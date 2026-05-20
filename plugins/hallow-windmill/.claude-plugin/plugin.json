@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "hallow-windmill",
+  "description": "Build automation tools on Hallow's self-hosted Windmill, no engineering background required. Bundles entry points for building (windmill-build), discovering existing tools (windmill-discover), and debugging failures (windmill-debug), plus first-time setup (/wmill-setup, /wmill-doctor, onboarder subagent), the full set of Windmill authoring skills (write-flow, write-script-*, raw-app, triggers, schedules, resources, preview, cli-commands), windmill-capture-learning for recording gotchas, and reference docs for patterns, shared tools, and ACLs.",
+  "author": {
+    "name": "Hallow Sandbox Platform",
+    "email": "sandbox@hallow.app"
+  },
+  "homepage": "https://github.com/hallow-inc/hallow-claude-plugins",
+  "repository": "https://github.com/hallow-inc/hallow-claude-plugins",
+  "license": "UNLICENSED",
+  "keywords": [
+    "windmill",
+    "onboarding",
+    "patterns",
+    "hallow",
+    "mcp",
+    "tailscale",
+    "wmill",
+    "dev-loop"
+  ]
+}

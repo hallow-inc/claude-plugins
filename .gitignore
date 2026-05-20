@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+*.log
+.env
+.env.local
+
+# Never commit real .mcp.json files anywhere in this repo —
+# only the .mcp.json TEMPLATE inside plugins/*/.mcp.json (which contains
+# REPLACE_ME placeholders) is allowed. If you create a real one for local
+# testing, drop it here:
+**/.mcp.json.local

@@ -1,0 +1,70 @@
+name: Validate plugins
+
+on:
+  pull_request:
+    paths:
+      - '.claude-plugin/**'
+      - 'plugins/**'
+      - '.github/workflows/validate.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.claude-plugin/**'
+      - 'plugins/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+
+      - name: Setup Node 20
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Print versions
+        run: |
+          node --version
+          claude --version
+
+      - name: Validate marketplace manifest
+        run: claude plugin validate .
+
+      - name: Validate each plugin manifest
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          fail=0
+          for plugin_dir in plugins/*/; do
+            echo "::group::$plugin_dir"
+            if ! claude plugin validate "$plugin_dir"; then
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$fail"
+
+      - name: Sanity-check no secrets
+        run: |
+          set -euo pipefail
+          # Block any committed token-shaped strings or .mcp.json with a real URL.
+          # Allow .example.jsonc.
+          if grep -rIn --exclude-dir=.git --exclude='*.example.jsonc' \
+               -E 'ey[A-Za-z0-9_-]{40,}|/api/mcp/w/[a-z0-9-]+/mcp\?token=' . ; then
+            echo "::error::Possible token committed."
+            exit 1
+          fi

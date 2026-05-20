@@ -1,0 +1,14 @@
+// Reference shape for the project-scoped .mcp.json in your local Windmill workdir
+// (~/dev/wmill/.mcp.json on macOS/Linux/WSL, %USERPROFILE%\dev\wmill\.mcp.json on Windows).
+//
+// Do NOT save this file as-is. The /wmill-setup command writes the real .mcp.json
+// for you via `claude mcp add -s project`, which substitutes your real token from
+// the Windmill UI. If you ever need to write it by hand, the shape is:
+{
+  "mcpServers": {
+    "windmill": {
+      "type": "http",
+      "url": "https://windmill.platform.hallow.app/api/mcp/w/dev/mcp?token=YOUR_TOKEN_FROM_WINDMILL_UI"
+    }
+  }
+}
