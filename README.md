@@ -1,6 +1,6 @@
 # hallow-claude-plugins
 
-Claude Code plugin marketplace for the Hallow team. Private repo. Install is `git clone` + local-path marketplace.
+Claude Code plugin marketplace for the Hallow team. Public repo, **internal-use license** — see [`LICENSE`](./LICENSE). Source is visible to anyone but only Hallow employees, contractors, and authorized agents are granted rights to use it. Install is `git clone` + local-path marketplace.
 
 ## Install (users)
 
@@ -63,9 +63,11 @@ claude plugin validate .
 
 ## Hosting + distribution
 
-Private repo: `github.com/hallow-inc/hallow-claude-plugins`. All install paths reduce to `git clone` + `/plugin marketplace add <local-path>`. No tarballs, no S3, no Windmill side. The repo IS the distribution channel.
+Public repo: `github.com/hallow-inc/hallow-claude-plugins`. All install paths reduce to `git clone` + `/plugin marketplace add <local-path>`. No tarballs, no S3, no Windmill side. The repo IS the distribution channel.
 
-Each user needs read access to the repo. The plugin doesn't dictate how they auth — anything that gets a working `git clone` is fine: GitHub Desktop, `gh` CLI, SSH key, HTTPS + credential helper, manual ZIP download.
+Source is publicly visible; use rights are restricted to Hallow personnel per [`LICENSE`](./LICENSE). No GitHub auth required to clone — HTTPS clone works anonymously. GitHub Desktop, `gh` CLI, SSH, HTTPS, ZIP download all work.
+
+The plugin itself is harmless without tailnet access: Windmill (`windmill.platform.hallow.app`) is tailnet-only, so an outsider who clones the repo cannot reach the backend.
 
 ## Versioning
 

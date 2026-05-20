@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/hallow-inc/hallow-claude-plugins",
   "repository": "https://github.com/hallow-inc/hallow-claude-plugins",
-  "license": "UNLICENSED",
+  "license": "LicenseRef-Hallow-Internal",
   "keywords": [
     "windmill",
     "onboarding",

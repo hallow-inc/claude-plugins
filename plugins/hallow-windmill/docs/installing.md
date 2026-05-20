@@ -2,20 +2,21 @@
 
 For Hallow team members installing the `hallow-windmill` plugin for the first time, or updating to the latest version.
 
-This plugin is distributed via a private GitHub repo, `hallow-inc/hallow-claude-plugins`. To install you need read access to that repo. Ping `#platform` if you don't have it yet.
+The plugin is distributed via the public GitHub repo `hallow-inc/hallow-claude-plugins`. Source is public but use rights are restricted to Hallow personnel per [`LICENSE`](https://github.com/hallow-inc/hallow-claude-plugins/blob/master/LICENSE). No GitHub auth required to clone.
+
+The plugin is harmless without our backend — Windmill is tailnet-only, so non-Hallow people who clone it can't use it anyway.
 
 ## Prerequisites
 
 1. **Claude Code installed** — `docs.anthropic.com/en/docs/claude-code`.
-2. **GitHub account joined to `hallow-inc`** with read on `hallow-claude-plugins`.
-3. **Some way to `git clone` from GitHub** — pick whichever you already have working:
+2. **Some way to `git clone` from GitHub** — pick whichever you already have:
    - **GitHub Desktop** (no terminal — easiest for non-devs)
-   - **`gh` CLI** (`gh auth login`)
+   - **`gh` CLI**
+   - **HTTPS clone** (default if you've used `git` before — no auth needed for public repos)
    - **SSH key** added to your GitHub account
-   - **HTTPS + credential helper** (macOS Keychain / Windows Credential Manager — default if you've used `git` before)
-   - **Manual ZIP download** (no clone needed; see below)
+   - **Manual ZIP download** (no git needed; see below)
 
-If none of those work yet, the simplest from zero: install GitHub Desktop (`desktop.github.com`), sign in with your `@hallow.app` GitHub account, done.
+If none of those work yet, the simplest from zero: install GitHub Desktop (`desktop.github.com`), done — no sign-in required for cloning a public repo.
 
 ## Install
 
@@ -42,21 +43,15 @@ New-Item -ItemType Directory -Path (Split-Path $dest) -Force | Out-Null
 git clone https://github.com/hallow-inc/hallow-claude-plugins.git $dest
 ```
 
-First time you run `git clone` on a private repo it will prompt for GitHub credentials. Username = your GitHub username. Password = a personal access token (NOT your GitHub password). To make a token:
-
-1. https://github.com/settings/tokens?type=beta
-2. **Generate new token** → name `claude-plugins` → expiration `1 year` → **Only select repositories** → `hallow-inc/hallow-claude-plugins` → **Repository permissions** → set **Contents** to **Read-only** → **Generate**
-3. Copy. Paste into the git password prompt when asked.
-
-The credential helper caches it after first use; you won't be prompted again.
+No GitHub credentials required — public HTTPS clone works anonymously.
 
 ### Option 3 — Manual ZIP (no git, no terminal)
 
 If even `git clone` is too much:
 
-1. Browse to `https://github.com/hallow-inc/hallow-claude-plugins` in your browser (you must be signed in to GitHub).
+1. Browse to `https://github.com/hallow-inc/hallow-claude-plugins` in your browser (no sign-in needed).
 2. **Code** → **Download ZIP**.
-3. Extract the ZIP. Rename the extracted folder to `hallow-claude-plugins` (no `-main` suffix).
+3. Extract the ZIP. Rename the extracted folder to `hallow-claude-plugins` (no `-main` or `-master` suffix).
 4. Move it to `~/.claude/plugins/marketplaces/` (or `%USERPROFILE%\.claude\plugins\marketplaces\` on Windows). Final path must be `~/.claude/plugins/marketplaces/hallow-claude-plugins`.
 
 Updates require re-downloading the ZIP. The terminal / GitHub Desktop options are nicer for that.
@@ -127,8 +122,7 @@ Then `/reload-plugins`. To go back to latest: `git checkout main && git pull`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `git clone` says `Repository not found` | No read access on the repo | Ping `#platform` to request access. Confirm at https://github.com/hallow-inc/hallow-claude-plugins (must be signed in to GitHub). |
-| `git clone` prompts forever and fails | Wrong PAT scope, or PAT expired | Mint a new PAT per the steps above. Repository permissions → Contents read. |
+| `git clone` says `Repository not found` | Typo in URL, or `git` configured to use SSH for an account without a key | Confirm URL: `https://github.com/hallow-inc/hallow-claude-plugins`. Open in browser to verify it loads. |
 | `Permission denied (publickey)` | Trying SSH without a key on file | Use HTTPS instead (the `https://github.com/...` URL). Or add an SSH key to your GitHub account. |
 | `marketplace.json not found` after `/plugin marketplace add` | Wrong path, or clone was incomplete | Confirm: `ls ~/.claude/plugins/marketplaces/hallow-claude-plugins/.claude-plugin/marketplace.json`. If missing, the clone failed — retry. |
 | Plugin installed but skills don't auto-load | `/reload-plugins` not run | Run `/reload-plugins` in Claude Code. |
