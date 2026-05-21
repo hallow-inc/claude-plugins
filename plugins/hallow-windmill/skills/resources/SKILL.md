@@ -1,6 +1,6 @@
 ---
 name: resources
-description: MUST use when managing resources.
+description: Use when creating, reading, or wiring a Windmill **resource** — typed credential/connection (DB, API, S3, OAuth) stored in the workspace and referenced from scripts/flows. Triggers on "add a resource", "database credentials in windmill", "resource type", `.resource.yaml`, `.resource-type.yaml`. Covers resource types, secret fields, and referencing from script main signatures.
 ---
 
 # Windmill Resources

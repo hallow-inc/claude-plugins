@@ -1,6 +1,6 @@
 ---
 name: raw-app
-description: MUST use when creating raw apps.
+description: Use when creating a Windmill **raw app** — single-file HTML/JS UI served from Windmill, not a low-code App Editor app. Triggers on "raw app", "html app in windmill", "single-page app on windmill", custom JS dashboards. NOT for: low-code App Editor apps, flow construction (use write-flow).
 ---
 
 # Windmill Raw Apps

@@ -1,9 +1,8 @@
----
-name: write-script-php
-description: MUST use when writing PHP scripts.
----
+# `wmill` CLI: preview vs run vs sync push
 
-## CLI Commands
+Decision tree any `write-script-*` skill should follow after generating or editing a script.
+
+## Commands
 
 Place scripts in a folder.
 
@@ -14,7 +13,7 @@ After writing, tell the user which command fits what they want to do:
 - `wmill generate-metadata` — generate `.script.yaml` and `.lock` files for the script you modified.
 - `wmill sync push` — deploy local changes to the workspace. Only suggest/run this when the user explicitly asks to deploy/publish/push — not when they say "run", "try", or "test".
 
-### Preview vs run — choose by intent, not habit
+## Preview vs run — choose by intent, not habit
 
 If the user says "run the script", "try it", "test it", "does it work" while there are **local edits to the script file**, use `script preview`. Do NOT push the script to then `script run` it — pushing is a deploy, and deploying just to test overwrites the workspace version with untested changes.
 
@@ -26,7 +25,7 @@ Only use `sync push` when:
 - The user explicitly asks to deploy, publish, push, or ship.
 - The preview has already validated the change and the user wants it in the workspace.
 
-### After writing — offer to test, don't wait passively
+## After writing — offer to test, don't wait passively
 
 If the user hasn't already told you to run/test/preview the script, offer it as a one-sentence next step (e.g. "Want me to run `wmill script preview` with sample args?"). Do not present a multi-option menu.
 
@@ -38,60 +37,6 @@ For a **visual** open-the-script-in-the-dev-page preview (rather than `script pr
 
 Use `wmill resource-type list --schema` to discover available resource types.
 
-# PHP
+## Hallow ban
 
-## Structure
-
-The script must start with `<?php` and contain at least one function called `main`:
-
-```php
-<?php
-
-function main(string $param1, int $param2) {
-    return ["result" => $param1, "count" => $param2];
-}
-```
-
-## Resource Types
-
-On Windmill, credentials and configuration are stored in resources and passed as parameters to main.
-
-You need to **redefine** the type of the resources that are needed before the main function. Always check if the class already exists using `class_exists`:
-
-```php
-<?php
-
-if (!class_exists('Postgresql')) {
-    class Postgresql {
-        public string $host;
-        public int $port;
-        public string $user;
-        public string $password;
-        public string $dbname;
-    }
-}
-
-function main(Postgresql $db) {
-    // $db contains the database connection details
-}
-```
-
-The resource type name has to be exactly as specified.
-
-## Library Dependencies
-
-Specify library dependencies as comments before the main function:
-
-```php
-<?php
-
-// require:
-// guzzlehttp/guzzle
-// stripe/stripe-php@^10.0
-
-function main() {
-    // Libraries are available
-}
-```
-
-One dependency per line. No need to require autoload, it is already done.
+`wmill sync push` and `wmill sync pull` are banned in the Hallow `dev` workspace. They delete server state not in local files and clobber secret variables. Mirror changes via the `windmill` MCP tools or the Windmill UI — never `wmill sync`.

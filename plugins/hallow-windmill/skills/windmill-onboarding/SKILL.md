@@ -1,5 +1,5 @@
 ---
-name: hallow-windmill
+name: windmill-onboarding
 description: Reference and discovery skill for Hallow's Windmill onboarding. Loads when a new engineer says they want to set up Windmill, install wmill, connect to windmill.platform.hallow.app, mint a Windmill token, configure the Windmill MCP, get started with Hallow's Windmill instance, or asks any "I'm new and need to get up and running" question. Surfaces the authoritative procedure at `${CLAUDE_PLUGIN_ROOT}/docs/onboarding.md` and points the engineer at `/hallow-windmill:wmill-setup` to run it end-to-end and `/hallow-windmill:wmill-doctor` to verify it later.
 ---
 

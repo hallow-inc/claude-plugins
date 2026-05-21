@@ -5,11 +5,38 @@ description: |
 
   Invoke for: any task where the user wants to be walked end-to-end through Windmill setup without flooding the main conversation — first-time install, machine swap, full re-onboarding after token loss, or when the parent thread is doing unrelated work.
 
-  Proactive: Offer when the user says "I'm new", "set me up", "get me running", or names Windmill/wmill/Tailscale setup, and the parent context is already deep in other work. If the parent thread is fresh, prefer driving the flow inline via the hallow-windmill skill + /wmill-setup.
+  Proactive: Offer when the user says "I'm new", "set me up", "get me running", or names Windmill/wmill/Tailscale setup, and the parent context is already deep in other work. If the parent thread is fresh, prefer driving the flow inline via the `windmill-onboarding` skill + `/hallow-windmill:wmill-setup` command.
 
-  Not needed for: writing flows/scripts/apps (route to windmill-build instead, which then routes to the bundled authoring skills), debugging existing jobs (use the cli-commands skill), or quick verification of an already-working dev loop (use /wmill-doctor instead).
+  Not needed for: writing flows/scripts/apps (route to windmill-build instead, which then routes to the bundled authoring skills), debugging existing jobs (use the cli-commands skill), or quick verification of an already-working dev loop (use `/hallow-windmill:wmill-doctor` instead).
 
-  Boundary: Owns the onboarding flow itself. Defers to windmill-build for tool creation, the bundled authoring skills for entity writing, /wmill-doctor for the §8 smoke test, and cli-commands for job inspection. Does not write code outside the onboarding workdir, does not modify the platform repo, does not commit anything.
+  Boundary: Owns the onboarding flow itself. Defers to windmill-build for tool creation, the bundled authoring skills for entity writing, `/hallow-windmill:wmill-doctor` for the §8 smoke test, and cli-commands for job inspection. Does not write code outside the onboarding workdir, does not modify the platform repo, does not commit anything.
+
+  <example>
+  Context: engineer joining Hallow, deep in unrelated discussion
+  user: "I just joined Hallow and need to get Windmill working"
+  assistant: "Spawning windmill-onboarder agent — keeps onboarding in isolated context."
+  <commentary>
+  New engineer, end-to-end setup needed, parent thread has other context. Subagent isolates the multi-step flow.
+  </commentary>
+  </example>
+
+  <example>
+  Context: engineer lost their token after machine swap
+  user: "Got a new laptop, wmill says token invalid"
+  assistant: "Spawning windmill-onboarder agent to re-walk the §3-§7 token mint + CLI register + MCP wiring flow."
+  <commentary>
+  Token-loss recovery = re-onboarding. Same procedure as first-time.
+  </commentary>
+  </example>
+
+  <example>
+  Context: user wants to build a tool, not set up
+  user: "Help me write a script that posts to Slack daily"
+  assistant: "Not an onboarding task. Routing to windmill-build skill instead."
+  <commentary>
+  Authoring work, not setup. Stay in main context.
+  </commentary>
+  </example>
 model: sonnet
 tools: Bash, Read, Edit, Write, AskUserQuestion, WebFetch
 ---

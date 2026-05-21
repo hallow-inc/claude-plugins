@@ -75,7 +75,7 @@ Plugins **omit the `version` field** in `plugin.json` — every commit on `main`
 
 To pin to a specific commit, check out that SHA in the clone (`git checkout <sha>`) and `/reload-plugins`.
 
-See [`CHANGELOG.md`](./CHANGELOG.md) for human-readable change history.
+Change history: `git log` is authoritative.
 
 ## References
 

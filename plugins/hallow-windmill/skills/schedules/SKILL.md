@@ -1,6 +1,6 @@
 ---
 name: schedules
-description: MUST use when configuring schedules.
+description: Use when configuring a Windmill **schedule** — cron-based or interval trigger that runs a script/flow on a timer. Triggers on "schedule a script", "run every X minutes", "cron in windmill", `.schedule.yaml`. Covers cron syntax, timezone, payload binding, enabled/disabled state. NOT for: webhook/event triggers (use triggers skill).
 ---
 
 # Windmill Schedules

@@ -35,17 +35,27 @@ Audience: any Hallow team member. Admin/infra-ops content lives in the platform 
 
 ### Authoring skills
 
-28 Windmill authoring skills, copied from the platform repo so the plugin is self-contained:
+Windmill authoring skills, copied from the platform repo so the plugin is self-contained.
 
-- `write-flow` — flows
-- `write-script-bun` (default) plus `write-script-python3`, `write-script-deno`, `write-script-bigquery`, `write-script-snowflake`, `write-script-postgresql`, `write-script-mysql`, `write-script-mssql`, `write-script-duckdb`, `write-script-graphql`, `write-script-go`, `write-script-rust`, `write-script-bash`, `write-script-powershell`, `write-script-csharp`, `write-script-java`, `write-script-php`, `write-script-rlang`, `write-script-nativets`, `write-script-bunnative`
+**Naming convention** — three groups, each prefix has a fixed meaning:
+
+| Prefix | Meaning | Examples |
+|---|---|---|
+| `write-*` | Code/format authoring (per language or per definition format) | `write-script-bun`, `write-flow`, `write-workflow-as-code` |
+| `windmill-*` | User-facing workflow / UX skills (front doors, not entity authors) | `windmill-build`, `windmill-debug`, `windmill-discover` |
+| (bare noun) | One Windmill entity type or operational concept | `triggers`, `schedules`, `resources`, `raw-app`, `preview`, `cli-commands` |
+
+Skills:
+
+- `write-flow` — flows (YAML)
+- `write-workflow-as-code` — workflow-as-code scripts (TS / Python, decorator-driven)
+- `write-script-bun` (default) plus `write-script-python3`, `write-script-snowflake`, `write-script-postgresql`, `write-script-duckdb`, `write-script-bash`, `write-script-nativets`, `write-script-bunnative`
 - `raw-app` — UI apps
-- `triggers` — HTTP / WebSocket / Kafka / Postgres CDC / SQS / NATS triggers
+- `triggers` — HTTP routes / webhooks / email triggers (Hallow runs Windmill OSS; WebSocket / Kafka / NATS / SQS / MQTT / GCP / Azure / Postgres-CDC triggers are EE-only and not available)
 - `schedules` — cron schedules
 - `resources` — resources + resource types
-- `write-workflow-as-code` — workflow-as-code scripts
 - `preview` — open the Windmill dev page for visual verification
-- `cli-commands` — `wmill job`-driven debugging and run history inspection
+- `cli-commands` — `wmill` CLI surface, job inspection, preview-vs-run-vs-push decisions
 
 These auto-load when you tell Claude what you want to build; you almost never invoke them directly.
 

@@ -1,7 +1,5 @@
 ---
-name: wmill-setup
-description: Drive a new Hallow engineer through the full Windmill onboarding flow — preconditions, installs, token mint, workdir, CLI workspace registration, and MCP wiring. Reads the authoritative onboarding doc, detects platform, and walks the user step by step with verification gates after each section. Use when the engineer types /hallow-windmill:wmill-setup, says they want to be walked through Windmill setup, or starts a fresh onboarding flow.
-disable-model-invocation: true
+description: Drive a new Hallow engineer through the full Windmill onboarding flow — preconditions, installs, token mint, workdir, CLI workspace registration, and MCP wiring.
 allowed-tools: Bash, Read, Edit, Write, AskUserQuestion, WebFetch
 ---
 
@@ -9,7 +7,7 @@ allowed-tools: Bash, Read, Edit, Write, AskUserQuestion, WebFetch
 
 You are running the Windmill onboarding flow for a new Hallow engineer. The authoritative procedure is at `${CLAUDE_PLUGIN_ROOT}/docs/onboarding.md`.
 
-This skill has side effects — it writes `.mcp.json`, calls `claude mcp add`, and handles API tokens. `disable-model-invocation: true` keeps Claude from auto-triggering it; the engineer must invoke `/hallow-windmill:wmill-setup` explicitly.
+This command has side effects — it writes `.mcp.json`, calls `claude mcp add`, and handles API tokens. It is user-invocable only.
 
 ## Step 0 — Read the doc
 

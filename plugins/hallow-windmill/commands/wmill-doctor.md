@@ -1,6 +1,5 @@
 ---
-name: wmill-doctor
-description: Run the Windmill onboarding end-to-end smoke test (§8 of the onboarding doc) and report which step failed plus the matching fix from §9. Read-only — does not modify any config or re-mint tokens. Use when the engineer types /hallow-windmill:wmill-doctor, asks "is my Windmill setup still working", reports their wmill or MCP tools stopped working, or wants to verify the dev loop after a reboot, machine change, or token rotation.
+description: Run the Windmill onboarding end-to-end smoke test (§8 of the onboarding doc) and report which step failed plus the matching fix from §9. Read-only.
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
