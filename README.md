@@ -1,23 +1,36 @@
 # hallow-claude-plugins
 
-Claude Code plugin marketplace for the Hallow team. Public repo, **internal-use license** — see [`LICENSE`](./LICENSE). Source is visible to anyone but only Hallow employees, contractors, and authorized agents are granted rights to use it. Install is `git clone` + local-path marketplace.
+Claude Code plugin marketplace for the Hallow team. Public repo, **internal-use license** — see [`LICENSE`](./LICENSE). Source is visible to anyone but only Hallow employees, contractors, and authorized agents are granted rights to use it.
 
 ## Install (users)
 
-```bash
-# 1. Clone the repo (whatever auth you already have — gh CLI, SSH key, https + PAT, GitHub Desktop)
-git clone https://github.com/hallow-inc/hallow-claude-plugins.git ~/.claude/plugins/marketplaces/hallow-claude-plugins
+In Claude Code:
 
-# 2. In Claude Code, register the marketplace and install the plugin
-claude
-> /plugin marketplace add ~/.claude/plugins/marketplaces/hallow-claude-plugins
-> /plugin install hallow-windmill@hallow-claude-plugins
-> /reload-plugins
 ```
+/plugin marketplace add hallow-inc/claude-plugins
+/plugin install hallow-windmill@hallow-claude-plugins
+/reload-plugins
+```
+
+Claude Code handles the clone for you (cached under `~/.claude/plugins/marketplaces/hallow-claude-plugins/`). No `git clone`, no auth setup required — repo is public.
+
+> ⚠️ **Name asymmetry**: the GitHub repo is `claude-plugins`; the marketplace name (used in `install` / `update` commands) is `hallow-claude-plugins`. Don't conflate them. `marketplace add` takes the repo, `install` / `update` / `remove` take the marketplace name.
 
 Full walkthrough (incl. troubleshooting, Windows paths, no-CLI options): [`plugins/hallow-windmill/docs/installing.md`](./plugins/hallow-windmill/docs/installing.md).
 
-**Updates**: `cd` into the clone, `git pull`, then `/reload-plugins` in Claude Code.
+## Update
+
+```
+/plugin marketplace update hallow-claude-plugins
+/plugin install hallow-windmill@hallow-claude-plugins
+/reload-plugins
+```
+
+The `marketplace update` step fetches new commits. The `install` step re-resolves the plugin against the fresh marketplace. `/reload-plugins` re-reads files into the running session.
+
+Re-running just `/plugin marketplace add` on an already-registered marketplace does **not** fetch new commits — use `/plugin marketplace update` to refresh.
+
+To pin to a specific commit, install with explicit ref (if supported) or fall back to manual clone (see [`installing.md`](./plugins/hallow-windmill/docs/installing.md)).
 
 ## Available plugins
 
@@ -63,17 +76,15 @@ claude plugin validate .
 
 ## Hosting + distribution
 
-Public repo: `github.com/hallow-inc/hallow-claude-plugins`. All install paths reduce to `git clone` + `/plugin marketplace add <local-path>`. No tarballs, no S3, no Windmill side. The repo IS the distribution channel.
+Public repo: `github.com/hallow-inc/claude-plugins`. Primary install path is `/plugin marketplace add hallow-inc/claude-plugins` (Claude Code clones + caches). Fallback is manual `git clone` into `~/.claude/plugins/marketplaces/` for users behind GitHub-blocking networks or who want pinned SHAs. The repo IS the distribution channel — no tarballs, no S3, no Windmill side.
 
-Source is publicly visible; use rights are restricted to Hallow personnel per [`LICENSE`](./LICENSE). No GitHub auth required to clone — HTTPS clone works anonymously. GitHub Desktop, `gh` CLI, SSH, HTTPS, ZIP download all work.
+Source is publicly visible; use rights are restricted to Hallow personnel per [`LICENSE`](./LICENSE). No GitHub auth required to clone — HTTPS clone works anonymously.
 
 The plugin itself is harmless without tailnet access: Windmill (`windmill.platform.hallow.app`) is tailnet-only, so an outsider who clones the repo cannot reach the backend.
 
 ## Versioning
 
-Plugins **omit the `version` field** in `plugin.json` — every commit on `main` is a new version. Users update by `git pull` in their local clone, then `/reload-plugins`.
-
-To pin to a specific commit, check out that SHA in the clone (`git checkout <sha>`) and `/reload-plugins`.
+Plugins **omit the `version` field** in `plugin.json` — every commit on `master` is a new version. Users update via `/plugin marketplace update hallow-claude-plugins` + `/plugin install hallow-windmill@hallow-claude-plugins` + `/reload-plugins`.
 
 Change history: `git log` is authoritative.
 

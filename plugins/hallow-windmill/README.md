@@ -77,7 +77,7 @@ These auto-load when you tell Claude what you want to build; you almost never in
 Full runbook (GitHub Desktop, terminal, ZIP, troubleshooting): [`docs/installing.md`](./docs/installing.md). Short form:
 
 ```bash
-git clone https://github.com/hallow-inc/hallow-claude-plugins.git \
+git clone https://github.com/hallow-inc/claude-plugins.git \
   ~/.claude/plugins/marketplaces/hallow-claude-plugins
 ```
 

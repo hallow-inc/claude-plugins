@@ -6,8 +6,8 @@
     "name": "Hallow Sandbox Platform",
     "email": "sandbox@hallow.app"
   },
-  "homepage": "https://github.com/hallow-inc/hallow-claude-plugins",
-  "repository": "https://github.com/hallow-inc/hallow-claude-plugins",
+  "homepage": "https://github.com/hallow-inc/claude-plugins",
+  "repository": "https://github.com/hallow-inc/claude-plugins",
   "license": "LicenseRef-Hallow-Internal",
   "keywords": [
     "windmill",
