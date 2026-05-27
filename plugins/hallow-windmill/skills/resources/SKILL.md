@@ -1,6 +1,6 @@
 ---
 name: resources
-description: Use when creating, reading, or wiring a Windmill **resource** — typed credential/connection (DB, API, S3, OAuth) stored in the workspace and referenced from scripts/flows. Triggers on "add a resource", "database credentials in windmill", "resource type", `.resource.yaml`, `.resource-type.yaml`. Covers resource types, secret fields, and referencing from script main signatures.
+description: Use when creating, reading, or wiring a Windmill **resource** — typed credential/connection (DB, API, S3, OAuth) stored in the workspace and referenced from scripts/flows. Triggers on "add a resource", "database credentials in windmill", "resource type", `.resource.yaml`, `.resource-type.yaml`, "change resource_type", "resource_type immutable", "apify Cloud only", "linked secret variable", "auto-linked variable", "apify_api_key". Covers resource types, secret fields, referencing from script main signatures, `resource_type` immutability (delete-recreate procedure), two flavors of secret storage (standalone `f/platform_secrets/<domain>__<name>` vs auto-linked at resource path), Cloud-only OAuth RTs vs `*_api_key` self-host variants (apify).
 ---
 
 # Windmill Resources
@@ -245,3 +245,31 @@ wmill resource-type get postgresql
 ```
 
 **Hallow ban:** `wmill sync push` and `wmill sync pull` are banned in this workspace. They delete server state not in local files and clobber secret variables. Mirror resource changes to the server via the MCP `windmill` tools or the Windmill UI — never `wmill sync`.
+
+## Hallow gotchas (resources)
+
+### `resource_type` is immutable — push silently keeps old type
+
+After a resource is created, its `resource_type` field cannot be changed. `wmill resource push` / `sync push` will REPORT success on a type change but silently keep the original type (only `value` + `description` actually update). The CLI has no `wmill resource delete` — and the MCP `deleteResource` is bound to the `admins` workspace only, unusable for `dev` / `prod`.
+
+**Procedure to change a resource type:**
+1. `DELETE /api/w/<ws>/resources/delete/<path>` via raw HTTP with a workspace token (UI delete may not commit due to caching — prefer the raw API).
+2. Re-create the resource with the new `resource_type` via the API.
+3. Verify with `wmill resource get <path>` that `resource_type` matches.
+
+### Resource-backed secrets auto-create a linked variable at the SAME path
+
+When a resource type has a secret-typed field, Windmill auto-creates a backing variable at the **resource's own path**, marked `is_linked: true`. Do NOT manually create a variable at that path — it collides with the auto-linked one.
+
+Two secret-storage flavors coexist in Hallow:
+
+| Flavor | When | Naming |
+|---|---|---|
+| Standalone secret var | Cross-domain shared secret (e.g. `db_password` used by multiple resources) | `f/platform_secrets/<domain>__<name>` (double underscore) |
+| Resource-backed secret | Single resource owns the secret | Auto-linked at resource path; do NOT pre-create |
+
+### `apify` resource-type is Cloud-only OAuth — self-host uses `apify_api_key`
+
+The `apify` RT in the `admins` workspace is OAuth-only ("Available only on Windmill Cloud") — self-hosted Hallow can't seed it. Use the sibling `apify_api_key` RT instead (`{api_key}` schema).
+
+**General rule for self-host:** when an n8n / generic doc refers to an OAuth resource type, look for a sibling `*_api_key` variant first. OAuth-only RTs to watch for on self-host: `apify` (use `apify_api_key`). RTs that work on self-host because they accept a plain token field: `gdrive`, `gsheets`, `gcal`, `gmail` (paste OAuth token manually).

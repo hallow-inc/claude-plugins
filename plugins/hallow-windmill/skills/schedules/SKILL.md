@@ -1,6 +1,6 @@
 ---
 name: schedules
-description: Use when configuring a Windmill **schedule** — cron-based or interval trigger that runs a script/flow on a timer. Triggers on "schedule a script", "run every X minutes", "cron in windmill", `.schedule.yaml`. Covers cron syntax, timezone, payload binding, enabled/disabled state. NOT for: webhook/event triggers (use triggers skill).
+description: Use when configuring a Windmill **schedule** — cron-based or interval trigger that runs a script/flow on a timer. Triggers on "schedule a script", "run every X minutes", "cron in windmill", `.schedule.yaml`, "schedule churns on every push", "perpetual ~ modify diff", "email field reverts", "cron_version v2", "ws_error_handler_muted", "Invalid range for Days of Week", "schedule deployer-stamped". Covers cron syntax (6-field, name-based DOW ranges), timezone, payload binding, enabled/disabled state, the three churn-preventing fields (cron_version + ws_error_handler_muted + email), deployer-stamped `email`/`permissioned_as`, multi-segment underscore filenames. NOT for: webhook/event triggers (use triggers skill).
 ---
 
 # Windmill Schedules
@@ -185,3 +185,29 @@ required:
 - enabled
 - permissioned_as
 ```
+
+## Hallow gotchas (schedules)
+
+### Multi-segment filenames use underscore, not dot
+
+A schedule whose path is `f/foo/bar_baz_v2` MUST live on disk as `bar_baz_v2.schedule.yaml`. A dotted name like `bar_baz.v2.schedule.yaml` derives a different entity path that won't match the server. Result: `wmill sync` shows the live schedule as a `-` delete with no paired `+`, and a push would DESTROY the running schedule. Always join multi-segment stems with `_` underscore.
+
+### Three fields the scaffold omits — add them or churn forever
+
+The server stores three schedule fields beyond the scaffold's defaults. Omitting them makes every sync diff a perpetual `~` modify:
+
+| Field | Required value | Notes |
+|---|---|---|
+| `cron_version` | `v2` | Server default. |
+| `ws_error_handler_muted` | `false` | Server default; mute only on purpose. |
+| `email` | **the pushing user's email** | See auto-stamp note below. |
+
+### `email` is deployer-stamped on every push
+
+The server FORCES `email` to the identity of whoever runs the push — the active `wmill workspace` token owner. Run `wmill workspace` to confirm whose identity will be stamped. Setting an arbitrary value (e.g. a shared service email) is reverted to the deployer on the next push, then local diverges and churns. Same auto-stamp behavior as trigger `permissioned_as`.
+
+**If a different run-as principal is required, that user must do the push.** Don't try to set it via YAML.
+
+### Cron parser rejects numeric DOW ranges
+
+Windmill's cron parser rejects numeric day-of-week ranges like `0-4` (error: `"Invalid range for Days of Week: 0-4"`). Use day-name ranges instead: `0 0 15 * * SUN-THU` rather than `0 0 15 * * 0-4`. Single numeric DOW (`* * * * * 0`) and lists (`0,3,5`) are fine — only RANGES require names.

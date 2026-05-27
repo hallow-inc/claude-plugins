@@ -58,6 +58,8 @@ For the failing job:
 
 Map the error to one of these buckets and tell the user in plain language. Quote the exact error line.
 
+**Full symptom→fix lookup** (broader than this table, includes gotchas from across the plugin): `${CLAUDE_PLUGIN_ROOT}/skills/windmill-debug/references/symptom-index.md`. Read on demand when the error string isn't in the inline table below.
+
 | Pattern in logs | Plain-English diagnosis | Fix |
 |---|---|---|
 | `401 Unauthorized` / `Token expired` | A token used by the script is dead or wrong. | Identify which resource (Snowflake / Supabase / Slack / etc.). Re-seed via Windmill UI → resource page. |
@@ -74,6 +76,11 @@ Map the error to one of these buckets and tell the user in plain language. Quote
 | `HTTP trigger: 404` from caller | Wrong URL — workspace name, trigger path, or method mismatch. | Fetch the trigger's actual URL via `mcp__windmill__listResource` or the Windmill UI. |
 | Slack post failed: `not_in_channel` | Bot not invited to the channel. | Invite the Hallow Slack bot to the channel manually in Slack. |
 | Slack post failed: `channel_not_found` | Channel name wrong, or it's a private channel. | Use the channel ID instead of `#name`. |
+| `TypeError: JSON.stringify cannot serialize cyclic structures` from a bun S3 step | **Masked AWS AccessDenied.** The AWS SDK error object is cyclic; the wrapper hides the real cause. The step ran on the `default` worker which has no IAM grant to the sandbox bucket. | Add `tag: fargate` to the module in `flow.yaml` (script preview can't be tagged — validate via flow). To unmask the underlying error, wrap: `catch (e) { return \`${e.name}: ${e.message}\` }`. |
+| `Bad request: A script with hash <H> with same parent_hash has been found. However, the lineage must be linear` | Script was moved/renamed but the old path is still active server-side. Windmill enforces single-child lineage per parent_hash. | Delete the OLD path via `mcp__windmill__deleteScriptByPath` (or `wmill script delete`), then re-push the script at the new path. |
+| `Trigger not found at name /w/<ws>/<route>` to a caller you expect to have access | Caller's identity can't READ the trigger's FOLDER. ACL on `authentication_method: windmill` does NOT bypass folder ACL. | Move the trigger into a folder readable by intended callers (e.g. `f/shared/` with `g/all: true`). Keep the elevated `script_path` impl in an admin-only folder. |
+| `wmill.createToken is not a function` / `TypeError: (void 0) is not a function` | Top-level `wmill` (windmill-client) has no `createToken` — workers get an injected token instead. | Use `process.env.WM_TOKEN` (caller-scoped). For non-worker contexts, `TokenService.createToken` lives in the OpenAPI client class. |
+| `runScriptAsync(...)` returned a job ID but nothing ran | Used `runScriptAsync` against a FLOW path — silently no-ops (returns `queued: true`, never dispatches). | Use `runFlowAsync(path, args, delay, doNotTrackInParent)`. Check `wmill flow list` vs `wmill script list` before choosing the dispatch fn. |
 
 If the error doesn't fit any of these, say so explicitly. Don't fabricate a diagnosis. Quote the error and ask the user for more context (when did it last work, did anything change, etc.).
 

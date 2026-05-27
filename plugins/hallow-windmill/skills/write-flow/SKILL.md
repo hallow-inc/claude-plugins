@@ -1,6 +1,6 @@
 ---
 name: write-flow
-description: Use when creating a Windmill **flow** — multi-step orchestration of scripts via `flow.yaml`, with branches, loops, suspends, approvals, error handlers. Triggers on "build a flow", "chain scripts", "windmill workflow", `flow.yaml`. NOT for: single-script work (use write-script-* skill), code-defined workflows (use write-workflow-as-code).
+description: Use when creating a Windmill **flow** — multi-step orchestration of scripts via `flow.yaml`, with branches, loops, suspends, approvals, error handlers. Triggers on "build a flow", "chain scripts", "windmill workflow", `flow.yaml`, "tag fargate", "S3 step in flow", "AccessDenied cyclic structures", "early_return HTML", "inline script import", "rename inline script", "flow sync up to date but diff persists". Covers flow scaffolding (`wmill flow new`), preprocessor/failure modules, loops, branches, approvals, sync HTTP-trigger response shaping via `early_return`, sandbox S3 steps MUST set `tag: fargate` (Fargate task role has the IAM grant; EC2 default worker does not — symptom is a masked cyclic-structure error), no cross-inline relative imports, wmill-owned inline-script filenames (hand-rename is non-convergent). NOT for: single-script work (use write-script-* skill), code-defined workflows (use write-workflow-as-code).
 ---
 
 # Windmill Flow CLI Guide
@@ -348,3 +348,58 @@ Reference a specific resource using `$res:` prefix:
 ## OpenFlow Schema (full reference)
 
 Full OpenAPI JSON schema for OpenFlow at `${CLAUDE_PLUGIN_ROOT}/skills/write-flow/references/openflow-schema.md`. Read on demand when you need exact field shapes for: FlowValue, FlowModule, RawScript, PathScript, ForloopFlow, WhileloopFlow, BranchOne, BranchAll, AiAgent, AgentTool, InputTransform, Retry, suspend, etc.
+
+## Hallow gotchas (flows)
+
+### No relative imports between inline scripts in the same flow
+
+Inline rawscript files inside a `.flow/` dir are bundled independently per module. You CANNOT `import { x } from "./other.ts"` from one inline module into another — the sibling file is not packaged. The flow will fail at runtime with a module-resolution error.
+
+Fold shared helpers and constants into the single module that uses them, or promote the helper to a real script (`f/<folder>/<helper>.ts`) and reference it via `PathScript` instead of an inline.
+
+### Inline-script filenames are wmill-derived — hand-renaming is non-convergent
+
+The `*.inline_script.ts` filenames inside a `.flow/` dir are NAMED BY WMILL from each step's content/summary (often long descriptive strings). Server-side, the flow value EMBEDS the inline code directly — there is NO filename field stored server-side. The local files + `!inline <name>` pointers are a CLI-local serialization detail.
+
+**Consequence:** hand-renaming `*.inline_script.ts` files (long → short, etc.) changes only local files. `sync push` reports "flow up to date" (true — the CODE is unchanged) but the file-level differ keeps listing the rename forever. `sync pull` REVERSES the rename and restores wmill's canonical names.
+
+**To actually shorten an inline-script filename**, change the step's `id` or `summary` so wmill re-derives the name. Don't rename the file by hand.
+
+### Return HTML/text from a sync HTTP-trigger flow via `early_return`
+
+A `request_type: sync` HTTP-trigger flow defaults to a JSON-wrapped module result for the response body. To respond with a raw string (e.g. an HTML page), set flow-level `early_return` to the expression whose value should be the response body:
+
+```yaml
+value:
+  modules:
+    - id: register
+      value:
+        type: rawscript
+        # returns { status, html } from inline script
+  early_return: results.register.html
+```
+
+The `early_return` expression value becomes the response body verbatim. **Content-Type caveat:** setting actual `text/html` requires additional trigger/app config; `early_return` only controls the body. Confirm via curl against the trigger URL before declaring done.
+
+### Any step touching the sandbox S3 bucket MUST set `tag: fargate`
+
+Steps that read/write `s3:///` (the Hallow sandbox bucket via `f/storage/sandbox_data`) MUST be pinned to the `fargate` worker group via `tag: fargate` on the module. The `default` (EC2/Coolify-hosted) worker runs as the EC2 instance role, which has NO IAM grant to the sandbox bucket — only the Fargate worker task role does (per `infra/pulumi/windmill/component.go`).
+
+**Symptom of a missing `tag: fargate`:** the failing step returns a **masked** error — `"TypeError: JSON.stringify cannot serialize cyclic structures"` from the Windmill bun wrapper (the AWS AccessDenied error object is cyclic). The real error is `"User: arn:aws:sts::...:assumed-role/hallow-platform-ec2/... is not authorized to perform: s3:ListBucket"`.
+
+**To see the real cause when debugging**, wrap the S3 call: `catch (e) { return \`${e.name}: ${e.message}\`; }`.
+
+**`wmill script preview` ignores tag routing** (no `--tag` flag) and routes nondeterministically — validate S3 steps via a flow with `tag: fargate`, not bare script preview.
+
+Module shape:
+
+```yaml
+- id: write_to_s3
+  tag: fargate
+  value:
+    type: rawscript
+    language: bun
+    ...
+```
+
+Full architectural context (Pulumi grant source, worker-group table, audit guidance for already-deployed-without-tag flows): see `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §8b.

@@ -98,4 +98,18 @@ Plus shared `error_handler_*` and `retry` — see `common-retry.md`.
 
 ## Hallow
 
-`permissioned_as` defaults to the creator. To run as an admin (needed when the trigger calls scripts that touch admin-only resources), set `permissioned_as: u/<admin-user>` and ensure the admin has acl on the trigger.
+`permissioned_as` is **server-set on push** — Windmill stamps it from the pushing user's identity and ignores the local YAML value. To run as an admin (needed when the trigger calls scripts that touch admin-only resources), the admin must do the push; ensure the admin also has acl on the trigger. Don't bother adding `permissioned_as` to local YAML — it will mismatch and churn.
+
+### URL form (workspaced route)
+
+External callers POST to:
+
+```
+${BASE_URL}/api/r/<workspace>/<route_path>
+```
+
+NO extra `w/` prefix. The server's not-found error includes `/w/<ws>/...` from its internal lookup key — do not copy that into the URL. Confirm the URL via the trigger's curl example in the Windmill UI.
+
+### Disabled-state on create
+
+`POST /http_triggers/create` ignores `enabled`/`mode` fields — always creates `mode: "enabled"`. To stage as disabled: create, then `POST /http_triggers/update/<path>` with `mode: "disabled"`. No `setenabled` endpoint for HTTP triggers. Also: create requires `is_static_website` + `static_asset_config` keys present or it 422s.

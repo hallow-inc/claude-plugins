@@ -131,6 +131,15 @@ Why: domain folders are open to the relevant team for resource/script edits; the
 
 Secrets are **never** committed in plaintext to YAML. Seed via Windmill UI in `f/platform_secrets/`. `wmill.yaml` has `skipSecrets: true` so push won't carry them either way.
 
+### Two flavors of secret storage
+
+| Flavor | When to use | Path / naming |
+|---|---|---|
+| **Standalone secret var** | Cross-domain shared secret (one secret consumed by multiple resources) | `f/platform_secrets/<domain>__<name>`, double underscore |
+| **Resource-backed secret** | Single resource owns the secret (e.g. a Slack bot token tied to one resource) | Auto-linked at the resource's own path. Do NOT pre-create the variable. |
+
+Resource-backed flavor: when a resource type has a secret-typed field, Windmill auto-creates a backing variable at the **resource's own path** marked `is_linked: true`. Manually creating a variable at that path collides with the auto-linked one. Earlier double-underscore naming at the resource path predates this auto-link behavior and conflicts with it.
+
 ### Script vs trigger permissions (critical gotcha)
 
 - **Scripts** have no `permissioned_as` field. They always run as the caller.
@@ -154,6 +163,9 @@ From `f/slack_bot/agent_reply.flow/`, `f/platform/flows/provision_supabase_area.
 4. **System prompts in the flow yaml**, not in a separate file. Include explicit refusal rules and anti-injection language for any LLM-touching agent (see `agent_reply.flow/flow.yaml` for template).
 5. **Approval gates** use Windmill suspend; pair with Slack post for the approval prompt. See `provision_supabase_area`.
 6. **HTTP trigger → flow dispatch**: use `runFlowAsync`, **not** `runScriptAsync`. The latter silently no-ops on flow paths (returns `queued: true` but never dispatches).
+7. **No relative imports between inline scripts in the same flow.** Each inline rawscript is bundled independently — `import {...} from "./sibling.ts"` fails at runtime. Fold helpers into the single module that uses them, or promote to a real script + reference via PathScript.
+8. **Inline-script filenames are wmill-owned.** `*.inline_script.ts` names are derived from each step's content/summary, and the flow CODE lives EMBEDDED in `flow.yaml` server-side. Hand-renaming the files is non-convergent: push reports "up to date" (code unchanged) but the differ keeps flagging the rename. To shorten a filename, change the step's `id` or `summary` so wmill re-derives the name.
+9. **Sync `request_type: sync` flows return JSON by default.** To respond with a raw string (HTML, plain text), set flow-level `early_return: results.<module>.<field>` — the expression value becomes the response body verbatim. Content-Type still defaults to JSON; setting `text/html` needs trigger config.
 
 ---
 
@@ -210,6 +222,70 @@ Two gotchas from `f/slack_bot/handle_mention.http_trigger.yaml`:
 
 Sync mode (`request_type: sync`) returns the script result as the response body — required for Slack url_verification (3-second ack window). Async mode (`request_type: async`) returns a job ID immediately.
 
+### `permissioned_as` is deployer-stamped
+
+Both HTTP triggers and schedules have `permissioned_as` (and schedules also `email`). The server STAMPS these fields to the identity of whoever pushed the entity — local YAML values are overwritten on push. If a trigger or schedule needs a non-deployer run-as principal, that user must perform the push. Don't try to set arbitrary values in YAML; they will revert and churn.
+
+### Workspaced HTTP route URL
+
+External callers POST to `${BASE_URL}/api/r/<workspace>/<route_path>` — NO extra `w/` prefix. The "not found" error includes `/w/<ws>/...` from the server's internal lookup key; copying that into the URL is a common 404 source. The trigger page in the Windmill UI shows the canonical curl example.
+
+### HTTP triggers + folder ACL
+
+Folder ACL gates trigger route lookup. Even with valid `windmill` auth, a caller who can't READ the trigger's folder gets `"Trigger not found"`. Standard pattern: put the trigger in `f/shared/` (g/all readable); set `script_path` to an impl in an admin-only folder; set `permissioned_as: u/<admin>` so the script can decrypt admin-only secrets regardless of caller.
+
+### Create-then-disable for HTTP triggers
+
+`POST /http_triggers/create` ignores `enabled`/`mode` fields — always creates `mode: "enabled"`. To stage as disabled: create, then `POST /http_triggers/update/<path>` with `mode: "disabled"`. Schedules differ — `create` honors `enabled: false` directly.
+
+---
+
+## 8b. Worker tags + Fargate IAM (S3 / sandbox bucket)
+
+Hallow's Windmill runs two worker groups:
+
+| Worker group | Host | IAM | Has sandbox-bucket access? |
+|---|---|---|---|
+| `default` | Coolify/EC2 container | EC2 instance role `hallow-platform-ec2` | **NO** — no grant to `hallow-platform-sandbox-data-*` |
+| `fargate` | ECS Fargate task | Task role `windmill-worker-task-role` | YES — grants `s3:List*/Get*/Put*/Delete*` + KMS |
+
+The Pulumi component (`infra/pulumi/windmill/component.go` "windmill-worker-sandbox-data-policy") grants the sandbox bucket policy ONLY to the Fargate task role. By design — broadening to the EC2 host role would put bucket access on every default-worker job.
+
+### Rule: any step touching `s3:///` or `f/storage/sandbox_data` MUST have `tag: fargate`
+
+In `flow.yaml`:
+
+```yaml
+- id: write_to_s3
+  tag: fargate
+  value:
+    type: rawscript
+    language: bun
+    ...
+```
+
+### Masked-error symptom when the tag is missing
+
+The AWS SDK's `AccessDenied` error object is cyclic. When the Windmill bun wrapper tries to serialize the unhandled error for the job result, it throws `"TypeError: JSON.stringify cannot serialize cyclic structures"` at `wrapper.mjs writeFile(result.json)` instead of surfacing AccessDenied. The cyclic-error symptom is the tell that the step ran on the wrong worker.
+
+**To unmask while debugging**, wrap: `catch (e) { return \`${e.name}: ${e.message}\`; }`. Real message: `"User: arn:aws:sts::131654760153:assumed-role/hallow-platform-ec2/i-... is not authorized to perform: s3:ListBucket"`.
+
+### `wmill script preview` is non-deterministic for tag routing
+
+The CLI's `script preview` has no `--tag` flag and ignores the sidecar `.script.yaml` tag — it routes to whichever worker happens to be free. So you can't validate sandbox-bucket scripts via `wmill script preview` — wrap in a flow with `tag: fargate` and run the flow instead.
+
+### Already-deployed flows missing the tag
+
+Any S3-as-DataTable flow written before this rule was understood is broken — it has never actually run successfully against S3. Examples in `infra/windmill/dev/`: anything that imports `f/storage/sandbox_data` and doesn't have `tag: fargate` on the S3-touching module. Audit before enabling on a schedule.
+
+---
+
+## 8c. Multi-segment filename convention (schedules + triggers)
+
+A schedule or HTTP trigger whose path is `f/foo/bar_baz_v2` MUST live on disk as `bar_baz_v2.schedule.yaml` (underscore). A dotted name like `bar_baz.v2.schedule.yaml` derives a DIFFERENT entity path that won't match the server — `wmill sync` then shows the live entity as a `-` delete with no paired `+`, and a push would destroy it. Always join multi-segment stems with `_`.
+
+Same rule for `*.http_trigger.yaml`. Single-segment names (`cleanup.schedule.yaml`) are fine — only multi-segment stems with dots trip the path derivation.
+
 ---
 
 ## 9. Visual preview after writing
@@ -227,5 +303,7 @@ After creating or modifying any flow / script / app, offer visual verification v
 - [ ] If LLM-touching: anti-injection rules in system prompt, `_redact` on any error strings returned.
 - [ ] If flow + HTTP trigger: trigger uses `runFlowAsync`, sets `permissioned_as` if elevation needed.
 - [ ] If new top-level `f/<folder>/` owned by non-admin: added to `wmill.yaml` `excludes`.
+- [ ] If schedule or HTTP trigger has a multi-segment path stem (e.g. `foo_bar_v2`), filename uses `_` underscores between segments — NOT `.` dots (dotted filenames derive a different entity path and a push will DESTROY the live route/schedule).
+- [ ] If any step touches the sandbox S3 bucket (`s3:///` or `f/storage/sandbox_data`), the flow module has `tag: fargate` set (default EC2 worker has no IAM grant — masked cyclic-structure error otherwise; see §8b).
 - [ ] `wmill job logs <id>` shows success for the path you touched (don't trust UI alone).
 - [ ] Visual preview offered to the user.

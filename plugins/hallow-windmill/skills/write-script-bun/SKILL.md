@@ -1,6 +1,6 @@
 ---
 name: write-script-bun
-description: Use when writing a Windmill TypeScript script on the **Bun runtime** with full npm ecosystem and `windmill-client` available. Default TS choice for fastest execution + npm imports (Hallow's primary script language, 63+ in production). Triggers on "windmill ts script", "bun script", uses `import` from npm packages. NOT for: pure stdlib/fetch-only scripts (use write-script-bunnative or write-script-nativets).
+description: Use when writing a Windmill TypeScript script on the **Bun runtime** with full npm ecosystem and `windmill-client` available. Default TS choice for fastest execution + npm imports (Hallow's primary script language, 63+ in production). Triggers on "windmill ts script", "bun script", uses `import` from npm packages, "runScriptAsync queued but never ran", "wmill.createToken is not a function", "WM_TOKEN env var", "dispatch flow vs script", "S3 step tag fargate". Covers main() shape, RT namespace for resource types, S3 helpers (loadS3File/writeS3File), preprocessor scripts, dispatch fn choice (`runScriptAsync` vs `runFlowAsync` — wrong fn = silent no-op against flow paths), worker-injected `process.env.WM_TOKEN` (no `wmill.createToken` on top-level SDK), sandbox S3 → flow module needs `tag: fargate`. NOT for: pure stdlib/fetch-only scripts (use write-script-bunnative or write-script-nativets).
 ---
 
 > **CLI lifecycle** (preview vs run vs sync push, when to test, Hallow ban on `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
@@ -128,3 +128,36 @@ Common import:
 ```typescript
 import * as wmill from 'windmill-client'
 ```
+
+## Hallow gotchas (bun scripts)
+
+### Dispatching: `runScriptAsync` vs `runFlowAsync` — wrong fn = silent no-op
+
+The top-level dispatch fns are NOT polymorphic on entity kind. Calling `runScriptAsync(path, ...)` against a FLOW path returns a job ID and `queued: true` but **nothing ever runs** — the job is queued against the wrong dispatcher and silently dropped.
+
+| Target | Function | Arg shape |
+|---|---|---|
+| Script | `runScript[Async](path, args, options?)` | `args` is an object of param values |
+| Flow | `runFlow[Async](path, args, delay?, doNotTrackInParent?)` | No second-position `args_to_replace` slot |
+| Script by hash | `runScriptByHash[Async](hash, args, options?)` | |
+
+**Before dispatching, check whether the target is a script or a flow** via `wmill flow list` vs `wmill script list`, or the MCP equivalents. `taskScript`/`taskFlow` are workflow-as-code only (need a `workflow()` wrapper) — wrong for fire-and-forget HTTP dispatch.
+
+### Don't call `wmill.createToken` — use `process.env.WM_TOKEN`
+
+The top-level `wmill` namespace from `windmill-client` does NOT export `createToken`. Calling `await wmill.createToken(...)` fails with `TypeError: (void 0) is not a function`. The method lives on `TokenService.createToken` inside the auto-generated OpenAPI client class, which you almost never want directly.
+
+**Workers get a caller-scoped token injected as an env var:** read it with `process.env.WM_TOKEN`. That token has the caller's identity + permissions and works with any `fetch` against `${process.env.BASE_URL}/api/...`.
+
+```typescript
+const token = process.env.WM_TOKEN;
+const res = await fetch(`${process.env.BASE_URL}/api/r/${process.env.WM_WORKSPACE}/<route>`, {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+### S3 steps in a flow MUST be tagged `tag: fargate`
+
+If your script reads/writes the Hallow sandbox bucket (via `f/storage/sandbox_data` or any `s3:///` URI on the workspace default storage), and you wrap it in a flow module, the MODULE needs `tag: fargate`. Otherwise the step runs on `default` (EC2 instance role, no S3 IAM) and fails with a MASKED cyclic-structure error.
+
+See the write-flow skill "Hallow gotchas → S3" section for the full symptom-and-fix.
