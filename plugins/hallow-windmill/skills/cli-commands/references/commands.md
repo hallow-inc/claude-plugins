@@ -542,6 +542,8 @@ user related commands
 
 variable related commands
 
+> **Hallow admin gate:** writes under `f/platform_secrets/` (canonical secret home) require admin / `u/sandbox`. Non-admins cannot create or push variables to that folder — request seeding via the Windmill UI by an admin. See `skills/windmill-patterns/SKILL.md` and `docs/patterns.md` §5. Also: `wmill sync push` is BANNED in this workspace (it clobbers secret variables) — mirror changes via the UI or MCP `windmill` tools.
+
 **Options:**
 - `--json` - Output as JSON (for piping to jq)
 
@@ -624,7 +626,7 @@ workspace related commands
   - `--exclude <items:string>` - Comma-separated kind:path items to exclude
   - `--preserve-on-behalf-of` - Preserve original on_behalf_of/permissioned_as values
   - `-y --yes` - Non-interactive mode (deploy without prompts)
-- `workspace connect-slack` - Non-interactively connect Slack to the active workspace using a pre-minted bot token (xoxb-...). Produces the same artifacts as the UI OAuth flow: workspace_settings fields, g/slack group, f/slack_bot folder, and the encrypted bot token variable + resource at f/slack_bot/bot_token.
+- `workspace connect-slack` - Non-interactively connect Slack to the active workspace using a pre-minted bot token (xoxb-...). Produces the same artifacts as the UI OAuth flow: workspace_settings fields, g/slack group, f/slack_bot folder, and the encrypted bot token variable + resource at f/slack_bot/bot_token. **Admin-only on Hallow** — must be run by `u/sandbox`; the bot token written here becomes a workspace-level credential. Non-admins should request via the admin.
   - `--bot-token <bot_token:string>` - Slack bot token (xoxb-...)
   - `--team-id <team_id:string>` - Slack team id
   - `--team-name <team_name:string>` - Slack team name

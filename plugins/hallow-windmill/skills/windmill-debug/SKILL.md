@@ -63,7 +63,7 @@ Map the error to one of these buckets and tell the user in plain language. Quote
 | Pattern in logs | Plain-English diagnosis | Fix |
 |---|---|---|
 | `401 Unauthorized` / `Token expired` | A token used by the script is dead or wrong. | Identify which resource (Snowflake / Supabase / Slack / etc.). Re-seed via Windmill UI → resource page. |
-| `403 Forbidden` / `permission denied` | The script is running as a user who doesn't have access to a resource it needs. | Either move the resource into a folder the caller can read, OR wrap the script in an HTTP trigger with `permissioned_as: u/<admin>`. See `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §5. |
+| `403 Forbidden` / `permission denied` | The script is running as a user who doesn't have access to a resource it needs. | Either move the resource into a folder the caller can read, OR wrap the script in an HTTP trigger with `permissioned_as: u/sandbox`. See `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §5. |
 | `Resource not found: f/...` | A `wmill.getResource()` path is wrong, or the resource was deleted. | List resources in that folder via `mcp__windmill__listResource`; correct the path. |
 | `Variable not found: f/platform_secrets/...` | Secret reference broken — wrong path, or admin hasn't seeded yet. | Check the variable exists in the Windmill UI under `f/platform_secrets/`. Ask an admin if missing. |
 | `TypeError`, `ReferenceError`, `SyntaxError` | Real code bug. | Read the line number from the stack. Open the script in the workdir, fix, re-publish via MCP. |

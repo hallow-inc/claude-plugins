@@ -42,7 +42,7 @@ Reference variables in resource values:
 {
   "value": {
     "api_key": "$var:g/all/api_key",
-    "secret": "$var:u/admin/secret"
+    "secret": "$var:f/platform_secrets/myservice__secret"
   }
 }
 ```

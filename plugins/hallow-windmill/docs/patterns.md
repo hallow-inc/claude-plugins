@@ -145,7 +145,7 @@ Resource-backed flavor: when a resource type has a secret-typed field, Windmill 
 - **Scripts** have no `permissioned_as` field. They always run as the caller.
 - **Triggers, schedules, and flows** can elevate via `permissioned_as`.
 
-If a script needs elevated privileges (e.g. mint a workspace token, access a resource the caller lacks), wrap it in an HTTP trigger with `permissioned_as: u/<admin>`. Example: `f/slack_tools/flow_status.http_trigger.yaml` runs as `u/brandon` so `wmill.createToken` works regardless of caller.
+If a script needs elevated privileges (e.g. mint a workspace token, access a resource the caller lacks), wrap it in an HTTP trigger with `permissioned_as: u/sandbox`. Example: `f/slack_tools/flow_status.http_trigger.yaml` runs as `u/sandbox` so `wmill.createToken` works regardless of caller. `u/sandbox` is the canonical admin push identity for Hallow — `permissioned_as` is server-stamped from the pusher, so the admin push must come from the `u/sandbox` token.
 
 ### Resource ACL
 
@@ -232,7 +232,7 @@ External callers POST to `${BASE_URL}/api/r/<workspace>/<route_path>` — NO ext
 
 ### HTTP triggers + folder ACL
 
-Folder ACL gates trigger route lookup. Even with valid `windmill` auth, a caller who can't READ the trigger's folder gets `"Trigger not found"`. Standard pattern: put the trigger in `f/shared/` (g/all readable); set `script_path` to an impl in an admin-only folder; set `permissioned_as: u/<admin>` so the script can decrypt admin-only secrets regardless of caller.
+Folder ACL gates trigger route lookup. Even with valid `windmill` auth, a caller who can't READ the trigger's folder gets `"Trigger not found"`. Standard pattern: put the trigger in `f/shared/` (g/all readable); set `script_path` to an impl in an admin-only folder; set `permissioned_as: u/sandbox` so the script can decrypt admin-only secrets regardless of caller.
 
 ### Create-then-disable for HTTP triggers
 

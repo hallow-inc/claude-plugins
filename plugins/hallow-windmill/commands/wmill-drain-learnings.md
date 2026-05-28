@@ -1,6 +1,6 @@
 ---
-description: Drain pending entries from WINDMILL_LEARNINGS.md into the right skill/doc files, then mark them resolved. Walks the user through each `[ ]` entry, proposes a target, applies edits, updates the scratchpad.
-allowed-tools: Read, Edit, Write, Grep, Glob, AskUserQuestion
+description: Drain pending entries from WINDMILL_LEARNINGS.md into the right skill/doc files, then mark them resolved. Walks the user through each `[ ]` entry, proposes a target, applies edits, updates the scratchpad, and logs the batch to the DuckLake plugin-learnings table.
+allowed-tools: Read, Edit, Write, Grep, Glob, AskUserQuestion, Bash, mcp__windmill__runFlowByPath, mcp__windmill__getFlowByPath
 ---
 
 # /wmill-drain-learnings
@@ -62,12 +62,57 @@ For each promoted entry:
 
 If Step 3 marked an entry "leave pending", leave it untouched in the Pending section.
 
+### Step 5.5 — Log batch to DuckLake (best-effort)
+
+Send the drained batch to the `f/shared/log_plugin_learnings` flow so it lands in `dl.dev_docs.plugin_learnings`. This is observability — drain success does NOT depend on it.
+
+Build the payload from the entries promoted in Step 4 (only `status: "promoted"` entries; skipped + leave-pending entries are NOT sent):
+
+```json
+{
+  "drained_at": "<ISO 8601 UTC now>",
+  "drained_by": "<git user.email or $USER>",
+  "entries": [
+    {
+      "captured_at": "<entry date>",
+      "topic": "<entry topic>",
+      "observation": "<entry observation>",
+      "evidence": "<entry evidence, or empty string>",
+      "tags": ["<tag>", ...],
+      "promoted_to": ["<file path>", ...],
+      "status": "promoted"
+    }
+  ]
+}
+```
+
+Resolve `drained_by` via `git config user.email`; fall back to `$USER` if git config is empty.
+
+Call:
+
+```
+mcp__windmill__runFlowByPath(path="f/shared/log_plugin_learnings", args=<payload>)
+```
+
+**Failure handling — best-effort:**
+
+- If the flow does not exist (`getFlowByPath` 404 or `runFlowByPath` returns "not found"): print
+  `[warn] log_plugin_learnings flow not provisioned — see ${CLAUDE_PLUGIN_ROOT}/docs/log_plugin_learnings-flow.md`
+  and continue.
+- If the flow exists but the call errors (DuckLake unreachable, schema mismatch, etc.): print
+  `[warn] log_plugin_learnings flow call failed: <err excerpt>`
+  and continue.
+- NEVER block Step 6 reporting on a logging failure. The local file edits in Steps 4–5 are the authoritative drain result.
+
+If the batch is empty (zero promoted entries), skip this step silently.
+
 ### Step 6 — Report
 
 Output a one-screen summary:
 - Entries drained: N
 - Entries skipped (per user): M
 - Files touched (deduped list)
+- DuckLake log: `ok (job <id>)` / `skipped (flow not provisioned)` / `failed (<err excerpt>)`
 - Suggest: "Run `/hallow-windmill:wmill-doctor` to verify nothing structurally broke, or invoke `plugin-dev:plugin-validator` agent for a quick check."
 
 ## Hard rules

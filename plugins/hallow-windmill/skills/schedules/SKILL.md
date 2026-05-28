@@ -77,7 +77,7 @@ properties:
     description: The arguments to pass to the script or flow
   permissioned_as:
     type: string
-    description: The user or group this schedule runs as (e.g., 'u/admin' or 'g/mygroup')
+    description: The user or group this schedule runs as (e.g., 'u/sandbox' for admin elevation, or 'g/mygroup')
   on_failure:
     type: string
     description: Path to a script or flow to run when the scheduled job fails

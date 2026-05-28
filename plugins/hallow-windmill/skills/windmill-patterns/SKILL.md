@@ -27,7 +27,7 @@ Authoritative content: `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md`. Treat as source
 - **Local YAML first, then mirror to server.** Edit `infra/windmill/dev/f/<...>` first, then API. Never the other way around.
 - **Pass `--workspace dev`** on any `wmill` CLI command. Active-workspace trap is real.
 - **Secrets live in `f/platform_secrets/<domain>__<name>`** (admin-only). Domain folders reference them via `$var:f/platform_secrets/<domain>__<name>`. Never plaintext in YAML.
-- **Scripts have no `permissioned_as`.** Only triggers, schedules, and flows can elevate. Wrap a script in an HTTP trigger with `permissioned_as: u/<admin>` if elevation is needed.
+- **Scripts have no `permissioned_as`.** Only triggers, schedules, and flows can elevate. Wrap a script in an HTTP trigger with `permissioned_as: u/sandbox` if elevation is needed. `u/sandbox` is Hallow's canonical admin push identity — the push of the wrapping trigger MUST come from the `u/sandbox` token (server stamps `permissioned_as` from pusher).
 - **`runFlowAsync`, not `runScriptAsync`, for flow paths.** Latter silently no-ops.
 - **Use `_redact` before returning error strings to an LLM.** `import { redact } from "/f/slack_tools/_redact.ts"`.
 - **Reuse before reinvent.** Check `toolbox.md` and `f/shared/` (`slack_post`, `error_to_slack`, `assert_principal`) before writing anything new.

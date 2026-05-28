@@ -219,6 +219,15 @@ async getVariable(path: string): Promise<string>
  * @param value value of the variable
  * @param isSecretIfNotExist if the variable does not exist, create it as secret or not (default: false)
  * @param descriptionIfNotExist if the variable does not exist, create it with this description (default: "")
+ *
+ * Hallow note: writes under `f/platform_secrets/` require admin / `u/sandbox` —
+ * scripts can't elevate themselves. If a non-admin caller needs to write a secret
+ * there, wrap the script in an HTTP trigger pushed by `u/sandbox` with
+ * `permissioned_as: u/sandbox`. See `docs/patterns.md` §5 (Script vs trigger
+ * permissions) and `skills/windmill-patterns/SKILL.md`.
+ *
+ * Similarly, `wmill.createToken` (mint workspace token) only works when the run
+ * principal is admin — same trigger-wrap pattern applies.
  */
 async setVariable(path: string, value: string, isSecretIfNotExist?: boolean, descriptionIfNotExist?: string): Promise<void>
 

@@ -208,7 +208,7 @@ Users discover via flow editor → "Workspace scripts" → `f/shared/<tool>`. Su
 | Variant | When | How |
 |---|---|---|
 | Flow tool | Multi-step pattern | `f/shared/<name>.flow/flow.yaml` via `wmill flow new` |
-| Trigger-wrapped | Tool needs elevated identity (decrypt secrets folder) | Wrap with HTTP trigger `permissioned_as: u/<admin>` (scripts always run as caller) |
+| Trigger-wrapped | Tool needs elevated identity (decrypt secrets folder) | Wrap with HTTP trigger `permissioned_as: u/sandbox` (scripts always run as caller) |
 | HTTP-triggered | Tool needs request headers | Add `export async function preprocessor(event)` |
 
 ## HTTP-triggered shared tool: structural rules
@@ -216,8 +216,8 @@ Users discover via flow editor → "Workspace scripts" → `f/shared/<tool>`. Su
 Combining "shared" (callable by g/all) with "elevated" (runs as admin to decrypt admin-only secrets) requires careful folder + ACL placement:
 
 1. **Trigger lives in the caller-readable folder** (`f/shared/<tool>.http_trigger.yaml` with `g/all: true`). Folder ACL gates route lookup — a trigger in an admin-only folder returns `"Trigger not found"` to non-admin callers even with valid auth.
-2. **`script_path` points at the admin-only impl** (e.g. `f/<admin>/<tool>.ts`). The impl folder stays gated; only the trigger is visible.
-3. **`permissioned_as: u/<admin>`** elevates the run. The admin must be the user who PUSHES the trigger — the server stamps `permissioned_as` from the pushing identity, ignoring local YAML.
+2. **`script_path` points at the admin-only impl** (e.g. `f/platform_secrets/<tool>.ts` or other admin-gated folder). The impl folder stays gated; only the trigger is visible.
+3. **`permissioned_as: u/sandbox`** elevates the run. `u/sandbox` is Hallow's canonical admin identity — the push of the trigger MUST come from the `u/sandbox` token because the server stamps `permissioned_as` from the pushing identity and ignores local YAML.
 4. **Workspaced URL**: callers POST to `${BASE_URL}/api/r/<workspace>/<route_path>` — no `w/` prefix. The misleading 404 error key includes `/w/<ws>/...`; do not copy it into the URL.
 5. **Headers via preprocessor only.** `main()` doesn't receive `headers`. Define `export async function preprocessor(event)` to read `event.headers` and return the args for `main`.
 6. **To create disabled** (for staged rollout): create-then-update. Create-time API ignores `enabled`/`mode` — always creates `mode: enabled`. Follow with `POST /http_triggers/update/<path>` setting `mode: disabled`.
