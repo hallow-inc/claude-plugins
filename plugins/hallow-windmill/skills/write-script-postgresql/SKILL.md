@@ -3,7 +3,7 @@ name: write-script-postgresql
 description: Use when writing a Windmill PostgreSQL script — SQL targeting Postgres via the `postgresql` runtime. Triggers on "postgres query", "pg script", `RETURNING *`, `::jsonb`, `$1` param markers. Covers parameter binding, resource auth, and JSONB handling.
 ---
 
-> **CLI lifecycle** (preview vs run vs sync push, when to test, Hallow ban on `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
+> **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
 
 # PostgreSQL
 

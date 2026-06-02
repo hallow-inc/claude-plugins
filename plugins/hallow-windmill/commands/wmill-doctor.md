@@ -32,6 +32,10 @@ At the end, output a single summary line:
 - `wmill-doctor: ALL PASS (steps 1-4) — engineer to verify step 5`
 - `wmill-doctor: FAILED at §8.<n> — see fix above`
 
+On ALL PASS, also remind the user: "Run `/plugin marketplace update hallow-claude-plugins` weekly so skills + conventions stay current. Changelog at `infra/windmill/docs/changelog.md`."
+
+On FAILED, before showing the fix, suggest: "If you haven't updated the plugin recently, try `/plugin marketplace update hallow-claude-plugins` first — the failure mode may already be fixed upstream."
+
 ## Hard rules
 
 - Read-only. Do not modify any config, re-mint tokens, or re-register the MCP automatically.

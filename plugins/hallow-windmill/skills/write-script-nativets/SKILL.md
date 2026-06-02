@@ -3,7 +3,7 @@ name: write-script-nativets
 description: Use when writing a Windmill TypeScript script on the **Native TS runtime** — fetch-only, no external imports, no `windmill-client`. Lightest TS option for pure HTTP/JSON glue. Triggers on minimal webhook handlers, zero-dependency requirements. NOT for: scripts needing npm packages (use write-script-bun), Bun Native + S3 helpers (use write-script-bunnative).
 ---
 
-> **CLI lifecycle** (preview vs run vs sync push, when to test, Hallow ban on `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
+> **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
 
 # TypeScript (Native)
 

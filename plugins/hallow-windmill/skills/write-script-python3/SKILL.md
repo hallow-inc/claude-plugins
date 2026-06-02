@@ -3,7 +3,7 @@ name: write-script-python3
 description: Use when writing a Windmill Python script (`.py`, python3 runtime). Triggers on "python script in windmill", `def main(...)`, `import wmill`, pip requirements in script header. Covers main signature, wmill SDK usage, dependency pinning, and wmill CLI lifecycle.
 ---
 
-> **CLI lifecycle** (preview vs run vs sync push, when to test, Hallow ban on `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
+> **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
 
 # Python
 
@@ -147,6 +147,52 @@ Full method reference at `${CLAUDE_PLUGIN_ROOT}/skills/write-script-python3/refe
 Common imports:
 ```python
 import wmill
+```
+
+## DuckLake (Hallow canonical analytical store)
+
+Use Python for ALL DuckLake work — the DuckDB script kind is forbidden (parameter binding gates reject S3 paths). See `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §9b for the full ruleset.
+
+**Minimum viable read script:**
+
+```python
+from typing import TypedDict
+from f.platform.ducklake.lib import connect
+
+class postgresql(TypedDict):
+    host: str; port: int; user: str; password: str; dbname: str
+
+def main(db: postgresql):
+    con = connect(db, read_only=True)
+    try:
+        return con.execute("SELECT * FROM dl.shared.<table> LIMIT 10").fetchall()
+    finally:
+        con.close()
+```
+
+**Hard requirements:**
+
+| Rule | Why |
+|---|---|
+| Script kind: **Python** | DuckDB kind's `$name` / `%%name%%` binds reject S3 paths |
+| Script tag: **`fargate`** | Catalog resource targets `127.0.0.1:5435` — only resolves in Fargate task netns (tsforwarder sidecar). Default/EC2 workers cannot reach it. |
+| Import: `from f.platform.ducklake.lib import connect` | Loads ducklake + httpfs + postgres extensions, creates S3 secret, ATTACHes lake as `dl` |
+| `db` param resource: pick by intent | `f/shared/ducklake_catalog_ro` (read-only any schema), `f/<dept>/ducklake_catalog` (writes to own schema only), `f/platform/ducklake/catalog_pg` (admin) |
+| Write target: **department schema only** | Never `dl.main.*` (reserved). Scripts under `f/finance/` write `dl.finance.*`. Cross-schema writes blocked by lib-level guard. |
+| Schema creation | NEVER `CREATE SCHEMA` from a script. Only `f/platform/ducklake/provision_schema` (admin). |
+| Maintenance | NEVER `CHECKPOINT` or `CALL ducklake_*` inline. `f/platform/ducklake/maintain` runs CHECKPOINT daily. |
+
+**Script-yaml fields:**
+
+```yaml
+summary: <what it does>
+description: <how it fits in>
+lock: !inline <lock>
+content: !inline <content>
+schema: { ... }
+language: python3
+kind: script
+tag: fargate          # mandatory for DuckLake
 ```
 
 Keep imports lean — only pull what you call.

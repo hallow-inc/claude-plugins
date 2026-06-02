@@ -3,7 +3,7 @@ name: write-script-bunnative
 description: Use when writing a Windmill TypeScript script on the **Bun Native runtime** — fetch-only, no external imports, no `windmill-client`, includes S3Object helpers. Triggers on requests for zero-dependency Bun TS, webhook receivers, lightweight glue code with S3. NOT for: scripts needing npm packages (use write-script-bun), no-S3-helpers variant (use write-script-nativets).
 ---
 
-> **CLI lifecycle** (preview vs run vs sync push, when to test, Hallow ban on `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
+> **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
 
 # TypeScript (Bun Native)
 

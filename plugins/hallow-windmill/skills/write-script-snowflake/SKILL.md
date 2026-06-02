@@ -3,7 +3,7 @@ name: write-script-snowflake
 description: Use when writing a Windmill Snowflake script — SQL targeting Snowflake via the `snowflake` runtime. Triggers on "snowflake query", `WAREHOUSE = ...`, `VARIANT`, Snowflake-flavored SQL. Covers parameter binding, resource auth, and warehouse/role context.
 ---
 
-> **CLI lifecycle** (preview vs run vs sync push, when to test, Hallow ban on `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
+> **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
 
 # Snowflake
 

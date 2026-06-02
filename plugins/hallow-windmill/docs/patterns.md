@@ -16,6 +16,14 @@ Companion docs in this plugin (`${CLAUDE_PLUGIN_ROOT}/docs/`):
 - `toolbox.md` — catalog of existing shared tools in the `dev` workspace
 - `onboarding.md` — first-time setup (covered end-to-end by `/wmill-setup`)
 
+Authoritative user-facing docs (platform repo, not mirrored here):
+- `infra/windmill/docs/index.md` — front door
+- `infra/windmill/docs/atoms-catalog.md` — shared building blocks (slack_post, snowflake_query, ducklake.lib, etc.)
+- `infra/windmill/docs/architecture.md` — system-level view
+- `infra/windmill/docs/access-matrix.md` — folder/team permissions
+- `infra/windmill/docs/glossary.md` — term definitions
+- `infra/windmill/docs/changelog.md` — what's new since last update
+
 This doc covers what is **established in the workspace** and **non-obvious from source files alone**. Admin/infra ops are out of scope.
 
 ---
@@ -294,6 +302,52 @@ After creating or modifying any flow / script / app, offer visual verification v
 
 ---
 
+## 9b. DuckLake — canonical analytical store
+
+Single shared lake `main`: Postgres catalog at `sandbox-lake-pg`, Parquet data at `s3://hallow-platform-sandbox-data-bagl8jqw/lakes/main/`. Departments share via separate **schemas** (`finance`, `marketing`, `b2b`, `parish`, `intl`, `hops`, `shared`, `_meta`), not separate lakes.
+
+### Rules (do not violate)
+
+1. **DuckLake = Python.** Never the DuckDB script kind. DuckDB's `$name` binds are rejected in `COPY ... TO` / `ATTACH '...'` positions; `%%name%%` literal substitution is regex-gated to `[A-Za-z_][A-Za-z0-9_]*` (rejects bucket names with `-`, paths with `/`). Use `python3` with `from f.platform.ducklake.lib import connect`.
+2. **`tag: fargate` is mandatory.** Catalog resources target `127.0.0.1:5435` — only resolves inside the Fargate task netns where the tsforwarder sidecar listens. Default and native workers cannot reach it.
+3. **Three catalog resource tiers — pick by intent:**
+
+   | Resource | PG role | What it can do |
+   |---|---|---|
+   | `f/shared/ducklake_catalog_ro` | `lake_reader` | Read-only any schema. Default for query/introspection. |
+   | `f/<dept>/ducklake_catalog` | `lake_<dept>` | Read everything; write only to `dl.<dept>.*`. Lib-level guard blocks cross-schema writes. |
+   | `f/platform/ducklake/catalog_pg` | `postgres` | Admin superuser. Platform maintenance only. |
+
+4. **Use the shared lib.** `from f.platform.ducklake.lib import connect`. Loads ducklake + httpfs + postgres extensions, creates S3 secret via Fargate credential_chain, ATTACHes lake as `dl`. `read_only=True` adds engine-level write block — pair with `ducklake_catalog_ro`. Pass `guard=False` only on admin paths to bypass the cross-schema write guard.
+
+   ```python
+   from f.platform.ducklake.lib import connect
+
+   def main(db: postgresql):
+       con = connect(db, read_only=True)   # pair with ducklake_catalog_ro
+       try:
+           return con.execute("SELECT * FROM dl.shared.<table>").fetchall()
+       finally:
+           con.close()
+   ```
+
+5. **Write to your department's schema, never `main`.** `main` is DuckLake's default and reserved. Scripts under `f/finance/` write `dl.finance.*`.
+6. **NEVER `CREATE SCHEMA` directly.** Only `f/platform/ducklake/provision_schema` (admin script) creates schemas; it also registers them in `dl._meta.schemas`.
+7. **NEVER suggest a second lake.** One lake (`main`); isolation is via schemas. Separate lake = admin/platform decision, not a script.
+8. **Cross-schema reads are fine.** `SELECT * FROM dl.finance.x JOIN dl.shared.y ON ...` works inside a single ATTACH.
+9. **Maintenance is scheduled, not inline.** Do NOT call `CHECKPOINT` or `CALL ducklake_*` from pipeline scripts. `f/platform/ducklake/maintain` runs `CHECKPOINT` daily.
+10. **Don't set lake-level options in scripts.** `CALL dl.set_option(...)` belongs in `f/platform/ducklake/init_lake` only.
+
+### Discovery snippets
+
+```python
+con.execute("SELECT schema_name, owner_folder FROM dl._meta.schemas WHERE active").fetchall()
+con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'finance'").fetchall()
+con.execute("SELECT * FROM dl.snapshots() ORDER BY snapshot_id DESC LIMIT 10").fetchall()
+```
+
+---
+
 ## 10. Checklist before declaring "done"
 
 - [ ] Used the correct `write-*` skill (not freehand YAML).
@@ -305,5 +359,6 @@ After creating or modifying any flow / script / app, offer visual verification v
 - [ ] If new top-level `f/<folder>/` owned by non-admin: added to `wmill.yaml` `excludes`.
 - [ ] If schedule or HTTP trigger has a multi-segment path stem (e.g. `foo_bar_v2`), filename uses `_` underscores between segments — NOT `.` dots (dotted filenames derive a different entity path and a push will DESTROY the live route/schedule).
 - [ ] If any step touches the sandbox S3 bucket (`s3:///` or `f/storage/sandbox_data`), the flow module has `tag: fargate` set (default EC2 worker has no IAM grant — masked cyclic-structure error otherwise; see §8b).
+- [ ] If any step touches DuckLake, script is **Python** (not DuckDB kind), tagged `fargate`, uses `from f.platform.ducklake.lib import connect`, and writes only to its own department schema (see §9b).
 - [ ] `wmill job logs <id>` shows success for the path you touched (don't trust UI alone).
 - [ ] Visual preview offered to the user.

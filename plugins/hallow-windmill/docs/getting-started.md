@@ -93,6 +93,20 @@ Then Claude walks you through it, writes the files, mirrors them to Windmill, an
 - **"Is there already a tool that does X"** → say "what tools exist for X" — the `windmill-discover` skill catalogs what's available.
 - **"I changed my tool and nothing happened"** → make sure you mirrored the local file to the server. Edits to a local file alone do not push to Windmill. The `write-*` skills handle this automatically; if you edited by hand, ask Claude to re-publish.
 
+## Keep the plugin fresh
+
+The plugin updates frequently — new shared atoms, new conventions, new gotchas baked into skills. Pull updates roughly weekly, or anytime Claude does something that contradicts what a colleague told you:
+
+```
+/plugin marketplace update hallow-claude-plugins
+/plugin install hallow-windmill@hallow-claude-plugins
+/reload-plugins
+```
+
+What's new since your last update: `infra/windmill/docs/changelog.md` in the platform repo.
+
+If Claude is doing something stale (still suggesting `wmill sync push`, missing a new shared atom, ignoring a convention), update first before debugging — the fix has often already shipped.
+
 ## Where to learn more
 
 You don't need to read any of these to start building. They exist for when you want to go deeper.

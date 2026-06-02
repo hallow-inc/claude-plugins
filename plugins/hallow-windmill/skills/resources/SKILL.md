@@ -81,6 +81,18 @@ Reference other resources:
 }
 ```
 
+### DuckLake catalog (Hallow, `resource_type: postgresql`)
+
+Three pre-provisioned PG resources pointing at the shared DuckLake catalog. Don't create new ones — pick by intent. Full ruleset in `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §9b.
+
+| Resource path | PG role | Use for |
+|---|---|---|
+| `f/shared/ducklake_catalog_ro` | `lake_reader` | Read-only queries from any folder. **Default for analytics scripts.** |
+| `f/<dept>/ducklake_catalog` | `lake_<dept>` | Department writer. Reads any schema, writes only `dl.<dept>.*`. ACL on `f/<dept>/` gates who can use. |
+| `f/platform/ducklake/catalog_pg` | `postgres` | Admin superuser. Platform maintenance + schema provisioning only. |
+
+All three target `127.0.0.1:5435` (tsforwarder sidecar). They only resolve from scripts/flows tagged `fargate`. Pair with `from f.platform.ducklake.lib import connect` in a Python script — see `write-script-python3` SKILL.md "DuckLake" section.
+
 ### MySQL
 ```json
 {

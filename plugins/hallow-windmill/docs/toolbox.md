@@ -1,23 +1,38 @@
 # Windmill Toolbox
 
-Re-usable scripts and flows in the `dev` Windmill workspace that any Hallow employee can drop into their own flows or scripts. Each is a typed wrapper around Hallow infrastructure — Supabase, S3 sandbox, Snowflake, Slack — so callers don't re-implement auth, sandbox prefixing, schema scoping, or validation.
+Re-usable scripts and flows in the `dev` Windmill workspace that any Hallow employee can drop into their own flows or scripts. Each is a typed wrapper around Hallow infrastructure — Supabase, S3 sandbox, Snowflake, DuckLake, Slack — so callers don't re-implement auth, sandbox prefixing, schema scoping, or validation.
 
 URL: `https://windmill.platform.hallow.app` (tailnet-only).
+
+> **More comprehensive catalog (with input/output schemas + one-line ask-Claude examples):** `infra/windmill/docs/atoms-catalog.md` in the platform repo. This page is the plugin-bundled summary; the platform doc is the source of truth.
 
 ## At a glance
 
 | Path | What it does |
 |------|--------------|
 | `f/shared/slack_post` | Post to Slack via webhook URL/resource or `chat.postMessage` |
+| `f/shared/error_to_slack` | Workspace error handler — routes by folder ancestry to team-specific webhooks |
 | `f/shared/assert_principal` | Gate a script/flow to specific users or groups |
 | `f/storage/s3_write_json` | Write JSON to the sandbox-data S3 bucket under your principal prefix |
 | `f/storage/s3_read_json` | Read JSON from the sandbox-data S3 bucket |
 | `f/storage/sandbox_data_prefix` | Build a safe S3 prefix from `WM_PERMISSIONED_AS + dataset` |
 | `f/storage/sandbox_data_roundtrip` | Put+Get a tiny object to verify IAM/KMS perms |
 | `f/warehouse/snowflake_query` | Run a Snowflake query, max-row-guarded |
+| `f/shared/snowflake_query` | Read-only Snowflake via HTTP route (any folder, no key-pair needed) |
 | `f/warehouse/supabase_query` | Run a Postgres query against Hallow Supabase (read-only by default) |
+| `f/platform/ducklake/lib` | Python lib — `from f.platform.ducklake.lib import connect` for DuckLake reads/writes (python3 + `tag: fargate` required) |
 | `f/platform/supabase_provision_area` | DDL: create a team or user role + schema (atom — use the flow) |
 | `f/platform/flows/provision_supabase_area` | Self-service: provision a Supabase area + DM credentials |
+
+## Sandbox Slack-bot tools (callable from `#sandbox-apps` `@`-mention only)
+
+| Path | What it does |
+|------|--------------|
+| `f/shared/schema_lookup` | Postgres schema (tables + columns) for an app |
+| `f/shared/last_deploy` | Last Coolify deployment status |
+| `f/shared/flow_status` | Recent runs of a Windmill script or flow |
+| `f/slack_bot/tools/rotate_db_pw` | Rotate a database password (approval-gated) |
+| `f/slack_bot/tools/add_user` | Create a Windmill user via direct INSERT (admin-only; bypasses OSS 10-OAuth cap) |
 
 ## Atoms
 

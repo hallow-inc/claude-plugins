@@ -3,7 +3,7 @@ name: write-script-bash
 description: Use when writing a Windmill Bash script (`.sh`, shell pipelines, system commands). Triggers on "write a bash script", "shell script in windmill", filenames ending `.sh`. Covers main() signature, arg parsing, exit codes, and wmill CLI preview/run/push.
 ---
 
-> **CLI lifecycle** (preview vs run vs sync push, when to test, Hallow ban on `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
+> **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
 
 # Bash
 

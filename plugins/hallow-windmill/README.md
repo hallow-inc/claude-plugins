@@ -101,18 +101,39 @@ Then either:
 
 `/hallow-windmill:wmill-doctor` runs the end-to-end smoke test and reports which step failed.
 
+## Stay current
+
+The plugin ships frequently — new shared atoms, new conventions, new gotchas wired into skills. Pull updates weekly (or any time Claude contradicts what a colleague told you):
+
+```
+/plugin marketplace update hallow-claude-plugins
+/plugin install hallow-windmill@hallow-claude-plugins
+/reload-plugins
+```
+
+`plugin.json` carries no `version` field — every master commit is effectively a new release, so `/plugin marketplace update` always picks up the latest. Changelog: `infra/windmill/docs/changelog.md` in the platform repo.
+
+If Claude suggests something stale (e.g. `wmill sync push`, a removed atom, an old folder convention), update before debugging. The fix has often already shipped.
+
 ## Platform support
 
 macOS, Linux/WSL, native Windows (PowerShell 5.1+).
 
 ## Hard rules baked in
 
-- Never `wmill sync push` (banned at Hallow).
+- Never `wmill sync push` / `wmill sync pull` (banned at Hallow — they delete server state not in local files and clobber secret variables). All entity mutations go via MCP `windmill` tools or the Windmill UI.
 - Never commit tokens.
 - Always pass `--workspace dev` on wmill commands.
+- DuckLake work is Python only, always tagged `fargate`, using `from f.platform.ducklake.lib import connect`. Never the DuckDB script kind.
 - Workdir for any tool work: `~/dev/wmill/` (macOS/Linux/WSL) or `%USERPROFILE%\dev\wmill\` (Windows). All bundled skills load from any directory — the workdir matters only because that's where the project-scoped `.mcp.json` lives.
 
 See `docs/onboarding.md` for the full procedure.
+
+## Authoritative platform docs
+
+The platform repo (`infra/windmill/docs/`) hosts the canonical user-facing doc set — Tutorial, How-to, Reference, Explanation, Architecture, Data flows, Workflow patterns, Possibilities, Building apps, Troubleshooting, Glossary, Changelog, Atoms catalog, Access matrix, Ask checklist. The plugin does NOT mirror them — it references them. When users need conceptual / discovery / lookup content beyond what's in `docs/` here, point at the platform docs index (`infra/windmill/docs/index.md`).
+
+Plugin-local `docs/` carries plugin-specific material only: onboarding procedure, Hallow-specific patterns (`patterns.md`), shared-tool template, install runbook.
 
 ## Layout
 

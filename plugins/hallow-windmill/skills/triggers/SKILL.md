@@ -54,6 +54,8 @@ Trigger entity at `f/foo/bar_baz_v2` must live on disk as `bar_baz_v2.http_trigg
 
 The field appears in API responses but Windmill ignores it on YAML push. The server stamps it from the **identity of whoever pushed** — typically the deployer's user (matches `wmill workspace`'s active token owner). Setting an arbitrary value in local YAML is a no-op. If a trigger needs a different run-as principal, that user must push it (or set it via the UI post-create).
 
+**Swap principal without re-pushing:** `wmill trigger set-permissioned-as <path> <email> --kind <kind>` rewrites the server-side principal without disturbing local YAML. Requires admin / `wm_deployers`. New principal must have read on the impl script's folder or runtime decrypt fails. See `cli-commands` SKILL.md → "Server-side principal swap".
+
 ### Headers require a `preprocessor`
 
 `main()` never receives request headers — even with `raw_string: true` or `format: resource-headers`. HTTP triggers have NO `args` field; headers/query/path-params are exposed only via the `event` object inside `export async function preprocessor(event)`. The preprocessor's return value becomes main()'s arg set (matched by parameter **name**, order irrelevant). Resources must be fetched inside the preprocessor via `await wmill.getResource(...)`. Applies to all event triggers (http, webhook, email).

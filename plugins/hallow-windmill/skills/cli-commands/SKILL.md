@@ -1,11 +1,13 @@
 ---
 name: cli-commands
-description: Use when running `wmill` CLI commands — `script preview/run`, `flow run`, `job get/list/logs`, `sync push/pull`, `workspace`, `version`. Triggers on "run the script", "check the job", "preview vs run", "push to windmill", inspecting failures via `wmill job`, "wmill generate-metadata no scripts found", "wmill bootstrap", "wmill --workspace", "wrong workspace push", "active workspace footgun", "script preview wrong worker tag". Covers preview-vs-run-vs-push decision, workspace flags (always pass `--workspace dev` — sync targets active workspace not cwd), JSON output handling, bootstrap-before-generate-metadata for hand-written scripts, `wmill script preview` ignoring sidecar tag (nondeterministic worker routing).
+description: Use when running `wmill` CLI commands — `script preview/run`, `flow run`, `job get/list/logs`, `workspace`, `version`. Triggers on "run the script", "check the job", "preview vs run", inspecting failures via `wmill job`, "wmill generate-metadata no scripts found", "wmill bootstrap", "wmill --workspace", "active workspace footgun", "script preview wrong worker tag". Covers preview-vs-run decision (no push — sync banned at Hallow), workspace flags, JSON output handling, bootstrap-before-generate-metadata for hand-written scripts, `wmill script preview` ignoring sidecar tag (nondeterministic worker routing).
 ---
 
 # Windmill CLI Commands
 
-The Windmill CLI (`wmill`) provides commands for managing scripts, flows, apps, and other resources.
+The Windmill CLI (`wmill`) provides commands for inspecting and previewing scripts, flows, apps, and resources.
+
+> **Hallow rule:** `wmill sync push` and `wmill sync pull` are **banned**. All entity mutations go through the **MCP `windmill` tools** (`createScript`, `updateFlow`, `createResource`, …) or the **Windmill UI** — never the CLI. `wmill` here is for **read/preview only**: job inspection, local preview, listing, validation. Anything that mutates server state is off-limits.
 
 ## Global Options
 
@@ -27,24 +29,25 @@ The Windmill CLI (`wmill`) provides commands for managing scripts, flows, apps, 
 | List scripts/flows/apps | `wmill script list`, `wmill flow list`, `wmill app list` | |
 | Inspect a resource | `wmill resource get <path>` | Use `resource-type list --schema` for type discovery. |
 | Inspect a schedule/trigger | `wmill schedule get <path>`, `wmill trigger get <path>` | |
-| Push local changes | `wmill sync push` | **Banned in Hallow `dev` workspace.** Use MCP `windmill` tools or UI. See `references/preview-vs-run.md`. |
+| Push local changes | — | `wmill sync push` is **banned**. Use MCP `windmill` tools (`createScript`, `updateScript`, `updateFlow`, `createResource`, `createSchedule`, `updateSchedule`, etc.) or the Windmill UI. |
+| Pull server state | — | `wmill sync pull` is **banned** (clobbers unrelated local files). Read individual entities via MCP `getScriptByPath`, `getFlowByPath`, `getResource`. |
 | Live-reload preview UI | `wmill dev` | For app/raw-app iteration. |
 | Validate trigger YAML | `wmill lint [directory]` | |
 
 ## Reference
 
-- `references/preview-vs-run.md` — preview vs run vs sync push decision + Hallow ban
+- `references/preview-vs-run.md` — preview vs run decision + Hallow ban on sync
 - `references/commands.md` — full `wmill` subcommand reference (all flags, all subcommands). Read on demand when you need exact CLI syntax not covered above.
 
 ## Hallow gotchas (CLI)
 
-### ALWAYS pass `--workspace dev` explicitly — sync uses the active workspace, not the directory
+### ALWAYS pass `--workspace dev` explicitly — CLI uses the active workspace, not the directory
 
-`wmill sync push`/`pull` and most `wmill` subcommands resolve the target workspace from `wmill workspace` (active state), NOT from the directory you're in. Running `wmill sync push` from `infra/windmill/dev/` while the active workspace is `admins` will push dev-intended changes INTO admins — a real footgun that has tripped the CE 3-group cap in practice.
+Most `wmill` subcommands resolve the target workspace from `wmill workspace` (active state), NOT from the directory you're in. Running a `wmill` command from `infra/windmill/dev/` while the active workspace is `admins` hits admins. Even read commands return wrong results.
 
 **Rules:**
-1. Always pass `--workspace <ws>` explicitly on every `wmill` command. Do not rely on the active workspace.
-2. If a dry-run shows unexpected `+ group` / `~ folder` operations against entities you've never seen, STOP — you're on the wrong workspace.
+1. Always pass `--workspace dev` explicitly on every `wmill` command.
+2. If a `wmill` listing shows entities you've never seen, STOP — wrong workspace.
 3. `wmill.yaml`'s `workspaces:` block helps but the CLI may still default to active unless `--workspace` is passed.
 
 ### `wmill generate-metadata` doesn't discover hand-written script files
@@ -62,3 +65,22 @@ wmill --workspace dev script generate-metadata f/<folder>/<name>  # NOW it works
 ### `wmill script preview` ignores tags — can't validate S3 routing
 
 `wmill script preview` has NO `--tag` flag. Even if you put `tag: fargate` in the script's sidecar `.script.yaml`, preview routes nondeterministically to whatever worker is free (usually `default`). To validate an S3 script's behavior against the Fargate worker (which has the IAM grant), wrap it in a flow with `tag: fargate` on the module and run the flow — bare script preview lies.
+
+### Workspace dedup — `wmill workspace add` rejects (URL, workspace) duplicates
+
+`wmill workspace add` enforces a unique `(remote URL, workspace_id)` constraint regardless of the `name` arg. Error: `"Backend constraint violation: (URL, workspace) already exists as 'X'. Use --force to overwrite."` `--force` overwrites the existing entry (losing the prior token) — useless for keeping two aliases (e.g. `u/brandon` and `u/sandbox` against the same workspace).
+
+**Workaround:** edit `$HOME/Library/Preferences/windmill/remotes.ndjson` directly. ndjson, NOT toml. Path is `Library/Preferences/windmill/`, NOT `.config/wmill/`. Append a duplicate row with a new name + new token:
+
+```ndjson
+{"name":"dev","remote":"https://windmill.platform.hallow.app/","workspaceId":"dev","token":"<token-1>"}
+{"name":"dev-sandbox","remote":"https://windmill.platform.hallow.app/","workspaceId":"dev","token":"<token-2>"}
+```
+
+### Server-side principal swap — `set-permissioned-as` (no re-push)
+
+`wmill trigger set-permissioned-as <path> <email> --kind <kind>` and `wmill schedule set-permissioned-as <path> <email>` swap the run-as principal **server-side** without re-pushing YAML or any sync operation. Email = login email; CLI resolves + reports username. Requires admin or `wm_deployers` group.
+
+**Caveat:** the new principal MUST have read on the impl script's folder (e.g. `f/platform_secrets/`) or runtime decrypt fails. Grant via `g/admin` membership or folder extra_perms first.
+
+Useful when migrating an entity from one canonical admin identity to another (e.g. `u/brandon` → `u/sandbox`) without disturbing the YAML on disk.

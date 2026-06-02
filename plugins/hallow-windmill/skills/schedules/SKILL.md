@@ -208,6 +208,8 @@ The server FORCES `email` to the identity of whoever runs the push — the activ
 
 **If a different run-as principal is required, that user must do the push.** Don't try to set it via YAML.
 
+**Swap principal without re-pushing:** `wmill schedule set-permissioned-as <path> <email>` rewrites the server-side principal directly (no YAML diff, no sync). Requires admin / `wm_deployers`. New principal must have read on the impl script's folder. See `cli-commands` SKILL.md → "Server-side principal swap".
+
 ### Cron parser rejects numeric DOW ranges
 
 Windmill's cron parser rejects numeric day-of-week ranges like `0-4` (error: `"Invalid range for Days of Week: 0-4"`). Use day-name ranges instead: `0 0 15 * * SUN-THU` rather than `0 0 15 * * 0-4`. Single numeric DOW (`* * * * * 0`) and lists (`0,3,5`) are fine — only RANGES require names.

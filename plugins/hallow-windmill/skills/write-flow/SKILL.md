@@ -403,3 +403,17 @@ Module shape:
 ```
 
 Full architectural context (Pulumi grant source, worker-group table, audit guidance for already-deployed-without-tag flows): see `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §8b.
+
+### DuckLake steps — `tag: fargate` + Python + lib (NOT DuckDB kind)
+
+Any flow module reading or writing the shared DuckLake (`dl.<schema>.<table>`) follows the same `tag: fargate` rule PLUS extra constraints:
+
+| Rule | Why |
+|---|---|
+| Module `tag: fargate` | Catalog resource targets `127.0.0.1:5435` (tsforwarder sidecar in Fargate task netns) — default worker can't reach it |
+| Step language: `python3` | DuckDB script kind's parameter binding rejects S3 paths — see patterns.md §9b rule 1 |
+| Inline code uses `from f.platform.ducklake.lib import connect` | Pre-built ATTACH/secret/extension setup |
+| `db:` param resource | `f/shared/ducklake_catalog_ro` (read), `f/<dept>/ducklake_catalog` (dept write), `f/platform/ducklake/catalog_pg` (admin) |
+| Don't call `CHECKPOINT` or `CALL ducklake_*` inline | `f/platform/ducklake/maintain` runs CHECKPOINT daily; inline competes with concurrent writers |
+
+Full ruleset (10 items, schema/lake rules, discovery snippets): `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §9b.
