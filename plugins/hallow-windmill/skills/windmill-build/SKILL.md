@@ -84,6 +84,7 @@ Once the entity is written and mirrored to the server via the MCP API:
 | "My tool failed / errored / didn't run / timed out" | `windmill-debug` |
 | "What tools already exist" / "is there a tool for X" / "show me the catalog" | `windmill-discover` |
 | "Who can run my tool" / "permissions" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §1 + §5, give the short answer for their case |
+| "Should I make a group / new group / how to organize access" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §0 (group-vs-folder-ACL decision; CE cap is gone but folder-ACL-first is the convention) |
 | "I want to publish a shared atom" | Read `${CLAUDE_PLUGIN_ROOT}/docs/shared-tool-template.md` and drive the 4-part recipe |
 
 ## Hard rules

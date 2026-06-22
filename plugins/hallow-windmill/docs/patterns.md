@@ -269,12 +269,20 @@ Folder ACL gates trigger route lookup. Even with valid `windmill` auth, a caller
 
 ## 8b. Worker tags + Fargate IAM (S3 / sandbox bucket)
 
-Hallow's Windmill runs two worker groups:
+Hallow's Windmill runs **five worker groups** (confirmed live via `wmill --workspace dev workers`, 2026-06-22, backend `CE v1.726.0`):
 
-| Worker group | Host | IAM | Has sandbox-bucket access? |
+| Worker group | Serves (tags) | Host / IAM | Sandbox-bucket access? |
 |---|---|---|---|
-| `default` | Coolify/EC2 container | EC2 instance role `hallow-platform-ec2` | **NO** — no grant to `hallow-platform-sandbox-data-*` |
-| `fargate` | ECS Fargate task | Task role `windmill-worker-task-role` | YES — grants `s3:List*/Get*/Put*/Delete*` + KMS |
+| `default` | ansible, bash, bun, csharp, deno, dependency, duckdb, flow, go, hub, java, nu, other, php, powershell, python3, rlang, ruby, rust | Coolify/EC2, role `hallow-platform-ec2` | **NO** grant to `hallow-platform-sandbox-data-*` |
+| `native` | nativets, postgresql, mysql, graphql, snowflake, bigquery, mssql, oracledb | native-tier workers (lightweight SQL/HTTP) | n/a |
+| `fargate` | `fargate` (S3 / sandbox-bucket work) | ECS Fargate task, role `windmill-worker-task-role` | **YES** — `s3:List*/Get*/Put*/Delete*` + KMS |
+| `odin` | `odin` | dedicated odin worker | n/a |
+| `reports` | `reports` | — **currently 0 workers** | n/a |
+
+Notes that bite:
+- **Language → group is automatic.** You don't tag a `postgresql`/`snowflake`/`nativets` script — Windmill routes it to `native` by its language tag. Same for `python3`/`bun`/`duckdb`/… → `default`. You only set `tag:` to override (e.g. `tag: fargate` for S3).
+- **`odin` is its OWN group, not on `default`.** The fork source adds `odin` to `DEFAULT_TAGS`, but the live `default` workers do NOT serve `odin` — an odin job needs `tag: odin` (or the odin group's auto-route). Don't assume odin runs on default.
+- **`reports` has 0 live workers.** A job tagged `reports` will queue forever (nothing serves it) — this is exactly the hang-the-queue failure mode in §7 ("always set a timeout"). Don't target `reports` unless an admin has scaled that group up.
 
 The Pulumi component (`infra/pulumi/windmill/component.go` "windmill-worker-sandbox-data-policy") grants the sandbox bucket policy ONLY to the Fargate task role. By design — broadening to the EC2 host role would put bucket access on every default-worker job.
 

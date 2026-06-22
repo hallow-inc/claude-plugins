@@ -340,5 +340,5 @@ When you publish an app to "anyone with the link", the deploy dialog now offers 
 - One entry per line; mix exact emails (`alice@hallow.app`) and domains (`@hallow.app` or `hallow.app`). Domain match is full-domain only — a subdomain won't match the parent.
 - Empty allowlist = traditional public-to-anyone (unchanged behavior).
 - With an allowlist set, a visitor must enter their email → receives a one-time magic link (15-min token) → gets a short session (30 min) before the app runs. The backend never reveals whether an email is on the list (enumeration-safe) and rate-limits 5 req/min per app+email.
-- **Requires SMTP configured at the instance level** (admin task — `deviation: implement OSS SMTP email delivery`) or the magic-link email never sends. If public users report "no email arrived", check with an admin that SMTP is configured.
+- **SMTP is configured on Hallow** (verified 2026-06-22: `smtp.gmail.com`, from `sandbox@hallow.app`) so the magic-link email sends. If public users report "no email arrived", check spam + that the address is actually on the allowlist before suspecting SMTP.
 - The gate covers only the public app UI — it does NOT gate script/flow exports or the authenticated workspace view.

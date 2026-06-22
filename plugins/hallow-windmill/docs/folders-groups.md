@@ -4,6 +4,27 @@ Sources: [groups_and_folders](https://www.windmill.dev/docs/core_concepts/groups
 
 ---
 
+## 0. When to create a group vs just use a folder ACL
+
+Default at Hallow: **reach for a folder ACL first; create a new group only when the same set of people needs the same access across multiple folders.**
+
+The historical reason to avoid groups — the Community-Edition **3-group cap** — is **GONE.** Hallow's customized-OSS fork neutered it (`deviation: neuter CE group cap`), so group creation no longer hard-fails at 3. But "you can" ≠ "you should": a group is a reusable identity to maintain, and most access needs are satisfied by attaching individual users (or one existing group) directly to a folder.
+
+Decision:
+
+| Situation | Do this |
+|---|---|
+| One app/domain, a handful of people, access doesn't recur elsewhere | **Folder ACL only.** Attach `u/person@hallow.app` (or an existing `g/team-*`) at Viewer/Writer on `f/<app>`. No new group. |
+| The *same team* needs the same access on **several** folders | **A group is warranted.** One `g/team-foo`, attach it to each folder — beats re-listing the same users per folder. Ask an admin to create it. |
+| You only need a *subset* of an existing group on one folder | Folder ACL — attach the individual users; don't fork a near-duplicate group. |
+| Gating a privileged/shared tool | Reuse the standing groups (`g/admin`, `g/all`) + folder placement — see §5 + `shared-tool-template.md`. Don't invent a group for one tool. |
+
+Who can create groups: **workspace admins only.** Group creation runs under the caller's DB identity (`user_db.begin(authed)` → `set_session_context(is_admin, …)`), and the `group_` table's row-level security only permits the INSERT when the session is admin (the `windmill_admin` role). A non-admin's create call is rejected by RLS. `wm_deployers` is a deploy-rights group, NOT admin — it does **not** let you create groups. So a non-admin engineer asks an admin, stating which folders the group will attach to and why an existing group / folder-ACL won't do. Standing system/convention groups not to duplicate: `g/all`, `g/admin`, `g/slack`, `g/error_handler`, `g/wm_deployers`.
+
+Folder-ACL mechanics (levels, inheritance, the subfolder gotcha) are in §1 below.
+
+---
+
 ## 1. Folder ACL semantics
 
 Three levels. Viewer = read-only. Writer = read + write. Admin = read + write + manage permissions + add admins.
