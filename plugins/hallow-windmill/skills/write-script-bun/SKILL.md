@@ -161,3 +161,23 @@ const res = await fetch(`${process.env.BASE_URL}/api/r/${process.env.WM_WORKSPAC
 If your script reads/writes the Hallow sandbox bucket (via `f/storage/sandbox_data` or any `s3:///` URI on the workspace default storage), and you wrap it in a flow module, the MODULE needs `tag: fargate`. Otherwise the step runs on `default` (EC2 instance role, no S3 IAM) and fails with a MASKED cyclic-structure error.
 
 See the write-flow skill "Hallow gotchas → S3" section for the full symptom-and-fix.
+
+### Catch raw AWS SDK errors and rethrow a plain `Error` — they crash the result writer
+
+A raw AWS SDK error thrown out of a bun script crashes Windmill's result writer with `TypeError: JSON.stringify cannot serialize cyclic structures` (`wrapper.mjs:60`) — the AWS SDK error object is cyclic, so the *real* S3 cause (`NoSuchKey`, `AccessDenied`) gets MASKED. (This is the same cyclic symptom as the missing-`tag: fargate` case above, but here it can also hide a genuine `NoSuchKey` / bad-key bug — not just an IAM mismatch.)
+
+**Always wrap S3 calls and rethrow a plain-string `Error`** so the real message survives serialization:
+
+```typescript
+try {
+  return await s3.send(cmd);
+} catch (e: any) {
+  throw new Error(`${e.name}: ${e.message}`);  // plain, serializable
+}
+```
+
+Pattern lives in `f/storage/s3_read_json` + `f/storage/s3_write_json`. Prefer calling those shared atoms over raw SDK use.
+
+### Always set an explicit `timeout` in `.script.yaml` (lower is better)
+
+Every script MUST set an explicit `timeout:` (seconds) in its `*.script.yaml`. Never ship a timeout-less script. A hang on a `tag: fargate` script pins the single thin Fargate worker (concurrency 1) and blocks the entire shared queue — and nothing catches it (the stuck worker keeps heartbeating, so neither the ECS healthcheck nor Windmill's zombie reaper fires). The job's own timeout is the only bound. Pick the smallest value that comfortably covers expected runtime (fast API/Slack glue 60–120s, warehouse query 300–600s, heavy pipeline 900–1800s); a per-script timeout overrides the instance default. Full rationale: `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §7 ("Always set an explicit timeout").

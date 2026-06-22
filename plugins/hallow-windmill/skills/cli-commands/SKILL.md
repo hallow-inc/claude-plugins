@@ -84,3 +84,13 @@ wmill --workspace dev script generate-metadata f/<folder>/<name>  # NOW it works
 **Caveat:** the new principal MUST have read on the impl script's folder (e.g. `f/platform_secrets/`) or runtime decrypt fails. Grant via `g/admin` membership or folder extra_perms first.
 
 Useful when migrating an entity from one canonical admin identity to another (e.g. `u/brandon` → `u/sandbox`) without disturbing the YAML on disk.
+
+### `folders/create` + `folders/update` return BARE STRINGS, not JSON
+
+The `POST /folders/create` and `POST /folders/update/<path>` endpoints return a bare string body (e.g. `Created folder f/foo`), NOT JSON. A blind `JSON.parse(body)` on the response throws `Unexpected identifier "Created"`. Only parse the body if it starts with `{` or `[`; otherwise treat it as a status string.
+
+### `folders/update` has PUT semantics — always send `owners`
+
+`POST /folders/update/<path>` replaces the whole folder record (PUT, not PATCH). Omitting `owners` from the payload EMPTIES the owners list and the call 400s with `"invalid state: owner would not have permission"`. Always include the current `owners` array in every update, even when you're only changing another field.
+
+Related footgun: the folder **creator is auto-added to `owners`**. A manual test run as `u/sandbox` pollutes the owners of any folder it creates — clean those up post-test (re-`update` with the intended owners) so test identities don't linger as folder owners.

@@ -285,3 +285,11 @@ Two secret-storage flavors coexist in Hallow:
 The `apify` RT in the `admins` workspace is OAuth-only ("Available only on Windmill Cloud") — self-hosted Hallow can't seed it. Use the sibling `apify_api_key` RT instead (`{api_key}` schema).
 
 **General rule for self-host:** when an n8n / generic doc refers to an OAuth resource type, look for a sibling `*_api_key` variant first. OAuth-only RTs to watch for on self-host: `apify` (use `apify_api_key`). RTs that work on self-host because they accept a plain token field: `gdrive`, `gsheets`, `gcal`, `gmail` (paste OAuth token manually).
+
+### Google OAuth-connect now works on Hallow's fork (gcal, gmail, gdrive, …) — UI Connect button, not just manual paste
+
+Hallow's customized-OSS fork enabled the full OSS OAuth-**connect** flow for any resource type in the `oauth_connect.json` registry (`deviation: oauth connect for gcal and gmail as resources`, plus `deviation: implement OSS OAuth/SSO login`). So for `gcal`, `gmail`, `gdrive`, `gsheets` etc. you can now use the Windmill UI **"Connect"** button (instance OAuth app must be configured by an admin) — it runs the authorize→callback flow, persists an `account` row + refresh token, and Windmill auto-refreshes it. You no longer HAVE to hand-paste a token.
+
+- `gcal` scope: `https://www.googleapis.com/auth/calendar.events`. `gmail` scope: `https://www.googleapis.com/auth/gmail.send`.
+- This is the OSS connect flow (stock OSS gates it behind EE/Cloud). It needs the instance-level Google OAuth client configured in instance settings (admin task) before the Connect button works.
+- Manual-paste still works as a fallback for any of these RTs if the OAuth client isn't configured. `apify` is still OAuth-Cloud-only at the RT level — use `apify_api_key`.

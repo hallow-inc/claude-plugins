@@ -1,5 +1,7 @@
 # EmailTrigger (`*.email_trigger.yaml`)
 
+> ⚠️ **NOT currently available on Hallow.** The email-routing trigger is the Enterprise `windmill-trigger-email` feature — the backend `handler_oss` returns `"Email triggers are not available in open source version"` and the frontend only fetches email triggers under an enterprise license. Hallow's customized-OSS fork did NOT deviation-enable it. This reference is kept for completeness; **confirm the feature is actually live before authoring one.** For inbound email → script today, use an external mail-webhook service POSTing to an `*.http_trigger.yaml` route instead.
+
 Routes incoming emails to a script or flow. Each trigger reserves a local-part: emails sent to `<local_part>@<windmill_email_domain>` deliver to the configured runnable. Set `workspaced_local_part: true` to namespace per workspace — recipient becomes `<workspace_id>-<local_part>@…`.
 
 Senders can append URL-style extras with `+`: `mytrigger+foo=bar+baz=qux@…`. These flow through as `email_extra_args`.

@@ -316,3 +316,29 @@ For everything else, tell the user which command fits their intent and let them 
 4. **Use descriptive IDs** - `get_user.ts` not `a.ts`
 5. **Always whitelist tables** - add to `data.tables` before querying
 6. **Generate locks** - tell the user to run `wmill generate-metadata` after adding/modifying backend runnables
+
+## Hallow gotchas (raw apps)
+
+### The `./wmill` import is a build-time virtual module — never hand-write a shim
+
+`import { backend } from './wmill'` resolves to a build-time **virtual module** (`[wmill-virtual]`), not a physical `wmill.ts` you author. Running `wmill app dev` generates the `wmill.d.ts` types and provides the runtime exports (`backend`, `backendAsync`, `waitJob`, `getJob`, `streamJob`). Do NOT hand-write a `wmill.ts` shim to make imports resolve — just run `wmill app dev` and let it wire the virtual module.
+
+`wmill generate-metadata` is a **no-op without a `wmill.yaml`** present — it silently does nothing rather than erroring, so don't expect it to bootstrap an app's lock files on its own.
+
+### Deleting a raw app: the generic delete endpoint does NOT work — check `apps/list`
+
+`DELETE /api/w/<ws>/apps/delete/p/<path>` returns `200 "app deleted"` but does **NOT** delete a `raw_app: true` app — verified with the id-route, the encoded-path route, and repeated calls; all return 200 while the app persists. `apps/exists/path/<p>` is also unreliable (false negatives). The generic `apps/delete` endpoint only removes low-code (App Editor) apps.
+
+**Authoritative existence check = `apps/list`** (not `apps/exists`). To actually delete a raw app, use the Windmill UI. (`wmill sync push`'s deletion-diff would also work but sync is banned at Hallow.)
+
+### Gating a publicly-shared app by email allowlist (magic-link)
+
+Hallow's customized-OSS fork added a **per-app email allowlist** for publicly-shared apps (`deviation: OSS per-app email allowlist (magic-link gate)`) — EE-only in stock OSS. It applies to any app published with anonymous (public-link) execution mode, raw apps included.
+
+When you publish an app to "anyone with the link", the deploy dialog now offers an optional **"Restrict to an email allowlist"** textarea:
+
+- One entry per line; mix exact emails (`alice@hallow.app`) and domains (`@hallow.app` or `hallow.app`). Domain match is full-domain only — a subdomain won't match the parent.
+- Empty allowlist = traditional public-to-anyone (unchanged behavior).
+- With an allowlist set, a visitor must enter their email → receives a one-time magic link (15-min token) → gets a short session (30 min) before the app runs. The backend never reveals whether an email is on the list (enumeration-safe) and rate-limits 5 req/min per app+email.
+- **Requires SMTP configured at the instance level** (admin task — `deviation: implement OSS SMTP email delivery`) or the magic-link email never sends. If public users report "no email arrived", check with an admin that SMTP is configured.
+- The gate covers only the public app UI — it does NOT gate script/flow exports or the authenticated workspace view.

@@ -521,7 +521,7 @@ Hard rules:
 - **Never `wmill sync push`** anywhere, anytime. Use API/UI/MCP.
 - **Never commit a token** to git (CLI config, `.mcp.json`, `.vscode/mcp.json`, `wmill.yaml`, scripts, anything).
 - **Never edit other users' folders** (`u/<other>/**`).
-- **Never create new Windmill groups** (CE caps custom groups at 3 — use folder ACLs on user-owned folders).
+- **Prefer folder ACLs over new Windmill groups.** (The old CE 3-group cap is GONE — Hallow's customized-OSS fork neutered it via `deviation: neuter CE group cap`, so group creation no longer hard-fails at 3. But folder ACLs on user-owned folders remain the Hallow convention; don't proliferate groups just because you now can. Ask an admin if a new group is genuinely warranted.)
 - **Never bypass tailnet** to reach Windmill. If reachability breaks, fix Tailscale, not the workaround.
 - **Never `sudo npm install -g`** anything. Fix the Node install instead.
 

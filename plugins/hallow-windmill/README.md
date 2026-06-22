@@ -51,7 +51,7 @@ Skills:
 - `write-workflow-as-code` — workflow-as-code scripts (TS / Python, decorator-driven)
 - `write-script-bun` (default) plus `write-script-python3`, `write-script-snowflake`, `write-script-postgresql`, `write-script-duckdb`, `write-script-bash`, `write-script-nativets`, `write-script-bunnative`
 - `raw-app` — UI apps
-- `triggers` — HTTP routes / webhooks / email triggers (Hallow runs Windmill OSS; WebSocket / Kafka / NATS / SQS / MQTT / GCP / Azure / Postgres-CDC triggers are EE-only and not available)
+- `triggers` — HTTP routes / webhooks, plus WebSocket / Postgres-CDC / MQTT (OSS-native) and SQS (enabled by a Hallow fork deviation). Hallow runs a customized OSS fork; Kafka / NATS / GCP / Azure and the email-routing trigger remain EE-only and not available — see the skill's availability matrix
 - `schedules` — cron schedules
 - `resources` — resources + resource types
 - `preview` — open the Windmill dev page for visual verification
@@ -168,7 +168,7 @@ plugins/hallow-windmill/
     ├── write-script-python3/        ← Python scripts
     ├── write-script-{deno,bigquery,snowflake,postgresql,mysql,mssql,duckdb,graphql,go,rust,bash,powershell,csharp,java,php,rlang,nativets,bunnative}/
     ├── raw-app/                     ← UI apps
-    ├── triggers/                    ← HTTP / WebSocket / Kafka / CDC / SQS / NATS triggers
+    ├── triggers/                    ← HTTP / WebSocket / Postgres-CDC / MQTT / SQS triggers
     ├── schedules/                   ← cron schedules
     ├── resources/                   ← resources + resource types
     ├── write-workflow-as-code/      ← workflow-as-code scripts

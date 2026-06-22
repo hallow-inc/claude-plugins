@@ -102,6 +102,15 @@ After any fix:
 2. Confirm `success: true` on the new job.
 3. Tell the user the new job ID + result summary.
 
+### Restarting a failed flow from the failed step (not a full re-run)
+
+Hallow's customized-OSS fork enabled **flow step restart** (`deviation: implement OSS flow step restart`) — EE-only in stock OSS. When a long flow fails at step N (and earlier steps were expensive / side-effecting), you can restart from the failed step instead of re-running the whole flow:
+
+- **UI:** open the failed flow run's page and use the **Restart** button (now enabled — no enterprise license needed). Lets you pick the step.
+- **API:** `POST /api/w/dev/jobs/restart/f/<job_id>/<step_id>/<branch_or_iteration_n>`. For a step inside a nested `branchone` / for-loop / subflow, send a `RestartFlowRequestBody` with the `nested_path` (array of `{step_id, …}`) describing the path down to the inner step.
+- Restart reuses the prior run's results for the steps before the restart point — so confirm those earlier results were actually correct before restarting (don't restart past a step that silently produced bad data).
+- Any user can restart **their own** flow runs; no CLI command exists for this (`wmill` has no `flow restart`).
+
 ## Hard rules
 
 - **Read the actual logs.** Never diagnose blind.

@@ -110,7 +110,7 @@ Established cross-cutting building blocks. Check here before writing anything ne
 | Path | Use it when |
 |---|---|
 | `f/shared/slack_post` | Posting to Slack from any script/flow. Webhook URL **or** bot `channel`. Returns `ts` in bot mode. |
-| `f/shared/error_to_slack` | Workspace-level error handler. Auto-routes via folder ancestry → `error_webhook` resource → falls back to `f/shared/slack_ops_webhook`. |
+| `f/shared/error_to_slack` | Workspace-level error handler. Auto-routes via folder ancestry → `error_webhook` resource. **Note:** the `f/shared/slack_ops_webhook` fallback named in `error_to_slack.ts` does NOT exist on this workspace — only `f/platform_secrets/slack_bot__token` is provisioned. Use **bot channel mode** (channel `#platform-alerts`) rather than relying on the webhook fallback. |
 | `f/shared/assert_principal` | Gate a flow/script to allowed groups/users. Use as the first module of any privileged flow. |
 | `f/slack_tools/_redact` | Library (no `main()`). `import { redact } from "/f/slack_tools/_redact.ts"` before returning error strings to an LLM. Defense in depth. |
 | `f/slack_bot/bot_token` | Slack bot token resource. Default token source for `slack_post` bot mode. |
@@ -174,6 +174,9 @@ From `f/slack_bot/agent_reply.flow/`, `f/platform/flows/provision_supabase_area.
 7. **No relative imports between inline scripts in the same flow.** Each inline rawscript is bundled independently — `import {...} from "./sibling.ts"` fails at runtime. Fold helpers into the single module that uses them, or promote to a real script + reference via PathScript.
 8. **Inline-script filenames are wmill-owned.** `*.inline_script.ts` names are derived from each step's content/summary, and the flow CODE lives EMBEDDED in `flow.yaml` server-side. Hand-renaming the files is non-convergent: push reports "up to date" (code unchanged) but the differ keeps flagging the rename. To shorten a filename, change the step's `id` or `summary` so wmill re-derives the name.
 9. **Sync `request_type: sync` flows return JSON by default.** To respond with a raw string (HTML, plain text), set flow-level `early_return: results.<module>.<field>` — the expression value becomes the response body verbatim. Content-Type still defaults to JSON; setting `text/html` needs trigger config.
+10. **Inline step `summary:` is slugified into the filename — keep it 2-4 words.** Windmill derives `*.inline_script.ts` filenames by slugifying the step `summary:`. Verbose summaries produce ugly, non-convergent filenames (`+`, parens, spaces) that flip on every push/pull. Use 2-4 word snake-friendly summaries; put prose in `description:` (not slugified). Verify with both `wmill sync push --dry-run` and `pull --dry-run` reading `0 changes`. See `skills/write-flow/SKILL.md` (Hallow gotchas).
+11. **`input_transforms[].expr` runs in a QuickJS isolate — no wmill SDK.** `await wmill.getResource/getVariable` inside an `expr` throws `wmill is not defined`. Inject resources/variables with a `static` transform (`value: $res:<path>` / `$var:<path>`) and unpack fields in the script body. See `skills/write-flow/SKILL.md` (Hallow gotchas).
+12. **`wmill flow push` does NOT update `preprocessor_module`.** Push succeeds silently while old preprocessor content stays live. Patch via API: GET flow → edit `value.preprocessor_module.value.content` → POST `/flows/update/<path>` with the full payload (`path` field required or 422). See `skills/write-flow/SKILL.md` (Hallow gotchas).
 
 ---
 
@@ -187,6 +190,22 @@ From `f/slack_bot/agent_reply.flow/`, `f/platform/flows/provision_supabase_area.
 - Sync uses the *active workspace* (`wmill workspace`), not the directory name — easy to push `dev` content to `admins` or `prod` by accident.
 
 If you ever see a `wmill sync` command suggested in another doc, ignore it for this workspace. Use MCP tools or the UI.
+
+### Always set an explicit `timeout` (lower is better) — a hang wedges the shared queue
+
+Every script and flow the plugin authors MUST set an explicit `timeout` (seconds). Never rely on the absence of a timeout.
+
+**Why this is non-negotiable:** a timeout-less `tag: fargate` job that hangs inside user code (no output, no error) pins its worker forever. The Fargate group runs thin (autoscale can be a single worker) at concurrency 1, so one hung job blocks the **entire** Fargate queue — every other parish/collections/org-sync job stacks behind it. A worker stuck on a hung *job* keeps its process alive, keeps answering `/ready`, and keeps heartbeating `worker_ping`, so neither the ECS container healthcheck NOR Windmill's zombie-job reaper (fires on stale ping only) ever notices. **The job's own timeout is the only thing that bounds a hang.** The instance default (`job_default_timeout`, 1800s on dev) is a backstop, not a substitute — a per-script timeout overrides it.
+
+**Pick the smallest value that comfortably covers expected runtime:**
+
+| Workload | Suggested `timeout` |
+|---|---|
+| Fast API / Slack glue | 60–120s |
+| Warehouse / DuckLake query | 300–600s |
+| Heavy pipeline | 900–1800s |
+
+A too-low timeout that occasionally false-kills is far cheaper than a hang that takes out a shared worker group. Set it in `*.script.yaml` (`timeout:`) for scripts and on the module / flow for flows. Especially mandatory for anything `tag: fargate` (the concurrency-1 amplifier).
 
 ### `wmill.yaml` excludes — respect them
 
@@ -224,7 +243,7 @@ For flows, `wmill job get` returns sub-job IDs per step — drill into the faili
 
 Two gotchas from `f/slack_bot/handle_mention.http_trigger.yaml`:
 
-1. **Headers require a `preprocessor`.** `main()` never receives request headers. Define `export async function preprocessor(event)` to read headers and fetch resources before main runs. The HTTP trigger has no `args:` field — preprocessor is the only way.
+1. **Headers require a `preprocessor`.** `main()` never receives request headers. Define `export async function preprocessor(event)` to read headers and fetch resources before main runs. The HTTP trigger has no `args:` field — preprocessor is the only way. The preprocessor takes a **single `event` object** (`{ kind, body, raw_string, route, path, method, params, query, headers }`) — NOT positional `(body, headers, query)` params; declaring separate params makes each one `undefined`. Exact signature shape: see `skills/write-flow/SKILL.md` (Hallow gotchas → "HTTP-trigger preprocessor takes ONE `event` arg").
 
 2. **Custom signature verification** (Slack v0, Stripe, etc) needs `authentication_method: none` + `raw_string: true`. Windmill's built-in schemes don't cover HMAC headers. Verify yourself in the script, using the raw body to recompute the HMAC.
 
@@ -360,5 +379,6 @@ con.execute("SELECT * FROM dl.snapshots() ORDER BY snapshot_id DESC LIMIT 10").f
 - [ ] If schedule or HTTP trigger has a multi-segment path stem (e.g. `foo_bar_v2`), filename uses `_` underscores between segments — NOT `.` dots (dotted filenames derive a different entity path and a push will DESTROY the live route/schedule).
 - [ ] If any step touches the sandbox S3 bucket (`s3:///` or `f/storage/sandbox_data`), the flow module has `tag: fargate` set (default EC2 worker has no IAM grant — masked cyclic-structure error otherwise; see §8b).
 - [ ] If any step touches DuckLake, script is **Python** (not DuckDB kind), tagged `fargate`, uses `from f.platform.ducklake.lib import connect`, and writes only to its own department schema (see §9b).
+- [ ] Script/flow has an explicit `timeout:` set (lowest that comfortably covers expected runtime — fast glue 60–120s, query 300–600s, heavy 900–1800s). Mandatory for `tag: fargate`; a hang otherwise wedges the whole Fargate queue (see §7).
 - [ ] `wmill job logs <id>` shows success for the path you touched (don't trust UI alone).
 - [ ] Visual preview offered to the user.

@@ -21,7 +21,9 @@ One-stop lookup for "I see error X, where do I fix it?". Built from the windmill
 |---|---|---|
 | `TypeError`, `ReferenceError`, `SyntaxError` | Real code bug. | `windmill-debug` classify table |
 | `wmill.createToken is not a function` / `TypeError: (void 0) is not a function` | `createToken` doesn't exist on top-level windmill-client. Use `process.env.WM_TOKEN`. | `skills/write-script-bun/SKILL.md` (Hallow gotchas) |
-| `TypeError: JSON.stringify cannot serialize cyclic structures` at `wrapper.mjs writeFile(result.json)` | **Masked AWS AccessDenied** — the AWS SDK error object is cyclic. Step ran on wrong worker. | `docs/patterns.md` §8b + `skills/write-flow/SKILL.md` (Hallow gotchas) |
+| `TypeError: JSON.stringify cannot serialize cyclic structures` at `wrapper.mjs writeFile(result.json)` (or `wrapper.mjs:60`) | **Masked AWS SDK error** — the SDK error object is cyclic and crashes the result writer. Two underlying causes: (a) `AccessDenied` because the step ran on the wrong worker (missing `tag: fargate`); (b) a genuine S3 error (`NoSuchKey`, bad key) thrown raw. Fix: catch + rethrow `new Error(\`${e.name}: ${e.message}\`)` to unmask, then address the real cause. | `docs/patterns.md` §8b + `skills/write-flow/SKILL.md` (Hallow gotchas) + `skills/write-script-bun/SKILL.md` (Hallow gotchas: rethrow pattern) |
+| `TypeError: undefined is not an object (evaluating 'headers["..."]')` at preprocessor step | HTTP-trigger preprocessor declared positional params `(body, headers, query)`. It takes ONE `event` object — separate params are all `undefined`. | `skills/write-flow/SKILL.md` (Hallow gotchas: preprocessor signature) + `docs/patterns.md` §8 |
+| `Error: wmill is not defined` at flow runtime (in an input_transform) | `input_transforms[].expr` runs in a QuickJS isolate with no wmill SDK. Inject via `static: $res:/$var:` instead. | `skills/write-flow/SKILL.md` (Hallow gotchas: input_transforms isolate) + `docs/patterns.md` §6 rule 11 |
 | `EACCES` / `ENOENT` on local filesystem | Workers don't have that filesystem. Use S3. | `windmill-debug` classify table |
 
 ## Dispatch / routing
@@ -54,6 +56,10 @@ One-stop lookup for "I see error X, where do I fix it?". Built from the windmill
 | Created variable at resource path conflicts with auto-linked one | Resource secret-typed fields auto-create a linked variable at the resource's own path. Don't pre-create. | `skills/resources/SKILL.md` (Hallow gotchas) + `docs/patterns.md` §5 |
 | HTTP trigger main() got `headers: undefined` | HTTP triggers have no `args` field. Headers exposed only via `event` in `export async function preprocessor(event)`. | `skills/triggers/SKILL.md` (Hallow gotchas) + `docs/patterns.md` §8 |
 | Flow inline script: `import {...} from "./sibling.ts"` fails at runtime | Inline modules bundled independently — no cross-inline relative imports. | `skills/write-flow/SKILL.md` (Hallow gotchas) + `docs/patterns.md` §6 rule 7 |
+| `Unexpected identifier "Created"` parsing a `folders/create` or `folders/update` response | Those endpoints return a BARE STRING, not JSON. Only `JSON.parse` if the body starts with `{`/`[`. | `skills/cli-commands/SKILL.md` (Hallow gotchas: folders return bare strings) |
+| `folders/update` → `400 invalid state: owner would not have permission` | `folders/update` is PUT semantics — omitting `owners` empties them. Always send the current `owners` array. | `skills/cli-commands/SKILL.md` (Hallow gotchas: folders/update PUT) |
+| `DELETE /apps/delete/p/<path>` returns `200 "app deleted"` but the app persists | Generic delete only removes low-code apps, NOT `raw_app: true` apps. `apps/exists` also unreliable. Authoritative check = `apps/list`; delete via UI. | `skills/raw-app/SKILL.md` (Hallow gotchas: deleting a raw app) |
+| `wmill flow push` exits 0 but preprocessor changes don't take effect | `flow push` doesn't update `preprocessor_module`. Patch via API: GET → edit `value.preprocessor_module.value.content` → POST `/flows/update/<path>` (with `path` in body). | `skills/write-flow/SKILL.md` (Hallow gotchas: flow push doesn't update preprocessor) |
 
 ## Cron / scheduling
 
@@ -77,6 +83,7 @@ One-stop lookup for "I see error X, where do I fix it?". Built from the windmill
 | `wmill generate-metadata` says "no scripts found" on a hand-written file | Must `wmill script bootstrap <path> <lang>` first, then overwrite, then generate-metadata. | `skills/cli-commands/SKILL.md` (Hallow gotchas) |
 | `wmill script preview` of an S3 script intermittently succeeds/fails | Preview ignores tag routing — nondeterministic worker selection. Validate via flow with `tag: fargate`. | `skills/cli-commands/SKILL.md` (Hallow gotchas) + `docs/patterns.md` §8b |
 | `Job timed out` | Default per-job timeout hit (often 30s). Bump `timeout:` in `.script.yaml` or `flow.yaml` step. | `windmill-debug` classify table |
+| Fargate queue stalled — many jobs `queued`, none progressing; logs of one job froze after `--- BUN CODE EXECUTION ---` with no output/error | A timeout-less job hung inside user code and pinned the single thin Fargate worker (concurrency 1). Worker keeps heartbeating so no reaper fires. Cancel the hung job; ALWAYS set an explicit `timeout`. | `docs/patterns.md` §7 ("Always set an explicit timeout") |
 | `429 Too Many Requests` | Downstream service rate-limit. Backoff/cache. | `windmill-debug` classify table |
 
 ## How to grow this index

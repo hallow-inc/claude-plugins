@@ -417,3 +417,84 @@ Any flow module reading or writing the shared DuckLake (`dl.<schema>.<table>`) f
 | Don't call `CHECKPOINT` or `CALL ducklake_*` inline | `f/platform/ducklake/maintain` runs CHECKPOINT daily; inline competes with concurrent writers |
 
 Full ruleset (10 items, schema/lake rules, discovery snippets): `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §9b.
+
+### Inline step `summary:` is slugified into the filename — keep it 2-4 words
+
+Windmill names each inline-script file (`!inline <name>.inline_script.{ts,lock}`) by **slugifying the step's `summary:`**. The server applies the slug on push; a later `wmill sync pull` rewrites local `flow.yaml` `!inline` refs to whatever the current server slug is.
+
+A long/verbose summary produces an ugly filename full of `+`, parens, and spaces — and it never converges: `summary: "Verify HMAC + timestamp window (replay protection)"` becomes `verify_hmac_+_timestamp_window_(replay_protection).inline_script.ts`, and every push/pull round-trip flips the filename and the `!inline` ref back.
+
+**Rule:** inline step `summary:` must be 2-4 words, snake-friendly, no symbols, no parens (e.g. `summary: verify_signature`). Put the long prose in `description:` — that field is NOT slugified. This is the *cause* of the wmill-derived-filename non-convergence documented above; controlling the summary is how you make filenames both short and stable.
+
+**Convergence check:** after authoring, both `wmill sync push --dry-run` and `wmill sync pull --dry-run` must read `0 changes`. (Hallow bans actual `wmill sync` — dry-run only, for convergence verification.)
+
+### `input_transforms[].expr` runs in a QuickJS isolate with NO wmill SDK
+
+A step's `input_transforms.<arg>.expr` is evaluated in a sandboxed QuickJS isolate that does **not** have the wmill SDK. Any `await wmill.getResource("...")` / `await wmill.getVariable("...")` inside an `expr` throws `Error: wmill is not defined` at flow runtime.
+
+Allowed in `expr`: `flow_input.X`, `results.<step>.X`, plain JS, JSON, string interpolation, ternaries, arithmetic. Nothing that needs the SDK.
+
+To inject a resource or variable into a step, use a `static` transform with the `$res:` / `$var:` prefix — the whole object is passed in, and the script body (which DOES have the SDK, but won't need it) unpacks the fields:
+
+```yaml
+# FAILS at runtime — wmill is not defined in the isolate
+input_transforms:
+  supabase_anon_key:
+    type: javascript
+    expr: (await wmill.getResource("f/area/supabase")).anon_key
+
+# CORRECT — inject the resource statically, unpack in the script body
+input_transforms:
+  supabase:
+    type: static
+    value: $res:f/area/supabase
+  my_var:
+    type: static
+    value: $var:f/platform_secrets/some__secret
+```
+
+If a flow genuinely needs a *derived* value from a resource at flow level, compute it inside an earlier script step and read it via `results.<step>.<field>` in the later `expr`.
+
+### HTTP-trigger preprocessor takes ONE `event` arg — not separate body/headers/query
+
+A flow's (or script's) HTTP-trigger `preprocessor` is invoked with a **single object** `event`, not positional `(body, raw_string, query, headers)` params. Declaring separate params makes every one of them `undefined` — symptom: `TypeError: undefined is not an object (evaluating 'headers["x-webhook-secret"]')` at the preprocessor step.
+
+Correct signature (verified against `f/webhooks/slack/events`):
+
+```ts
+export async function preprocessor(event: {
+  kind: "http";
+  body: unknown;
+  raw_string: string | null;
+  route: string;
+  path: string;
+  method: string;
+  params: Record<string, string>;
+  query: Record<string, string>;
+  headers: Record<string, string>;
+}): Promise<{ /* reshaped args for main(), matched by name */ }> {
+  const secret = event.headers["x-webhook-secret"];
+  // ...
+}
+```
+
+The preprocessor's return value becomes `main()`'s arg set (matched by name). See `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §8 for *why* a preprocessor is required (HTTP triggers have no `args` field).
+
+### `wmill flow push` does NOT update `preprocessor_module` — patch via API
+
+Pushing a flow (or `wmill script push <flow>/preprocessor.ts`) does NOT update the flow's `preprocessor_module` on the server — the push succeeds (exit 0) silently while the old preprocessor content stays live. To actually update it: GET the flow, patch `value.preprocessor_module.value.content`, then POST the full payload back:
+
+```bash
+# GET current flow value
+curl -s "$BASE_URL/api/w/$WS/flows/get/p/f/<folder>/<flow>" -H "Authorization: Bearer $WM_TOKEN" > flow.json
+# patch value.preprocessor_module.value.content in flow.json (jq/editor), then:
+curl -s -X POST "$BASE_URL/api/w/$WS/flows/update/f/<folder>/<flow>" \
+  -H "Authorization: Bearer $WM_TOKEN" -H 'Content-Type: application/json' \
+  -d @flow.json   # `path` field REQUIRED in body or 422
+```
+
+The `path` field must be present in the update body or the call 422s. (At Hallow, prefer the MCP `windmill` flow tools over raw curl when they cover the operation.)
+
+### Always set an explicit `timeout` (lower is better)
+
+Every flow MUST set an explicit `timeout`. A timeout-less hang on a `tag: fargate` step pins the Fargate worker (concurrency 1, thin autoscale) and blocks the entire shared queue — and nothing else catches it (the worker keeps heartbeating). Pick the smallest value that comfortably covers the expected runtime (fast glue 60–120s, query 300–600s, heavy 900–1800s). Full rationale + the instance-default-vs-per-entity relationship: `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §7 ("Always set an explicit timeout").
