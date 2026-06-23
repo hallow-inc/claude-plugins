@@ -1,14 +1,15 @@
 ---
 name: windmill-discover
-description: Catalogs existing Windmill tools so users can reuse instead of rebuild. Triggers when the user asks what tools exist, what's already built, is there something that does X, does anyone have a script for Y, what's in the toolbox, "show me available tools", "list scripts in folder Z", "is there an atom for Slack/S3/Snowflake", or wants to find a tool by description. Combines the static toolbox catalog (curated, high-quality) with live MCP listings (everything in the workspace) and returns a plain-English summary the user can act on.
+description: Catalogs existing Windmill tools so users can reuse instead of rebuild — and flags when no tool is needed at all. Triggers when the user asks what tools exist, what's already built, is there something that does X, does anyone have a script for Y, what's in the toolbox, "show me available tools", "list scripts in folder Z", "is there an atom for Slack/S3/Snowflake", "can I already do X", or wants to find a tool by description. Combines the static toolbox catalog (curated, high-quality), live MCP listings (everything in the workspace), and the no-build path (direct read-only MCP tools for one-off pulls/exports/lookups) and returns a plain-English verdict the user can act on.
 ---
 
 # Discover existing Windmill tools
 
-You are answering "does the tool I want already exist?" — the question that should be asked before every `windmill-build` invocation. Goal: prevent reinvention. Two sources:
+You are answering "does the tool I want already exist?" — the question that should be asked before every `windmill-build` invocation. Goal: prevent reinvention. Three sources:
 
 1. **`${CLAUDE_PLUGIN_ROOT}/docs/toolbox.md`** — curated catalog of high-quality shared atoms (Slack, S3, Snowflake, Supabase, secrets, identity). Hand-maintained. Read this first.
 2. **`mcp__windmill__listScripts`** — live workspace contents. Includes user-private drafts, team-folder tools, and shared atoms. Less curated.
+3. **The no-build path** — for a one-off read/export/lookup, no Windmill tool is needed at all. The dev workspace exposes direct MCP tools: `mcp__hallow__execute_query` / `export_to_csv` / `get_schema` (read-only DB access), `mcp__library__semantic_search` (internal library), `mcp__lightpanda__lp_fetch` (web pages). If the user's ask is a one-off, the answer to "does a tool exist?" is "you don't need one — I can just do it." Surface this before recommending a build. (Read-only DB rule: SELECT/SHOW/DESCRIBE only; prefer reader connections. See `windmill-build` Step 0.5.)
 
 ## Step 0 — Confirm MCP is alive
 

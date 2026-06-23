@@ -18,6 +18,23 @@ A tool on Windmill is usually one of these shapes:
 
 Most useful tools combine these. A typical "daily report" tool is a **script** that does the work, a **schedule** that runs it every morning, and the script ending with a call to the shared `slack_post` tool so the result lands in a channel.
 
+## Build for a problem, not a product
+
+The biggest mistake is thinking too big. Windmill is for **automating one annoying step in how you already work** — not for building a whole product.
+
+If you find yourself asking for "a CRM", "a replacement for Lattice", "an onboarding system", or "a dashboard for everything", stop. Those are whole products. They take months, need a real app and login, and usually already exist as software that does the job better. Claude will not build you one, and you wouldn't want to maintain it.
+
+Instead, point at the **one thing you do by hand over and over** that you wish happened by itself. That's the tool. Some real examples:
+
+| You might say… | What you actually want built | What it is |
+|---|---|---|
+| "Replace Lattice" | A Slack reminder to managers when a review is due | One small reminder |
+| "Build us a CRM" | A Slack alert when a big lead comes in | One small alert |
+| "An onboarding system" | Auto-grant the right access when someone joins | One small access step |
+| "A dashboard for everything" | One key number posted to a channel each morning | One small daily post |
+
+A good Windmill tool **does one thing and fits in one sentence.** When you ask Claude to build something, it'll help you narrow a big idea down to the single step worth automating — and tell you plainly if what you described is really a job for off-the-shelf software, with Windmill only gluing it to Hallow.
+
 ## What's already built that I can reuse?
 
 Before building anything new, check what already exists. Common tools live in shared folders:
@@ -33,6 +50,22 @@ Before building anything new, check what already exists. Common tools live in sh
 Full catalog: `${CLAUDE_PLUGIN_ROOT}/docs/toolbox.md` or ask Claude "what Windmill tools already exist?"
 
 If something close exists, prefer composing over rebuilding. Ask Claude to chain it into your tool.
+
+## Sometimes you don't need to build anything
+
+Building a tool only pays off when the work has to **happen again**, be **shared with other people**, or be **kicked off automatically** (a schedule, a webhook, a button). For a one-time question, building is overkill — just ask Claude to do it.
+
+Things Claude can do for you right now, with nothing to build:
+
+- **"Pull me last week's signups" / "how many X are there?"** — Claude can query the data directly and show you the answer.
+- **"Export that to a spreadsheet."** — Claude can run the query and hand you a CSV.
+- **"What's in this table?" / "what data do we have on X?"** — Claude can look at the structure for you.
+- **"Look up how we do X" / "find the docs on Y."** — Claude can search the internal library.
+- **"Grab the numbers off this web page."** — Claude can fetch a page for you.
+
+So a good first question is *"is this a one-time thing, or will I want it again?"* If it's one-time, just ask — Claude does it and you're done. If you'll want it on a schedule, want a button for it, or want your team to run it, **then** it's worth turning into a Windmill tool (just say "make that reusable").
+
+One safety note you don't have to think about, but should know exists: when Claude pulls data directly like this, it only ever **reads** — it never changes or deletes anything. Anything that writes data, or that needs to run on its own, goes through a proper Windmill tool with the usual permission checks. Claude handles that distinction for you.
 
 ## Where does my tool live?
 
