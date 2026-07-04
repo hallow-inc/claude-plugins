@@ -1,6 +1,7 @@
 ---
 name: write-script-duckdb
-description: Use when writing a Windmill DuckDB script — in-process analytical SQL via the `duckdb` runtime. Triggers on "duckdb query", local-file analytics, CSV/Parquet inspection, "DuckLake catalog", "ATTACH ducklake", "duckdb $name bind", "duckdb %%name%% literal substitution", "DuckDB rejected bucket name with dash", "DuckLake on S3 fails". Covers attach syntax, parameter binding ($name vs %%name%% restrictions — both reject S3 paths in common positions), result shape, DuckLake catalog file CANNOT live on S3 (use Postgres/MySQL catalog), Hallow rule "DuckDB should be Python" (prefer python3 script + `import duckdb` for non-trivial work), sandbox-bucket jobs require `tag: fargate`.
+description: >-
+  Use when writing a Windmill DuckDB script — in-process analytical SQL via the `duckdb` runtime. Triggers on "duckdb query", local-file analytics, CSV/Parquet inspection, "DuckLake catalog", "ATTACH ducklake", "duckdb $name bind", "duckdb %%name%% literal substitution", "DuckDB rejected bucket name with dash", "DuckLake on S3 fails". Covers attach syntax, parameter binding ($name vs %%name%% restrictions — both reject S3 paths in common positions), result shape, DuckLake catalog file CANNOT live on S3 (use Postgres/MySQL catalog), Hallow rule "DuckDB should be Python" (prefer python3 script + `import duckdb` for non-trivial work), sandbox-bucket jobs require `tag: fargate`.
 ---
 
 > **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.

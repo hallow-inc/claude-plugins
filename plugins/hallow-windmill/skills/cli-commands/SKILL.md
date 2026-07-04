@@ -79,7 +79,7 @@ wmill --workspace dev script generate-metadata f/<folder>/<name>  # NOW it works
 
 ### Server-side principal swap — `set-permissioned-as` (no re-push)
 
-`wmill trigger set-permissioned-as <path> <email> --kind <kind>` and `wmill schedule set-permissioned-as <path> <email>` swap the run-as principal **server-side** without re-pushing YAML or any sync operation. Email = login email; CLI resolves + reports username. Requires admin or `wm_deployers` group.
+`wmill trigger set-permissioned-as <path> <email> --kind <kind>` and `wmill schedule set-permissioned-as <path> <email>` swap the run-as principal **server-side** without re-pushing YAML or any sync operation. Email = login email; CLI resolves + reports username. Requires admin.
 
 **Caveat:** the new principal MUST have read on the impl script's folder (e.g. `f/platform_secrets/`) or runtime decrypt fails. Grant via `g/admin` membership or folder extra_perms first.
 

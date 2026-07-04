@@ -32,7 +32,6 @@ For each pending entry, propose a target file based on the topic and tags. Routi
 | `cli`, `sync`, `workspace`, `generate-metadata` | `skills/cli-commands/SKILL.md` (Hallow gotchas) |
 | Error string / debugging recipe | `skills/windmill-debug/SKILL.md` classify table + `skills/windmill-debug/references/symptom-index.md` |
 | Cross-cutting architectural rule (IAM, worker tags, naming convention) | `docs/patterns.md` (new section or extend existing) |
-| Shared-tool authoring pattern | `docs/shared-tool-template.md` |
 
 Domain-specific recipes (e.g. n8n migration quirks, single-product API auth) DO NOT belong in plugin skills — keep them in the Resolved section of the scratchpad for future audit reference, but do not promote.
 

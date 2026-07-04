@@ -1,6 +1,7 @@
 ---
 name: triggers
-description: Use when configuring a Windmill **trigger** — HTTP route, webhook, WebSocket, Postgres CDC, MQTT, or SQS entry point that invokes a script or flow on Hallow's customized-OSS Windmill. Triggers on "webhook in windmill", "http route", "sqs trigger", "websocket trigger", "postgres cdc", `.trigger.yaml`, "trigger 404 / not found", "trigger ACL", "permissioned_as", "headers in preprocessor", "create disabled trigger", "is_static_website required". Covers trigger types + availability matrix (SQS enabled via Hallow fork deviation; Kafka/NATS/GCP/Azure/email still EE-blocked), payload mapping, auth, retry, folder-ACL gating on route lookup, workspaced URL form (`/api/r/<ws>/<route>`), deployer-stamped `permissioned_as`, create-then-disable for staged rollout, multi-segment underscore filenames. NOT for: time-based runs (use schedules skill), Kafka/NATS/GCP/Azure/email triggers (EE-only, still not available on Hallow).
+description: >-
+  Use when configuring a Windmill **trigger** — HTTP route, webhook, WebSocket, Postgres CDC, MQTT, or SQS entry point that invokes a script or flow on Hallow's customized-OSS Windmill. Triggers on "webhook in windmill", "http route", "sqs trigger", "websocket trigger", "postgres cdc", `.trigger.yaml`, "trigger 404 / not found", "trigger ACL", "permissioned_as", "headers in preprocessor", "create disabled trigger", "is_static_website required". Covers trigger types + availability matrix (SQS enabled via Hallow fork deviation; Kafka/NATS/GCP/Azure/email still EE-blocked), payload mapping, auth, retry, folder-ACL gating on route lookup, workspaced URL form (`/api/r/<ws>/<route>`), deployer-stamped `permissioned_as`, create-then-disable for staged rollout, multi-segment underscore filenames. NOT for: time-based runs (use schedules skill), Kafka/NATS/GCP/Azure/email triggers (EE-only, still not available on Hallow).
 ---
 
 # Windmill Triggers (Hallow customized-OSS build)
@@ -19,9 +20,9 @@ Triggers let external events invoke scripts and flows. Hallow runs a **customize
 | Trigger | File suffix | Status | Reference |
 |---|---|---|---|
 | HTTP / webhook | `*.http_trigger.yaml` | available (primary) | `references/http.md` |
-| WebSocket | `*.websocket_trigger.yaml` | available (OSS-native) | Windmill UI / docs |
-| Postgres CDC | `*.postgres_trigger.yaml` | available (OSS-native) | Windmill UI / docs |
-| MQTT | `*.mqtt_trigger.yaml` | available (OSS-native) | Windmill UI / docs |
+| WebSocket | `*.websocket_trigger.yaml` | available (OSS-native) — tags route live 2026-07-04, fire-through not retested | Windmill UI / docs |
+| Postgres CDC | `*.postgres_trigger.yaml` | available (OSS-native) — tags route live 2026-07-04, fire-through not retested | Windmill UI / docs |
+| MQTT | `*.mqtt_trigger.yaml` | available (OSS-native) — tags route live 2026-07-04, fire-through not retested | Windmill UI / docs |
 | SQS | `*.sqs_trigger.yaml` | available (Hallow deviation) | Windmill UI |
 | Email-routing | `*.email_trigger.yaml` | **NOT available** (EE-gated; see warning) | `references/email.md` |
 
@@ -43,7 +44,7 @@ Hallow runs a **customized OSS fork** of Windmill (`hallow-inc/windmill`) that u
 - MQTT (`*.mqtt_trigger.yaml`) — OSS-native.
 - **SQS (`*.sqs_trigger.yaml`) — enabled by a Hallow fork deviation** (`deviation: implement OSS SQS triggers`). Two auth modes: static AWS credentials, or OIDC (Windmill mints an OIDC token → STS `AssumeRoleWithWebIdentity`). SQS is EE-only in stock OSS; on Hallow it works.
 
-> WebSocket / Postgres CDC / MQTT are compiled into the build, but Hallow may not run a dedicated listener worker for each — **verify the listener actually fires before relying on one** (create the trigger, send a test event, check `wmill job list --script-path <path>`).
+> WebSocket / Postgres CDC / MQTT are compiled into the build and their **listener tags route live as of 2026-07-04** (confirmed via `wmill --workspace dev workers`/`queues`) — but a full **fire-through test per kind was not run** that sweep. Before relying on one, still **verify the listener actually fires** (create the trigger, send a test event, check `wmill job list --script-path <path>`).
 
 **Still Enterprise-only — NOT available** (backend `handler_oss` returns `"... not available in open source version"`):
 
@@ -67,7 +68,7 @@ Trigger entity at `f/foo/bar_baz_v2` must live on disk as `bar_baz_v2.http_trigg
 
 The field appears in API responses but Windmill ignores it on YAML push. The server stamps it from the **identity of whoever pushed** — typically the deployer's user (matches `wmill workspace`'s active token owner). Setting an arbitrary value in local YAML is a no-op. If a trigger needs a different run-as principal, that user must push it (or set it via the UI post-create).
 
-**Swap principal without re-pushing:** `wmill trigger set-permissioned-as <path> <email> --kind <kind>` rewrites the server-side principal without disturbing local YAML. Requires admin / `wm_deployers`. New principal must have read on the impl script's folder or runtime decrypt fails. See `cli-commands` SKILL.md → "Server-side principal swap".
+**Swap principal without re-pushing:** `wmill trigger set-permissioned-as <path> <email> --kind <kind>` rewrites the server-side principal without disturbing local YAML. Requires admin. New principal must have read on the impl script's folder or runtime decrypt fails. See `cli-commands` SKILL.md → "Server-side principal swap".
 
 ### Headers require a `preprocessor`
 

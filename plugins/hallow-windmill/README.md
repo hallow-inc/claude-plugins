@@ -49,7 +49,7 @@ Skills:
 
 - `write-flow` — flows (YAML)
 - `write-workflow-as-code` — workflow-as-code scripts (TS / Python, decorator-driven)
-- `write-script-bun` (default) plus `write-script-python3`, `write-script-snowflake`, `write-script-postgresql`, `write-script-duckdb`, `write-script-bash`, `write-script-nativets`, `write-script-bunnative`
+- `write-script-bun` (default) plus `write-script-python3`, `write-script-postgresql`, `write-script-duckdb`
 - `raw-app` — UI apps
 - `triggers` — HTTP routes / webhooks, plus WebSocket / Postgres-CDC / MQTT (OSS-native) and SQS (enabled by a Hallow fork deviation). Hallow runs a customized OSS fork; Kafka / NATS / GCP / Azure and the email-routing trigger remain EE-only and not available — see the skill's availability matrix
 - `schedules` — cron schedules
@@ -67,7 +67,6 @@ These auto-load when you tell Claude what you want to build; you almost never in
 | `windmill-capture-learning` | Skill (model-invocable) | Records a Windmill behavior, CLI quirk, or doc-contradiction discovered mid-session. Writes a memory entry + a scratchpad bullet in `WINDMILL_LEARNINGS.md` so the finding survives the session. |
 | `docs/patterns.md` | Authoritative doc | Hallow conventions: entity creation, on-disk file shapes, shared atoms catalog, secrets pattern, flow conventions, operational rules. (Engineer-oriented.) |
 | `docs/folders-groups.md` | Reference | Folder/group ACL semantics. |
-| `docs/shared-tool-template.md` | Reference | Recipe for adding a new reusable tool. |
 | `docs/toolbox.md` | Reference | Catalog of existing shared tools in the `dev` workspace. |
 | `docs/installing.md` | Reference | User-facing install runbook (GitHub Desktop, terminal, ZIP). |
 | `WINDMILL_LEARNINGS.md` | Scratchpad | Append-only log of discoveries written by `windmill-capture-learning`. Drained into proper docs periodically. |
@@ -152,7 +151,6 @@ plugins/hallow-windmill/
 │   ├── mcp.json.example.jsonc       ← reference .mcp.json shape (jsonc — has // comments)
 │   ├── patterns.md                  ← Hallow conventions for entity creation/usage
 │   ├── folders-groups.md            ← ACL semantics
-│   ├── shared-tool-template.md      ← recipe for new shared tools
 │   └── toolbox.md                   ← shared-tool catalog (dev workspace)
 └── skills/
     ├── windmill-build/              ← front door for "build me a tool" (auto-load)
@@ -166,7 +164,7 @@ plugins/hallow-windmill/
     ├── write-flow/                  ← creates flows
     ├── write-script-bun/            ← default scripting (TypeScript / Bun)
     ├── write-script-python3/        ← Python scripts
-    ├── write-script-{deno,bigquery,snowflake,postgresql,mysql,mssql,duckdb,graphql,go,rust,bash,powershell,csharp,java,php,rlang,nativets,bunnative}/
+    ├── write-script-{postgresql,duckdb}/
     ├── raw-app/                     ← UI apps
     ├── triggers/                    ← HTTP / WebSocket / Postgres-CDC / MQTT / SQS triggers
     ├── schedules/                   ← cron schedules

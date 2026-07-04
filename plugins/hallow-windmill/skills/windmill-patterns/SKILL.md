@@ -16,7 +16,6 @@ Authoritative content: `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md`. Treat as source
 3. **Route to the right companion doc:**
    - "Where does my file live? Who can read it?" → `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md`
    - "What does `wmill sync` do? Can I push?" → short answer: no, never `wmill sync push` (banned at Hallow). All entity changes go through MCP `windmill` tools or the Windmill UI. Admin CI pipelines that do `sync push` to staging/prod live in the platform repo — out of scope here.
-   - "I want to make a new shared tool" → `${CLAUDE_PLUGIN_ROOT}/docs/shared-tool-template.md`
    - "Is there already a tool for X?" → `${CLAUDE_PLUGIN_ROOT}/docs/toolbox.md`
    - "I'm setting up Windmill for the first time" → wrong skill; tell them to run `/wmill-setup` instead.
 4. **Never inline-walk a creation procedure yourself.** The corresponding Windmill skill (`write-flow`, `write-script-bun`, `raw-app`, `triggers`, `schedules`, `resources`, etc.) is the driver. This skill is reference.

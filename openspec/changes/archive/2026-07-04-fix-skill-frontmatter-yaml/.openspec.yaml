@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-07-03
+goal: "Fix 9 hallow-windmill skills whose description: field contains an
+  unquoted YAML colon-space (NOT for:, tag:), which silently drops all
+  frontmatter so the skills never auto-trigger. Convert each to a folded block
+  scalar (>-)."

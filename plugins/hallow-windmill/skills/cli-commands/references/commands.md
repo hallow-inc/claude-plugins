@@ -30,7 +30,7 @@ app related commands
   - `--overwrite` - Overwrite the target directory if it already exists, without prompting.
   - `--no-open-in-desktop` - Do not prompt to open the new app in Claude Desktop.
 - `app generate-agents [app_folder:string]` - regenerate AGENTS.md and DATATABLES.md from remote workspace
-- `app set-permissioned-as <path:string> <email:string>` - Set the on_behalf_of_email for an app (requires admin or wm_deployers group)
+- `app set-permissioned-as <path:string> <email:string>` - Set the on_behalf_of_email for an app (requires admin)
 
 ### audit
 
@@ -116,7 +116,7 @@ flow related commands
   - `--json` - Output as JSON (for piping to jq)
 - `flow show-version <path:string> <version:string>` - Show a specific version of a flow
   - `--json` - Output as JSON (for piping to jq)
-- `flow set-permissioned-as <path:string> <email:string>` - Set the on_behalf_of_email for a flow (requires admin or wm_deployers group)
+- `flow set-permissioned-as <path:string> <email:string>` - Set the on_behalf_of_email for a flow (requires admin)
 
 ### folder
 
@@ -206,7 +206,7 @@ Manage workspace groups
   - `--json` - Output as JSON (for piping to jq)
 - `group get <name:string>` - Get group details and members
   - `--json` - Output as JSON (for piping to jq)
-- `group create <name:string>` - Create a new group
+- `group create <name:string>` - Create a new group (admin-only on Hallow; non-admins ask a workspace admin — RLS restricts group creation to `windmill_admin`)
   - `--summary <summary:string>` - Group summary/description
 - `group delete <name:string>` - Delete a group
 - `group add-user <name:string> <username:string>` - Add a user to a group
@@ -379,7 +379,7 @@ schedule related commands
 - `schedule enable <path:string>` - Enable a schedule
   - `--force` - Bypass the fork-conflict warning when the parent workspace has the same schedule (acknowledges that both crons will fire)
 - `schedule disable <path:string>` - Disable a schedule
-- `schedule set-permissioned-as <path:string> <email:string>` - Set the email (run-as user) for a schedule (requires admin or wm_deployers group)
+- `schedule set-permissioned-as <path:string> <email:string>` - Set the email (run-as user) for a schedule (requires admin)
 
 ### script
 
@@ -411,7 +411,7 @@ script related commands
 - `script bootstrap <path:file> <language:string>` - create a new script (alias for new)
   - `--summary <summary:string>` - script summary
   - `--description <description:string>` - script description
-- `script set-permissioned-as <path:string> <email:string>` - Set the on_behalf_of_email for a script (requires admin or wm_deployers group)
+- `script set-permissioned-as <path:string> <email:string>` - Set the on_behalf_of_email for a script (requires admin)
 - `script history <path:string>` - show version history for a script
   - `--json` - Output as JSON (for piping to jq)
 
@@ -520,7 +520,7 @@ trigger related commands
 - `trigger new <path:string>` - create a new trigger locally
   - `--kind <kind:string>` - Trigger kind (required: http, websocket, kafka, nats, postgres, mqtt, sqs, gcp, azure, email)
 - `trigger push <file_path:string> <remote_path:string>` - push a local trigger spec. This overrides any remote versions.
-- `trigger set-permissioned-as <path:string> <email:string>` - Set the email (run-as user) for a trigger (requires admin or wm_deployers group)
+- `trigger set-permissioned-as <path:string> <email:string>` - Set the email (run-as user) for a trigger (requires admin)
   - `--kind <kind:string>` - Trigger kind (required: http, websocket, kafka, nats, postgres, mqtt, sqs, gcp, azure, email)
 
 ### user

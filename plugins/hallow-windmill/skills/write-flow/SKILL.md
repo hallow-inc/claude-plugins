@@ -1,6 +1,7 @@
 ---
 name: write-flow
-description: Use when creating a Windmill **flow** — multi-step orchestration of scripts via `flow.yaml`, with branches, loops, suspends, approvals, error handlers. Triggers on "build a flow", "chain scripts", "windmill workflow", `flow.yaml`, "tag fargate", "S3 step in flow", "AccessDenied cyclic structures", "early_return HTML", "inline script import", "rename inline script", "flow sync up to date but diff persists". Covers flow scaffolding (`wmill flow new`), preprocessor/failure modules, loops, branches, approvals, sync HTTP-trigger response shaping via `early_return`, sandbox S3 steps MUST set `tag: fargate` (Fargate task role has the IAM grant; EC2 default worker does not — symptom is a masked cyclic-structure error), no cross-inline relative imports, wmill-owned inline-script filenames (hand-rename is non-convergent). NOT for: single-script work (use write-script-* skill), code-defined workflows (use write-workflow-as-code).
+description: >-
+  Use when creating a Windmill **flow** — multi-step orchestration of scripts via `flow.yaml`, with branches, loops, suspends, approvals, error handlers. Triggers on "build a flow", "chain scripts", "windmill workflow", `flow.yaml`, "tag fargate", "S3 step in flow", "AccessDenied cyclic structures", "early_return HTML", "inline script import", "rename inline script", "flow sync up to date but diff persists". Covers flow scaffolding (`wmill flow new`), preprocessor/failure modules, loops, branches, approvals, sync HTTP-trigger response shaping via `early_return`, sandbox S3 steps MUST set `tag: fargate` (Fargate task role has the IAM grant; EC2 default worker does not — symptom is a masked cyclic-structure error), no cross-inline relative imports, wmill-owned inline-script filenames (hand-rename is non-convergent). NOT for: single-script work (use write-script-* skill), code-defined workflows (use write-workflow-as-code).
 ---
 
 # Windmill Flow CLI Guide
@@ -498,3 +499,14 @@ The `path` field must be present in the update body or the call 422s. (At Hallow
 ### Always set an explicit `timeout` (lower is better)
 
 Every flow MUST set an explicit `timeout`. A timeout-less hang on a `tag: fargate` step pins the Fargate worker (concurrency 1, thin autoscale) and blocks the entire shared queue — and nothing else catches it (the worker keeps heartbeating). Pick the smallest value that comfortably covers the expected runtime (fast glue 60–120s, query 300–600s, heavy 900–1800s). Full rationale + the instance-default-vs-per-entity relationship: `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §7 ("Always set an explicit timeout").
+
+### Many concurrent multi-step flows can deadlock
+
+Same worker-pinning model as §timeout above, one level up. A worker runs **one job at a time**. A multi-step flow pins a worker for its **parent-flow job** for the whole run, while its **step jobs** also need workers. If the parent and steps draw from the same pool, then at enough concurrent runs every worker is holding a parent that is waiting for a step worker that can never free — a hold-and-wait deadlock.
+
+- **Symptom:** launch N of the same multi-step flow at once → they all start, none finish. One at a time is fine; a nightly single-flow-over-many-items is fine. Only a *fan-out of N whole flows* wedges.
+- **Two fixes you can apply as the author:**
+  1. Set a flow-level **`concurrency_limit`** so no more parents run at once than the pool can also serve steps for.
+  2. **Collapse thin steps into one script.** One job → one worker → deadlock is structurally impossible. This is the durable fix; prefer it when the steps are just glue. (A step that writes S3 keeps `tag: fargate`.)
+
+(How the platform mitigates this at the infra level — a dedicated flow-orchestration worker pool — is an admin concern, not something a flow author configures.)

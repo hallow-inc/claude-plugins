@@ -1,6 +1,7 @@
 ---
 name: raw-app
-description: Use when creating a Windmill **raw app** — single-file HTML/JS UI served from Windmill, not a low-code App Editor app. Triggers on "raw app", "html app in windmill", "single-page app on windmill", custom JS dashboards. NOT for: low-code App Editor apps, flow construction (use write-flow).
+description: >-
+  Use when creating a Windmill **raw app** — single-file HTML/JS UI served from Windmill, not a low-code App Editor app. Triggers on "raw app", "html app in windmill", "single-page app on windmill", custom JS dashboards. NOT for: low-code App Editor apps, flow construction (use write-flow).
 ---
 
 # Windmill Raw Apps
@@ -8,6 +9,8 @@ description: Use when creating a Windmill **raw app** — single-file HTML/JS UI
 Raw apps let you build custom frontends with React, Svelte, or Vue that connect to Windmill backend runnables and datatables.
 
 ## Creating a Raw App
+
+> **Styling:** a raw app owns its full styling via its own `index.css` — no gate. (Separately, Hallow's fork also un-gated the *low-code App-Editor*'s custom themes + CSS editor as of 2026-07-04 — but that's the App-Editor app type, not raw apps; irrelevant unless you're building a low-code app instead.)
 
 **You — the AI agent — create the app yourself by running `wmill app new` with the right flags. Do NOT tell the user to "run `wmill app new` and follow the prompts" or wait for them to do it.** The bare `wmill app new` is an interactive wizard that hangs waiting for stdin in any non-TTY context (which includes you). Always pass flags.
 

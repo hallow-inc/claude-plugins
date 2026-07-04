@@ -12,7 +12,6 @@ Audience: Hallow team members (engineers or anyone comfortable reading code) cre
 
 Companion docs in this plugin (`${CLAUDE_PLUGIN_ROOT}/docs/`):
 - `folders-groups.md` — ACL semantics, where your files end up
-- `shared-tool-template.md` — recipe for adding a new reusable tool
 - `toolbox.md` — catalog of existing shared tools in the `dev` workspace
 - `onboarding.md` — first-time setup (covered end-to-end by `/wmill-setup`)
 
@@ -115,13 +114,10 @@ Established cross-cutting building blocks. Check here before writing anything ne
 | `f/slack_tools/_redact` | Library (no `main()`). `import { redact } from "/f/slack_tools/_redact.ts"` before returning error strings to an LLM. Defense in depth. |
 | `f/slack_bot/bot_token` | Slack bot token resource. Default token source for `slack_post` bot mode. |
 
-Adding a new shared atom:
-- Cross-workspace: `f/shared/<name>`, owners `g/admin`, `g/all: false` (opt-in callers).
+Adding a new reusable atom (in a folder you can write):
 - Domain-scoped: `f/<domain>/<name>` (e.g. `f/slack_tools/`, `f/storage/`).
 - Schema: typed args with `description` (renders as tooltip), `default: null` for optional, `required:` for mandatory.
 - Return type: typed object, never raw error strings (use `_redact` first).
-
-Full recipe: see `${CLAUDE_PLUGIN_ROOT}/docs/shared-tool-template.md`.
 
 ---
 
@@ -153,7 +149,7 @@ Resource-backed flavor: when a resource type has a secret-typed field, Windmill 
 - **Scripts** have no `permissioned_as` field. They always run as the caller.
 - **Triggers, schedules, and flows** can elevate via `permissioned_as`.
 
-If a script needs elevated privileges (e.g. mint a workspace token, access a resource the caller lacks), wrap it in an HTTP trigger with `permissioned_as: u/sandbox`. Example: `f/slack_tools/flow_status.http_trigger.yaml` runs as `u/sandbox` so `wmill.createToken` works regardless of caller. `u/sandbox` is the canonical admin push identity for Hallow — `permissioned_as` is server-stamped from the pusher, so the admin push must come from the `u/sandbox` token.
+Elevation is **admin-only.** If a script needs elevated privileges (e.g. mint a workspace token, access a resource the caller lacks), it must run behind a trigger/schedule/flow whose `permissioned_as` is stamped from an admin push — `permissioned_as` is server-set from the pusher's identity, and only an admin push achieves an elevated principal. A non-admin cannot do this: provide the script and ask an admin to wrap and push it.
 
 ### Resource ACL
 
@@ -259,7 +255,7 @@ External callers POST to `${BASE_URL}/api/r/<workspace>/<route_path>` — NO ext
 
 ### HTTP triggers + folder ACL
 
-Folder ACL gates trigger route lookup. Even with valid `windmill` auth, a caller who can't READ the trigger's folder gets `"Trigger not found"`. Standard pattern: put the trigger in `f/shared/` (g/all readable); set `script_path` to an impl in an admin-only folder; set `permissioned_as: u/sandbox` so the script can decrypt admin-only secrets regardless of caller.
+Folder ACL gates trigger route lookup. Even with valid `windmill` auth, a caller who can't READ the trigger's folder gets `"Trigger not found"` — `authentication_method: windmill` does not bypass folder ACL. The trigger must live in a folder its intended callers can read.
 
 ### Create-then-disable for HTTP triggers
 
@@ -269,20 +265,19 @@ Folder ACL gates trigger route lookup. Even with valid `windmill` auth, a caller
 
 ## 8b. Worker tags + Fargate IAM (S3 / sandbox bucket)
 
-Hallow's Windmill runs **five worker groups** (confirmed live via `wmill --workspace dev workers`, 2026-06-22, backend `CE v1.726.0`):
+Hallow's Windmill runs **four worker groups**. Backend deployed as **1.735.0-1** per the fork's release commit (`da35af71d` on `hallow-inc/windmill`); the binary can't self-report — `GET /api/version` returns the literal `CE unknown-version`, so trust the git tag, not the endpoint. Live worker snapshot **2026-07-04** via `wmill --workspace dev workers` (re-run: see the "Re-verify the fact-set" block atop `WINDMILL_LEARNINGS.md`).
 
 | Worker group | Serves (tags) | Host / IAM | Sandbox-bucket access? |
 |---|---|---|---|
-| `default` | ansible, bash, bun, csharp, deno, dependency, duckdb, flow, go, hub, java, nu, other, php, powershell, python3, rlang, ruby, rust | Coolify/EC2, role `hallow-platform-ec2` | **NO** grant to `hallow-platform-sandbox-data-*` |
-| `native` | nativets, postgresql, mysql, graphql, snowflake, bigquery, mssql, oracledb | native-tier workers (lightweight SQL/HTTP) | n/a |
-| `fargate` | `fargate` (S3 / sandbox-bucket work) | ECS Fargate task, role `windmill-worker-task-role` | **YES** — `s3:List*/Get*/Put*/Delete*` + KMS |
-| `odin` | `odin` | dedicated odin worker | n/a |
-| `reports` | `reports` | — **currently 0 workers** | n/a |
+| `default` (3 wk) | deno, python3, go, bash, nativets, mysql, oracledb, bun, postgresql, bigquery, snowflake, mssql, graphql, rlang, duckdb, odin, dependency, other — **committed config removes `flow`** (→ `flowpool`); a running `default` container may still serve `flow` until restarted (live 2026-07-04 still showed it — committed compose is ground truth) | Coolify/EC2, role `hallow-platform-ec2` | **NO** grant to `hallow-platform-sandbox-data-*` |
+| `flowpool` (1 wk) | `flow` only — **NEW**, isolates parent-flow jobs so they can't starve their own steps (see write-flow §deadlock) | Coolify/EC2 | n/a |
+| `fargate` (2 wk) | `fargate, aws, flow, python3, bun, odin, rlang` — S3/sandbox work **plus overflow** for bursts | ECS Fargate task, role `windmill-worker-task-role` | **YES** — `s3:List*/Get*/Put*/Delete*` + KMS |
+| `native` (8 wk) | postgresql, mysql, graphql, snowflake | native-tier (lightweight SQL/HTTP; 8 = threads in one native container, not 8 processes) | n/a |
 
 Notes that bite:
-- **Language → group is automatic.** You don't tag a `postgresql`/`snowflake`/`nativets` script — Windmill routes it to `native` by its language tag. Same for `python3`/`bun`/`duckdb`/… → `default`. You only set `tag:` to override (e.g. `tag: fargate` for S3).
-- **`odin` is its OWN group, not on `default`.** The fork source adds `odin` to `DEFAULT_TAGS`, but the live `default` workers do NOT serve `odin` — an odin job needs `tag: odin` (or the odin group's auto-route). Don't assume odin runs on default.
-- **`reports` has 0 live workers.** A job tagged `reports` will queue forever (nothing serves it) — this is exactly the hang-the-queue failure mode in §7 ("always set a timeout"). Don't target `reports` unless an admin has scaled that group up.
+- **Language → group is automatic.** You don't tag a `postgresql`/`snowflake` script — Windmill routes it to `native` by its language tag. Same for `python3`/`bun`/`duckdb`/… → `default`. You only set `tag:` to override (e.g. `tag: fargate` for S3).
+- **`odin`/`rlang` run on `default` and spill to `fargate`.** The separate `odin` worker container was retired — odin is baked into the fat image and served by `default` (+ `fargate` overflow). No `tag: odin` gymnastics needed; the old dedicated-odin-group advice is obsolete.
+- **`reports` group is retired.** It no longer exists — don't target a `reports` tag (nothing serves it; a job would queue forever, the §7 hang-the-queue failure mode).
 
 The Pulumi component (`infra/pulumi/windmill/component.go` "windmill-worker-sandbox-data-policy") grants the sandbox bucket policy ONLY to the Fargate task role. By design — broadening to the EC2 host role would put bucket access on every default-worker job.
 

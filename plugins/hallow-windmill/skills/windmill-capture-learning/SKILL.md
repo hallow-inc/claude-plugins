@@ -6,7 +6,7 @@ description: Capture a Windmill behavior, gotcha, or plugin-doc-contradiction di
 # Capture a Windmill learning
 
 Use this skill any time you discover something about Windmill that should be
-reflected in the plugin (skills, shared-tool-template, patterns) but isn't yet.
+reflected in the plugin (skills, patterns, folders-groups) but isn't yet.
 
 ## When to use
 

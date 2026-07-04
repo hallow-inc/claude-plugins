@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-07-03
+goal: Remove admin-only how-to from the non-admin-audience hallow-windmill
+  plugin; where a non-admin hits an admin-gated wall, route to what they CAN do
+  (team folder), never the admin recipe.

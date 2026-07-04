@@ -147,5 +147,4 @@ You don't need to read any of these to start building. They exist for when you w
 - `${CLAUDE_PLUGIN_ROOT}/docs/toolbox.md` — catalog of reusable tools
 - `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` — who can see what (ACLs)
 - `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` — Hallow conventions (technical, for engineers)
-- `${CLAUDE_PLUGIN_ROOT}/docs/shared-tool-template.md` — recipe for publishing a tool others can reuse
 - `${CLAUDE_PLUGIN_ROOT}/docs/onboarding.md` — full first-time setup procedure (driven by `/wmill-setup`)

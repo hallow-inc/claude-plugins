@@ -1,6 +1,7 @@
 ---
 name: write-workflow-as-code
-description: Use when writing or modifying a Windmill **Workflow-as-Code** (WAC) script — TS/Python scripts that orchestrate steps using `@workflow`, `@task`, `step`, `sleep`, `task_script`, `task_flow` decorators instead of `flow.yaml`. Triggers on `workflow()`, `@task`, `taskScript(...)`, `task_flow(...)`, checkpoint/replay semantics. NOT for: YAML flows (use write-flow), one-shot scripts without orchestration (use write-script-*).
+description: >-
+  Use when writing or modifying a Windmill **Workflow-as-Code** (WAC) script — TS/Python scripts that orchestrate steps using `@workflow`, `@task`, `step`, `sleep`, `task_script`, `task_flow` decorators instead of `flow.yaml`. Triggers on `workflow()`, `@task`, `taskScript(...)`, `task_flow(...)`, checkpoint/replay semantics. NOT for: YAML flows (use write-flow), one-shot scripts without orchestration (use write-script-*).
 ---
 
 > **CLI lifecycle**: WAC files use the normal script CLI (`wmill script preview/run`, no separate WAC commands). See `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.

@@ -1,6 +1,7 @@
 ---
 name: schedules
-description: Use when configuring a Windmill **schedule** — cron-based or interval trigger that runs a script/flow on a timer. Triggers on "schedule a script", "run every X minutes", "cron in windmill", `.schedule.yaml`, "schedule churns on every push", "perpetual ~ modify diff", "email field reverts", "cron_version v2", "ws_error_handler_muted", "Invalid range for Days of Week", "schedule deployer-stamped". Covers cron syntax (6-field, name-based DOW ranges), timezone, payload binding, enabled/disabled state, the three churn-preventing fields (cron_version + ws_error_handler_muted + email), deployer-stamped `email`/`permissioned_as`, multi-segment underscore filenames. NOT for: webhook/event triggers (use triggers skill).
+description: >-
+  Use when configuring a Windmill **schedule** — cron-based or interval trigger that runs a script/flow on a timer. Triggers on "schedule a script", "run every X minutes", "cron in windmill", `.schedule.yaml`, "schedule churns on every push", "perpetual ~ modify diff", "email field reverts", "cron_version v2", "ws_error_handler_muted", "Invalid range for Days of Week", "schedule deployer-stamped". Covers cron syntax (6-field, name-based DOW ranges), timezone, payload binding, enabled/disabled state, the three churn-preventing fields (cron_version + ws_error_handler_muted + email), deployer-stamped `email`/`permissioned_as`, multi-segment underscore filenames. NOT for: webhook/event triggers (use triggers skill).
 ---
 
 # Windmill Schedules
@@ -208,7 +209,7 @@ The server FORCES `email` to the identity of whoever runs the push — the activ
 
 **If a different run-as principal is required, that user must do the push.** Don't try to set it via YAML.
 
-**Swap principal without re-pushing:** `wmill schedule set-permissioned-as <path> <email>` rewrites the server-side principal directly (no YAML diff, no sync). Requires admin / `wm_deployers`. New principal must have read on the impl script's folder. See `cli-commands` SKILL.md → "Server-side principal swap".
+**Swap principal without re-pushing:** `wmill schedule set-permissioned-as <path> <email>` rewrites the server-side principal directly (no YAML diff, no sync). Requires admin. New principal must have read on the impl script's folder. See `cli-commands` SKILL.md → "Server-side principal swap".
 
 ### Cron parser rejects numeric DOW ranges
 

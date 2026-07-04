@@ -93,4 +93,4 @@ If composition is enough, suggest a **flow** (route to `windmill-build` with the
 | "How do I use this one" | Read snippet from toolbox.md aloud; if not there, fetch script source via MCP |
 | "Show me visually" | `preview` skill |
 | "Who can run this" / "what folder is this in" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §1 + give the short answer |
-| "I want to publish my own reusable tool" | Read `${CLAUDE_PLUGIN_ROOT}/docs/shared-tool-template.md` and drive |
+| "I want to build my own reusable tool" | `windmill-build` — it writes the tool into a folder you can write (`u/<you>/` or `f/<team>/`) |

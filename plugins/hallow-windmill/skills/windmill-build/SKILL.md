@@ -72,7 +72,6 @@ Ask via a single `AskUserQuestion` call:
 3. **Who else needs to run it?** Options:
    - "Just me" → put it under `u/<your-email>/`
    - "My team" → put it under `f/<team>/`, ask which team
-   - "Anyone at Hallow" → put it under `f/shared/` (requires admin to grant write)
 
 Do not ask about programming language unless the user volunteers a preference. Default to **Bun (TypeScript)** — it's what most of the dev workspace uses.
 
@@ -111,7 +110,6 @@ Once the entity is written and mirrored to the server via the MCP API:
 3. **Tell the user how to share it** — match this to their Step 1c answer:
    - `u/<user>/` → only they can run it; show them the URL.
    - `f/<team>/` → anyone in the team folder ACL can run it; show them the URL.
-   - `f/shared/` → publish-once, everyone can call it.
 4. **If they want a UI**, point them at the raw app you generated (or generate one now via `raw-app`).
 5. **If they want it on a schedule**, confirm the schedule was created and tell them the next-run time.
 
@@ -125,7 +123,6 @@ Once the entity is written and mirrored to the server via the MCP API:
 | "What tools already exist" / "is there a tool for X" / "show me the catalog" | `windmill-discover` |
 | "Who can run my tool" / "permissions" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §1 + §5, give the short answer for their case |
 | "Should I make a group / new group / how to organize access" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §0 (group-vs-folder-ACL decision; CE cap is gone but folder-ACL-first is the convention) |
-| "I want to publish a shared atom" | Read `${CLAUDE_PLUGIN_ROOT}/docs/shared-tool-template.md` and drive the 4-part recipe |
 
 ## Hard rules
 
