@@ -1,6 +1,6 @@
 ---
 name: windmill-discover
-description: Catalogs existing Windmill tools so users can reuse instead of rebuild — and flags when no tool is needed at all. Triggers when the user asks what tools exist, what's already built, is there something that does X, does anyone have a script for Y, what's in the toolbox, "show me available tools", "list scripts in folder Z", "is there an atom for Slack/S3/Snowflake", "can I already do X", or wants to find a tool by description. Combines the static toolbox catalog (curated, high-quality), live MCP listings (everything in the workspace), and the no-build path (direct read-only MCP tools for one-off pulls/exports/lookups) and returns a plain-English verdict the user can act on.
+description: Catalogs existing Windmill tools so users can reuse instead of rebuild — and flags when no tool is needed at all. Triggers when the user asks what tools exist, what's already built, is there something that does X, does anyone have a script for Y, what's in the toolbox, "show me available tools", "list scripts in folder Z", "is there an atom for Slack/S3/Snowflake", "can I already do X", "what can I do with windmill", "what's on windmill.platform.hallow.app", or wants to find a tool by description on windmill / wmill. Combines the static toolbox catalog (curated, high-quality), live MCP listings (everything in the workspace), and the no-build path (direct read-only MCP tools for one-off pulls/exports/lookups) and returns a plain-English verdict the user can act on.
 ---
 
 # Discover existing Windmill tools

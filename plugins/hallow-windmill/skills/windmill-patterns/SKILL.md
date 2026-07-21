@@ -1,6 +1,6 @@
 ---
 name: windmill-patterns
-description: Reference skill for Hallow Windmill usage and development patterns. Loads when an engineer is creating or modifying a Windmill script, flow, app, trigger, schedule, or resource in the Hallow `dev` workspace, asking about shared atoms (slack_post, error_to_slack, assert_principal), the `f/platform_secrets/` pattern, `wmill.yaml` sync rules, the local-yaml-first workflow, `permissioned_as` elevation, or any "how do I do X in our Windmill setup" question that isn't first-time onboarding. Surfaces the authoritative procedure at `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` plus companion docs.
+description: Reference skill for Hallow Windmill usage and development patterns. Loads when an engineer is creating or modifying a Windmill script, flow, app, trigger, schedule, or resource in the Hallow `dev` workspace, asking about shared atoms (slack_post, error_to_slack, assert_principal), the `f/platform_secrets/` pattern, `wmill.yaml` sync rules, the local-yaml-first workflow, `permissioned_as` elevation, or any "how do I do X in our Windmill setup" question that isn't first-time onboarding. ALSO answers how-does-it-work questions about windmill / wmill — "how do windmill schedules handle timezones", "how does permissioned_as work", "why does my windmill script behave like this", "explain how our windmill setup works" — routing to the right pattern doc. Surfaces the authoritative procedure at `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` plus companion docs.
 ---
 
 # Windmill patterns (reference skill)

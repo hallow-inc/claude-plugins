@@ -20,6 +20,7 @@ Audience: any Hallow team member. Admin/infra-ops content lives in the platform 
 | `windmill-build` | Skill (reference / auto-load) | Front door for any "I want to automate X" / "build me a tool" / "make a button" request. Confirms the dev loop works, checks if the tool already exists, asks 3 plain-language questions, routes to the matching authoring skill. |
 | `windmill-discover` | Skill (reference / auto-load) | "What tools already exist?" / "Is there a tool for X?" — combines curated `toolbox.md` + live MCP listings, recommends a verdict (use this, adapt this, or build new). |
 | `windmill-debug` | Skill (reference / auto-load) | "My tool failed / errored / didn't run / timed out" — fetches the failing job's logs + result, diagnoses in plain English, suggests a concrete fix. NOT for dev-loop setup problems (`/wmill-doctor` owns that). |
+| `windmill-ask` | Skill (reference / auto-load) | Front door for any *question* about Windmill — "how does X work", "does Windmill support Y", "where are the docs" — that doesn't map to build/discover/debug/setup. Thin router: defers to the specific skill when one fits, otherwise points at the platform docs + matching pattern skill. |
 | `docs/getting-started.md` | Reference | Plain-English overview — what you can build, how it's run, what's safe, when to use which entity type. |
 
 ### First-time dev loop setup
@@ -42,7 +43,7 @@ Windmill authoring skills, copied from the platform repo so the plugin is self-c
 | Prefix | Meaning | Examples |
 |---|---|---|
 | `write-*` | Code/format authoring (per language or per definition format) | `write-script-bun`, `write-flow`, `write-workflow-as-code` |
-| `windmill-*` | User-facing workflow / UX skills (front doors, not entity authors) | `windmill-build`, `windmill-debug`, `windmill-discover` |
+| `windmill-*` | User-facing workflow / UX skills (front doors, not entity authors) | `windmill-build`, `windmill-debug`, `windmill-discover`, `windmill-ask` |
 | (bare noun) | One Windmill entity type or operational concept | `triggers`, `schedules`, `resources`, `raw-app`, `preview`, `cli-commands` |
 
 Skills:
@@ -94,6 +95,7 @@ Then either:
 - **Building a tool:** ask "I want to automate X" / "build me a tool that does Y" / "make a button that runs Z" → `windmill-build` auto-loads, asks three questions, and drives the rest.
 - **Finding an existing tool:** ask "what tools exist for X" / "is there an atom for Slack/S3/Snowflake" → `windmill-discover` reads `toolbox.md` + live MCP and recommends what to use.
 - **A tool failed:** ask "my tool errored" / "the job failed" / "the schedule didn't fire" → `windmill-debug` fetches logs and diagnoses.
+- **A question about Windmill:** ask "how do Windmill schedules handle timezones" / "does Windmill support SQS" / "where are the Windmill docs" → `windmill-ask` routes to the right doc or skill.
 - **Reference questions about Hallow conventions:** ask about shared atoms, secrets, ACLs, or local-yaml-first → `windmill-patterns` auto-loads and points at the right doc.
 
 ## Verify later
@@ -156,6 +158,7 @@ plugins/hallow-windmill/
     ├── windmill-build/              ← front door for "build me a tool" (auto-load)
     ├── windmill-discover/           ← "what already exists" (auto-load)
     ├── windmill-debug/              ← "my tool failed" (auto-load)
+    ├── windmill-ask/                ← "a question about Windmill" (auto-load, front-door router)
     ├── windmill-onboarding/         ← reference skill, name `hallow-windmill` (auto-load, setup)
     ├── wmill-setup/                 ← drives onboarding flow (user-invocable)
     ├── wmill-doctor/                ← smoke test (read-only)

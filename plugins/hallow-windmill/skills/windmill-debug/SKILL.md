@@ -1,6 +1,6 @@
 ---
 name: windmill-debug
-description: Diagnoses Windmill tool failures in plain language. Triggers when the user says their script/flow/app failed, errored, crashed, didn't run, returned nothing, hung, timed out, ran but did the wrong thing, "my tool is broken", "Windmill is throwing an error", "the job failed", "nothing happens when I click", "the schedule didn't fire". Fetches the most recent failing job, reads logs + result, summarizes the error in plain English, and suggests a concrete next step. Does NOT diagnose dev-loop setup problems — `/hallow-windmill:wmill-doctor` owns that.
+description: Diagnoses Windmill tool failures in plain language. Triggers when the user says their script/flow/app failed, errored, crashed, didn't run, returned nothing, hung, timed out, ran but did the wrong thing, "my tool is broken", "Windmill is throwing an error", "the job failed", "nothing happens when I click", "the schedule didn't fire". Fetches the most recent failing job, reads logs + result, summarizes the error in plain English, and suggests a concrete next step. Anchored on windmill / wmill. Does NOT diagnose dev-loop setup problems — `/hallow-windmill:wmill-doctor` owns that.
 allowed-tools: Bash, Read, AskUserQuestion
 ---
 
