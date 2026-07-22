@@ -42,6 +42,8 @@ Windmill uses 6-field cron expressions (includes seconds):
 
 **Hallow ban:** `wmill sync push` and `wmill sync pull` are banned in this workspace. They delete server state not in local files and clobber secret variables. Mirror schedule changes to the server via the MCP `windmill` tools or the Windmill UI — never `wmill sync`.
 
+**Before mirroring, run the pre-push gate:** spawn the `windmill-build-reviewer` agent to check the authored `*.schedule.yaml` against `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (SCHED.* + GEN.4). A finding blocks the push until fixed; a PASS proceeds. This is build-policy GATE.1.
+
 After writing, tell the user they can run these read-only commands (do NOT run them yourself):
 
 ```bash
@@ -188,6 +190,8 @@ required:
 ```
 
 ## Hallow gotchas (schedules)
+
+> Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (SCHED.* + GEN.4). This section is the detailed reference; the doc is authoritative and the schedule is reviewed against it before push.
 
 ### Multi-segment filenames use underscore, not dot
 

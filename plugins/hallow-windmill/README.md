@@ -65,7 +65,9 @@ These auto-load when you tell Claude what you want to build; you almost never in
 | Component | Type | Trigger |
 |---|---|---|
 | `windmill-patterns` | Skill (reference / auto-load) | Loads when a user is asking about Hallow-specific conventions: shared atoms (`slack_post`, `error_to_slack`, `assert_principal`), the `f/platform_secrets/` pattern, local-yaml-first workflow, `permissioned_as` elevation. Reference; defers actual editing to the authoring skills. |
+| `windmill-build-reviewer` | Subagent (read-only critic) | Pre-push gate. Reviews a locally-authored entity against `docs/build-policy.md` and returns PASS or findings; never edits, never pushes. The authoring skills and `windmill-build` Step 4 route to it before the MCP push (build-policy GATE.1). |
 | `windmill-capture-learning` | Skill (model-invocable) | Records a Windmill behavior, CLI quirk, or doc-contradiction discovered mid-session. Writes a memory entry + a scratchpad bullet in `WINDMILL_LEARNINGS.md` so the finding survives the session. |
+| `docs/build-policy.md` | Authoritative doc | Consolidated pre-push ruleset (GATE + GEN + per-entity `SCRIPT/FLOW/TRIG/SCHED/RES/APP` rules) that `windmill-build-reviewer` checks against. Single source of truth; a `wmill-drain-learnings` target for reviewable gotchas. |
 | `docs/patterns.md` | Authoritative doc | Hallow conventions: entity creation, on-disk file shapes, shared atoms catalog, secrets pattern, flow conventions, operational rules. (Engineer-oriented.) |
 | `docs/folders-groups.md` | Reference | Folder/group ACL semantics. |
 | `docs/toolbox.md` | Reference | Catalog of existing shared tools in the `dev` workspace. |
@@ -145,12 +147,14 @@ plugins/hallow-windmill/
 ├── README.md                        ← this file
 ├── WINDMILL_LEARNINGS.md            ← capture-as-you-go scratchpad
 ├── agents/
-│   └── windmill-onboarder.md        ← isolated-context subagent
+│   ├── windmill-onboarder.md        ← isolated-context subagent
+│   └── windmill-build-reviewer.md   ← read-only pre-push critic (build-policy GATE.1)
 ├── docs/
 │   ├── getting-started.md           ← plain-English overview (what windmill-build reads)
 │   ├── installing.md                ← user-facing install runbook
 │   ├── onboarding.md                ← authoritative setup procedure
 │   ├── mcp.json.example.jsonc       ← reference .mcp.json shape (jsonc — has // comments)
+│   ├── build-policy.md              ← consolidated pre-push ruleset (reviewer reads this)
 │   ├── patterns.md                  ← Hallow conventions for entity creation/usage
 │   ├── folders-groups.md            ← ACL semantics
 │   └── toolbox.md                   ← shared-tool catalog (dev workspace)

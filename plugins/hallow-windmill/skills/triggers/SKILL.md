@@ -30,7 +30,11 @@ Read the matching reference at `${CLAUDE_PLUGIN_ROOT}/skills/triggers/references
 
 ## Hallow ban
 
+> Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (TRIG.* + GEN.*). This skill's ban + gotchas are the detailed reference; the doc is authoritative and the trigger is reviewed against it before push.
+
 `wmill sync push` and `wmill sync pull` are banned in this workspace. They delete server state not in local files and clobber secret variables. Mirror trigger changes via the `windmill` MCP tools or the Windmill UI — never `wmill sync`.
+
+**Before mirroring, run the pre-push gate:** spawn the `windmill-build-reviewer` agent to check the authored trigger files against `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (TRIG.* + GEN.*). A finding blocks the push until fixed; a PASS proceeds. This is build-policy GATE.1.
 
 ## Trigger availability on Hallow's customized OSS build
 

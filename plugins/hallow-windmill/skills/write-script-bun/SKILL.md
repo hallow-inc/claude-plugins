@@ -132,6 +132,8 @@ import * as wmill from 'windmill-client'
 
 ## Hallow gotchas (bun scripts)
 
+> Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (SCRIPT.* + GEN.*). This section is the detailed reference for those rules; the doc is authoritative and the entity is reviewed against it before push.
+
 ### Dispatching: `runScriptAsync` vs `runFlowAsync` — wrong fn = silent no-op
 
 The top-level dispatch fns are NOT polymorphic on entity kind. Calling `runScriptAsync(path, ...)` against a FLOW path returns a job ID and `queued: true` but **nothing ever runs** — the job is queued against the wrong dispatcher and silently dropped.

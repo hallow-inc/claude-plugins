@@ -4,6 +4,8 @@ description: Use when writing a Windmill PostgreSQL script — SQL targeting Pos
 ---
 
 > **CLI lifecycle** (preview vs run, mirror via MCP, never `wmill sync`): see `${CLAUDE_PLUGIN_ROOT}/skills/cli-commands/references/preview-vs-run.md`.
+>
+> **Pre-push ruleset** (canonical): `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (SCRIPT.1, GEN.*). The script is reviewed against it before push (GATE.1).
 
 # PostgreSQL
 

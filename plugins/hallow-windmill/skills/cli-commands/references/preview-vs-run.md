@@ -34,8 +34,9 @@ Only use `wmill script run` when:
 
 1. Write/edit the local YAML + code file.
 2. Offer to `wmill script preview` to verify behavior.
-3. Once verified, mirror to the server via the matching MCP tool (`createScript` / `updateScript` for scripts; `createFlow` / `updateFlow` for flows; etc.).
-4. Confirm the server state with `getScriptByPath` / `getFlowByPath`.
+3. **Pre-push gate:** before mirroring, have the authored files reviewed against `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` — spawn the `windmill-build-reviewer` agent (or check inline against the policy for a trivial entity). A finding blocks the push until fixed; a PASS proceeds. This is build-policy GATE.1.
+4. Once verified and PASS, mirror to the server via the matching MCP tool (`createScript` / `updateScript` for scripts; `createFlow` / `updateFlow` for flows; etc.).
+5. Confirm the server state with `getScriptByPath` / `getFlowByPath`.
 
 Never wait passively after writing. Offer the preview as a one-sentence next step (e.g. "Want me to run `wmill script preview` with sample args?").
 

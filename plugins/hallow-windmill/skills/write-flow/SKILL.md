@@ -64,6 +64,8 @@ The OpenFlow schema (openflow.openapi.yaml) is the source of truth for flow stru
 
 ## Hard Structural Rules
 
+> Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (FLOW.* + GEN.*). This skill's structural rules, "Common Mistakes", and "Hallow gotchas" are the detailed reference; the doc is authoritative and the flow is reviewed against it before push (FLOW.1–FLOW.10).
+
 These are strict Windmill schema rules. Follow them exactly.
 
 - `value.modules` is only for normal sequential steps

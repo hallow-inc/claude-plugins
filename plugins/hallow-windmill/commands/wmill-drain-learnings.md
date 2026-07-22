@@ -31,6 +31,7 @@ For each pending entry, propose a target file based on the topic and tags. Routi
 | `duckdb`, `ducklake` | `skills/write-script-duckdb/SKILL.md` (Hallow gotchas) |
 | `cli`, `sync`, `workspace`, `generate-metadata` | `skills/cli-commands/SKILL.md` (Hallow gotchas) |
 | Error string / debugging recipe | `skills/windmill-debug/SKILL.md` classify table + `skills/windmill-debug/references/symptom-index.md` |
+| **Reviewable rule catchable *before push*** (a mistake `windmill-build-reviewer` could flag by inspecting entity files — e.g. missing `tag: fargate`, dotted filename, absent `timeout`, wrong dispatch fn) | `docs/build-policy.md` — add a stable-id'd rule in the matching section (`SCRIPT.*`/`FLOW.*`/`TRIG.*`/`SCHED.*`/`RES.*`/`APP.*`/`GEN.*`). Keep the detailed reference in the source skill's gotchas as today; the policy doc is the terse checkable copy. |
 | Cross-cutting architectural rule (IAM, worker tags, naming convention) | `docs/patterns.md` (new section or extend existing) |
 
 Domain-specific recipes (e.g. n8n migration quirks, single-product API auth) DO NOT belong in plugin skills — keep them in the Resolved section of the scratchpad for future audit reference, but do not promote.

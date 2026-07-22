@@ -311,6 +311,8 @@ For everything else, tell the user which command fits their intent and let them 
 
 **Deploying to Windmill:** `wmill sync push` and `wmill sync pull` are banned at Hallow. Use the MCP `windmill` tools (e.g. `mcp__windmill__createApp`, `mcp__windmill__updateApp`) or the Windmill UI to mirror local changes to the server.
 
+**Before mirroring, run the pre-push gate:** spawn the `windmill-build-reviewer` agent to check the authored app files against `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (APP.* + GEN.*). A finding blocks the push until fixed; a PASS proceeds. This is build-policy GATE.1.
+
 ## Best Practices
 
 1. **Check DATATABLES.md** for existing tables before creating new ones
@@ -321,6 +323,8 @@ For everything else, tell the user which command fits their intent and let them 
 6. **Generate locks** - tell the user to run `wmill generate-metadata` after adding/modifying backend runnables
 
 ## Hallow gotchas (raw apps)
+
+> Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (APP.* + GEN.*). This section is the detailed reference; the doc is authoritative and the app is reviewed against it before push.
 
 ### The `./wmill` import is a build-time virtual module — never hand-write a shim
 

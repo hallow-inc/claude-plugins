@@ -86,6 +86,8 @@ dialects — that directive is not available in DuckDB.
 
 ## Hallow gotchas (DuckDB)
 
+> Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (SCRIPT.5, SCRIPT.6, FLOW.2). This section is the detailed reference; the doc is authoritative and the entity is reviewed against it before push.
+
 ### Prefer python3 + `import duckdb` for non-trivial DuckDB work
 
 User policy: **DuckDB should be Python**. The `duckdb` script kind has hard parser/parameter restrictions (below) that make S3 paths and dynamic table/bucket names painful. Use the `write-script-python3` skill instead and import the `duckdb` library:

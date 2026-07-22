@@ -103,7 +103,11 @@ Tell the user which skill is going to drive the actual writing, then let it take
 
 ## Step 4 — After the authoring skill is done
 
-Once the entity is written and mirrored to the server via the MCP API:
+Once the entity is **written** (before it is mirrored to the server):
+
+0. **Pre-push gate (build-policy GATE.1).** Spawn the `windmill-build-reviewer` agent to check the authored files against `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md`. A finding blocks the push — route the fix back to the authoring skill, then re-review. A PASS proceeds. (The authoring skills also run this at their own mirror seam; don't double-run if one already passed on the same files.)
+
+Once the entity is written, reviewed (PASS), and mirrored to the server via the MCP API:
 
 1. Offer **visual preview**: call the `preview` skill to open the Windmill dev page for the entity.
 2. Run **a test invocation**. The exact MCP tool name varies by Windmill server version — try `mcp__windmill__runScript` first; if not exposed, use `wmill --workspace dev script run <path> --args '<json>'` via Bash; if neither works, instruct the user to run it from the Windmill UI's "Test" button on the entity page. Confirm a successful result either way.
@@ -125,6 +129,8 @@ Once the entity is written and mirrored to the server via the MCP API:
 | "Should I make a group / new group / how to organize access" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §0 (group-vs-folder-ACL decision; CE cap is gone but folder-ACL-first is the convention) |
 
 ## Hard rules
+
+> Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (GATE + GEN + per-entity rules). The bullets below are the front-door subset; the doc is authoritative, and every entity is reviewed against it before push (GATE.1).
 
 - **Never `wmill sync push`** — banned at Hallow. Use MCP `windmill` tools or the Windmill UI.
 - **Never commit a token** to any file.
