@@ -70,13 +70,18 @@ Gotcha: if an app-foo schedule is edited by a user who leaves or loses access, t
 
 ---
 
-## 5. Top-level folders = only enforcement boundary
+## 5. Top-level folders = the only *nesting* boundary — but not the only ACL mechanism
 
-Permission enforcement stops at the top-level folder. Practical implication for app-per-folder model:
+Permission enforcement via **path/folder structure** stops at the top-level folder. Subfolders are cosmetic, not a nested security boundary — this part still holds:
 
-- `f/app-foo/` — one security boundary. Everything inside is in-or-out for whoever has ACL.
-- Cannot grant `g/team-foo` access to `f/app-foo/subdir-a` but not `f/app-foo/subdir-b`. Whole folder, all or nothing.
-- Fine-grained sub-isolation requires separate top-level folders. Use `f/app-foo-admin/` vs `f/app-foo-ops/` if you need different access tiers within one app.
+- `f/app-foo/` — one folder-level security boundary. `f/app-foo/subdir-a` and `f/app-foo/subdir-b` are NOT independently addressable ACL scopes; Windmill resolves the folder unit from the path's second segment only.
+- Cannot grant `g/team-foo` access to `f/app-foo/subdir-a` but not `f/app-foo/subdir-b` **by folder structure alone**. A sibling top-level folder (`f/app-foo-admin/` vs `f/app-foo-ops/`) is one valid way to express a durable, structural access tier.
+
+**But this is not the only way to narrow access below the folder default.** Windmill's documented "Extra permissions" feature (UI: `⋮` → Share) grants item-level access on a *single* script/flow/resource/variable/schedule/trigger/app/etc., independent of its folder, OR'd permissively with the folder's own grant. This is a first-class, upstream OSS mechanism — not a workaround. See the `windmill-acl` skill for the procedure (verb-based grant/revoke, mandatory before/after diff, and the `extra_perms` 3-state read/write semantics that make hand-authoring this JSON dangerous — the exact trap that caused the Libra DuckLake guard-fork incident).
+
+**When to use which:**
+- Durable, department/team-level boundary that should hold for everything inside it → a top-level folder (as below).
+- One-off or narrower-than-folder access on a specific existing item → `windmill-acl` item-level grant, not a new sibling folder. Reach for a new folder only when the narrowing is itself durable and spans many items, not to express a single exception.
 
 ---
 
@@ -137,6 +142,18 @@ u/ namespace:
 ```
 
 Operator visibility: disable resources, variables, audit logs, groups, folders for `g/app-<name>-ops`. Leave runs + schedules visible so they can check job status.
+
+---
+
+## 9. Item-level ACL — the second mechanism (beyond folders)
+
+Everything above describes **folder** ACL — the default, and the right tool for durable boundaries. Windmill has a second, independent grant surface: item-level `extra_perms`, set via the UI's `⋮` → **Share** on any single entity, or the `/api/w/{workspace}/acls/get|add|remove/{kind}/{path}` API. It applies to 21 entity kinds (script, flow, app, raw_app, resource, variable, schedule, folder, group_, volume, and all 11 trigger types) and is OR'd permissively with the item's folder grant — an item is visible if *either* grants it.
+
+This is not an internal/undocumented mechanism — Windmill documents it as a first-class feature. It is, however, easy to misuse: the `extra_perms` JSON is `{principal: bool}`, but read-visibility is gated by *key presence* while write is gated by the *boolean value* — so `{"g/all": false}` grants read, not denial. This ambiguity already caused a real incident at Hallow (Libra DuckLake guard-fork mutation). **Never hand-author this JSON.** Use the `windmill-acl` skill, which only accepts named verbs (`grant read`, `grant write`, `revoke`) and runs a mandatory before/after diff on every mutation.
+
+Granting an item-level ACL entry still requires folder-owner rights on the item's containing folder (or, for `volume`, creator-only rights — the one kind with no folder-owner path at all) — this is not a way around folder-level gatekeeping, just a way to express something narrower than the folder's own default from inside it.
+
+**Practical effect on the topology below**: before reaching for a new sibling folder (`f/app-foo-admin/` pattern) solely to express one narrower exception, consider whether an item-level grant on the specific resource/script/trigger in question does the job with less structure to maintain. Reserve new top-level folders for boundaries that are themselves durable and span multiple items.
 
 **Gotchas summary**:
 1. Sub-folders are not permission boundaries — design top-level folders accordingly.

@@ -28,6 +28,8 @@ Triggers let external events invoke scripts and flows. Hallow runs a **customize
 
 Read the matching reference at `${CLAUDE_PLUGIN_ROOT}/skills/triggers/references/<name>.md` before writing the YAML. Every trigger type also includes shared `retry` + `error_handler_path` — see `references/common-retry.md`.
 
+**Need access narrower than this trigger's folder default?** Don't carve out a new folder just to express one exception — see the `windmill-acl` skill for item-level grants on an existing trigger.
+
 ## Hallow ban
 
 > Canonical pre-push ruleset: `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (TRIG.* + GEN.*). This skill's ban + gotchas are the detailed reference; the doc is authoritative and the trigger is reviewed against it before push.

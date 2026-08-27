@@ -98,6 +98,7 @@ Based on the Step 1 answers, map to one of these:
 | Runs every morning / hourly / weekly | Script + schedule | `write-script-bun` + `schedules` | — |
 | Reacts to a webhook (Slack, GitHub, etc.) | Script + HTTP trigger | `write-script-bun` + `triggers` | Often needs `f/shared/assert_principal` for auth |
 | Talks to Postgres / Snowflake / S3 / Slack | Any of above | Same as above | Reuse from `toolbox.md` — don't reinvent |
+| Narrowing/checking who can access an *existing* item (not creating anything new) | — (no entity created) | `windmill-acl` | Not a build — routes here directly, skip the rest of Step 3 |
 
 Tell the user which skill is going to drive the actual writing, then let it take over. Do not write the script yourself — defer to the authoring skill so the file shapes are correct.
 
@@ -125,7 +126,8 @@ Once the entity is written, reviewed (PASS), and mirrored to the server via the 
 | "My tools stopped working" / "verify my setup" | `/hallow-windmill:wmill-doctor` |
 | "My tool failed / errored / didn't run / timed out" | `windmill-debug` |
 | "What tools already exist" / "is there a tool for X" / "show me the catalog" | `windmill-discover` |
-| "Who can run my tool" / "permissions" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §1 + §5, give the short answer for their case |
+| "Who can run my tool" / "permissions" (general question about the model) | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §1 + §5, give the short answer for their case |
+| "Give X access to just this one thing" / "share this with just Y" / "narrow this to just Z" / "revoke access from" (an actual grant/revoke action on an existing item) | `windmill-acl` |
 | "Should I make a group / new group / how to organize access" | Read `${CLAUDE_PLUGIN_ROOT}/docs/folders-groups.md` §0 (group-vs-folder-ACL decision; CE cap is gone but folder-ACL-first is the convention) |
 
 ## Hard rules

@@ -38,6 +38,8 @@ Windmill uses 6-field cron expressions (includes seconds):
 - `0 0 9 * * 1-5` - Weekdays at 9 AM
 - `0 0 0 1 * *` - First day of each month
 
+**Need access narrower than this schedule's folder default?** Don't carve out a new folder just to express one exception — see the `windmill-acl` skill for item-level grants on an existing schedule.
+
 ## CLI Commands
 
 **Hallow ban:** `wmill sync push` and `wmill sync pull` are banned in this workspace. They delete server state not in local files and clobber secret variables. Mirror schedule changes to the server via the MCP `windmill` tools or the Windmill UI — never `wmill sync`.

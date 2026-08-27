@@ -359,6 +359,7 @@ Single shared lake `main`: Postgres catalog at `sandbox-lake-pg`, Parquet data a
 8. **Cross-schema reads are fine.** `SELECT * FROM dl.finance.x JOIN dl.shared.y ON ...` works inside a single ATTACH.
 9. **Maintenance is scheduled, not inline.** Do NOT call `CHECKPOINT` or `CALL ducklake_*` from pipeline scripts. `f/platform/ducklake/maintain` runs `CHECKPOINT` daily.
 10. **Don't set lake-level options in scripts.** `CALL dl.set_option(...)` belongs in `f/platform/ducklake/init_lake` only.
+11. **Windmill's arg-schema UI only detects a script's own locally-defined `main`.** `f/platform/ducklake/{lib,helpers}.py` are thin wrappers over the published `hallow-windmill` wheel — every function is a plain re-export EXCEPT `main`. A bare `from hallow_windmill.ducklake.lib import main` fails with `main() missing 1 required positional argument: 'db'` because Windmill builds the arg schema off the file's own top-level `def main(...)` signature, not whatever it imports. Fix: keep a real top-level `def main(db: postgresql) -> dict: return _wheel_main(db)` that delegates. This applies to any future Windmill script shimmed over a wheel, not just DuckLake.
 
 ### Discovery snippets
 

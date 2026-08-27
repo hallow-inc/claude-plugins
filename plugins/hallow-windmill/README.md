@@ -43,7 +43,7 @@ Windmill authoring skills, copied from the platform repo so the plugin is self-c
 | Prefix | Meaning | Examples |
 |---|---|---|
 | `write-*` | Code/format authoring (per language or per definition format) | `write-script-bun`, `write-flow`, `write-workflow-as-code` |
-| `windmill-*` | User-facing workflow / UX skills (front doors, not entity authors) | `windmill-build`, `windmill-debug`, `windmill-discover`, `windmill-ask` |
+| `windmill-*` | User-facing workflow / UX skills (front doors, not entity authors) | `windmill-build`, `windmill-debug`, `windmill-discover`, `windmill-ask`, `windmill-acl` |
 | (bare noun) | One Windmill entity type or operational concept | `triggers`, `schedules`, `resources`, `raw-app`, `preview`, `cli-commands` |
 
 Skills:
@@ -55,6 +55,7 @@ Skills:
 - `triggers` — HTTP routes / webhooks, plus WebSocket / Postgres-CDC / MQTT (OSS-native) and SQS (enabled by a Hallow fork deviation). Hallow runs a customized OSS fork; Kafka / NATS / GCP / Azure and the email-routing trigger remain EE-only and not available — see the skill's availability matrix
 - `schedules` — cron schedules
 - `resources` — resources + resource types
+- `windmill-acl` — item-level access grants (`extra_perms`/Share) on an existing entity, narrower than its folder default — 21 supported kinds, verb-based procedure, mandatory before/after diff
 - `preview` — open the Windmill dev page for visual verification
 - `cli-commands` — `wmill` CLI surface, job inspection, preview-vs-run-vs-push decisions
 
@@ -69,7 +70,7 @@ These auto-load when you tell Claude what you want to build; you almost never in
 | `windmill-capture-learning` | Skill (model-invocable) | Records a Windmill behavior, CLI quirk, or doc-contradiction discovered mid-session. Writes a memory entry + a scratchpad bullet in `WINDMILL_LEARNINGS.md` so the finding survives the session. |
 | `docs/build-policy.md` | Authoritative doc | Consolidated pre-push ruleset (GATE + GEN + per-entity `SCRIPT/FLOW/TRIG/SCHED/RES/APP` rules) that `windmill-build-reviewer` checks against. Single source of truth; a `wmill-drain-learnings` target for reviewable gotchas. |
 | `docs/patterns.md` | Authoritative doc | Hallow conventions: entity creation, on-disk file shapes, shared atoms catalog, secrets pattern, flow conventions, operational rules. (Engineer-oriented.) |
-| `docs/folders-groups.md` | Reference | Folder/group ACL semantics. |
+| `docs/folders-groups.md` | Reference | Folder/group ACL semantics, plus item-level ACL (§9) as the second, narrower-grant mechanism — see `windmill-acl`. |
 | `docs/toolbox.md` | Reference | Catalog of existing shared tools in the `dev` workspace. |
 | `docs/installing.md` | Reference | User-facing install runbook (GitHub Desktop, terminal, ZIP). |
 | `WINDMILL_LEARNINGS.md` | Scratchpad | Append-only log of discoveries written by `windmill-capture-learning`. Drained into proper docs periodically. |
@@ -176,6 +177,7 @@ plugins/hallow-windmill/
     ├── triggers/                    ← HTTP / WebSocket / Postgres-CDC / MQTT / SQS triggers
     ├── schedules/                   ← cron schedules
     ├── resources/                   ← resources + resource types
+    ├── windmill-acl/                ← item-level access grants on an existing entity
     ├── write-workflow-as-code/      ← workflow-as-code scripts
     ├── preview/                     ← visual preview of an entity
     └── cli-commands/                ← debugging via wmill job CLI

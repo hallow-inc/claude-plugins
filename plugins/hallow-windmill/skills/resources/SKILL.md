@@ -256,6 +256,8 @@ wmill resource-type get postgresql
 
 ```
 
+**Need access narrower than this resource's folder default?** Don't carve out a new folder just to express one exception — see the `windmill-acl` skill for item-level grants on an existing resource.
+
 **Hallow ban:** `wmill sync push` and `wmill sync pull` are banned in this workspace. They delete server state not in local files and clobber secret variables. Mirror resource changes to the server via the MCP `windmill` tools or the Windmill UI — never `wmill sync`.
 
 **Before mirroring, run the pre-push gate:** spawn the `windmill-build-reviewer` agent to check the authored `*.resource.yaml` against `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (RES.* + GEN.*). A finding blocks the push until fixed; a PASS proceeds. This is build-policy GATE.1.
