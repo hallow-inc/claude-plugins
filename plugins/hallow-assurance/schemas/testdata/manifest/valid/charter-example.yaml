@@ -1,5 +1,6 @@
 version: 0
 catalog: v0
+languages: [go]
 components:
   - path: internal/billing/**
     level: A
@@ -16,3 +17,5 @@ components:
     dst:
       harness: ./sim/ledger
 default_level: C
+protected:
+  - .github/workflows/**

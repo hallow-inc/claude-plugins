@@ -1,5 +1,6 @@
 version: 0
 catalog: v0
+languages: [go]
 default_level: Z
 components:
   - level: A

@@ -1,0 +1,6 @@
+{
+  "missing-sha256.json": [{"location": "/adapters/go", "keyword": "required"}],
+  "uppercase-sha256.json": [{"location": "/adapters/go/sha256", "keyword": "pattern"}],
+  "describe-without-claims.json": [{"location": "/adapters/go/describe", "keyword": "required"}],
+  "bad-language-key.json": [{"location": "/adapters", "keyword": "additionalProperties"}]
+}

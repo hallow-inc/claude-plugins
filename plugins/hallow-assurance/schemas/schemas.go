@@ -32,6 +32,7 @@ const (
 	AdapterClassify Kind = "adapter-classify"
 	AdapterRun      Kind = "adapter-run"
 	AdapterLint     Kind = "adapter-lint"
+	AdapterCache    Kind = "adapter-cache"
 )
 
 const base = "https://assure.invalid/schemas/v0/"
@@ -58,6 +59,7 @@ var kinds = map[Kind]struct {
 	AdapterClassify: {base + "adapter-classify.schema.json", jsonDoc},
 	AdapterRun:      {base + "adapter-run.schema.json", jsonDoc},
 	AdapterLint:     {sarifID, jsonDoc},
+	AdapterCache:    {base + "adapter-cache.schema.json", jsonDoc},
 }
 
 type Violation struct {

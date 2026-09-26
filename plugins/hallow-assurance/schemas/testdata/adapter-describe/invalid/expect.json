@@ -1,4 +1,6 @@
 {
   "future-protocol.json": [{"location": "/protocol", "keyword": "const"}],
-  "source-pattern-key.json": [{"location": "/patterns", "keyword": "additionalProperties"}]
+  "source-pattern-key.json": [{"location": "/patterns", "keyword": "additionalProperties"}],
+  "missing-claims.json": [{"location": "", "keyword": "required"}],
+  "empty-claims.json": [{"location": "/claims", "keyword": "minItems"}]
 }

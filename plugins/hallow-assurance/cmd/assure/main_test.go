@@ -21,7 +21,7 @@ func TestKnownCommandsSucceed(t *testing.T) {
 }
 
 func TestUnknownCommandFails(t *testing.T) {
-	known := map[string]bool{"help": true, "--help": true, "-h": true, "version": true, "--version": true}
+	known := map[string]bool{"help": true, "--help": true, "-h": true, "version": true, "--version": true, "guard": true, "context": true, "classify": true}
 	rapid.Check(t, func(t *rapid.T) {
 		cmd := rapid.String().Filter(func(s string) bool { return !known[s] }).Draw(t, "cmd")
 		var out, errOut bytes.Buffer

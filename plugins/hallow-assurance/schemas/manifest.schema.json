@@ -4,14 +4,24 @@
   "title": "assurance.yaml manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "catalog", "default_level", "components"],
+  "required": ["version", "catalog", "default_level", "languages", "components"],
   "properties": {
     "version": { "const": 0 },
     "catalog": { "type": "string", "pattern": "^v[0-9]+$" },
     "default_level": { "$ref": "common.schema.json#/$defs/level" },
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/languageId" }
+    },
     "components": {
       "type": "array",
       "items": { "$ref": "#/$defs/component" }
+    },
+    "protected": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/repoPath" }
     }
   },
   "$defs": {

@@ -11,9 +11,12 @@ var version = "dev"
 const usage = `assure — deterministic verification evaluator
 
 Usage:
-  assure <command>
+  assure <command> [arguments]
 
 Commands:
+  classify   Print level, language, and role for each path
+  context    Print the level map and applicable objectives
+  guard      Decide whether an agent may edit each path
   help       Show this help
   version    Print the assure version
 `
@@ -33,6 +36,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		_, err = fmt.Fprint(stdout, usage)
 	case "version", "--version":
 		_, err = fmt.Fprintln(stdout, version)
+	case "guard":
+		return runGuard(args[1:], stdout, stderr)
+	case "context":
+		return runContext(args[1:], stdout, stderr)
+	case "classify":
+		return runClassify(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "assure: unknown command %q\n\n%s", args[0], usage)
 		return 2

@@ -148,7 +148,7 @@ plugins/hallow-assurance/
   adapters/
     go/                          # assure-adapter-go (separate binary)
     typescript/                  # assure-adapter-typescript (v1)
-  catalog/
+  catalog/                       # embedded in the assure binary; adopting repos carry no copy
     v0/objectives.yaml
   schemas/                       # JSON Schemas for every file format below
   plugin/                        # the Claude Code plugin
@@ -172,6 +172,7 @@ plugins/hallow-assurance/
 ```yaml
 version: 0
 catalog: v0
+languages: [go]                                    # runs assure-adapter-go from PATH
 components:
   - path: internal/billing/**
     level: A
@@ -188,6 +189,8 @@ components:
     dst:                                           # optional: deterministic simulation harness
       harness: ./sim/ledger
 default_level: C
+protected:                                         # optional: extra paths guard denies to agents
+  - .github/workflows/**
 ```
 
 Path → level resolution: a path takes the level of the matching glob with the most literal
@@ -263,13 +266,15 @@ than in CI.
 **Adapter protocol v0** — subprocess, JSON on stdin/stdout:
 
 ```
-assure-adapter-go describe            → {protocol:0, languages:["go"], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{...}}
+assure-adapter-go describe            → {protocol:0, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{...}}
 assure-adapter-go classify  <paths>   → {protocol:0, files:[{path, language, role}]}
 assure-adapter-go lint      <paths>   → SARIF
 assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:0, evidence:[{type, path}], tool_versions:{...}}
 ```
 
 Every response except `lint` is an object carrying `protocol: 0`, so each message is versioned on its own.
+`claims` lists the files the adapter owns. A claimed file's role is the first matching pattern list
+in the order `generated`, `fuzz_corpus`, `test`, `config`, and otherwise `source`.
 Schemas: `schemas/adapter-{describe,classify,run}.schema.json`; `lint` is validated against SARIF 2.1.0.
 
 ## Starter catalog (v0)
@@ -318,7 +323,9 @@ keep local behavior as close to fail-closed as the harness allows:
 - The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted) and exits 2 when
   `assure` is missing or the wrong version.
 - `internal/hookio` recovers from every internal error and emits a deny/block decision.
-- Every hook declares an explicit `timeout`; `guard` is a pure in-memory decision.
+- Every hook declares an explicit `timeout`; `guard` is a pure in-memory decision. It reads file
+  roles from each adapter's `describe` globs, cached in `.assure/state/adapters.json` and keyed by
+  the adapter executable's SHA-256, so no adapter runs at edit time while the cache is fresh.
 - Edits made through Bash bypass the `Edit|Write` matcher. SessionStart records hashes of protected
   files in `.assure/state/`; the Stop check blocks on any drift. CI checks the PR diff the same way.
 - The manifest is resolved from `tool_input.file_path` / `cwd`, not `CLAUDE_PROJECT_DIR`, which stays
@@ -352,8 +359,9 @@ Commands: `/assure:check`, `/assure:bugfix <issue|seed>`, `/assure:inspect`.
 
 ## Milestones
 
-Each milestone ends with its acceptance criteria met, tests passing, and this repo passing its own
-`assure evaluate`.
+Each milestone ends with its acceptance criteria met, tests passing, and, from M3 on, this repo
+passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, and
+`go test -race -shuffle=on`.
 
 **M0 — Scaffolding & schemas**
 - Repo layout, `go.mod`, CI, `CLAUDE.md`, `assurance.yaml`

@@ -97,13 +97,30 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 		"catalog":       "v" + strconv.Itoa(rapid.IntRange(0, 9).Draw(t, "cat")),
 		"default_level": levelGen.Draw(t, "dl"),
 	}
+	langs := rapid.SliceOfNDistinct(langGen, 1, 3, func(s string) string { return s }).Draw(t, "langs")
+	la := make([]any, len(langs))
+	for i, l := range langs {
+		la[i] = l
+		r.bad("/languages", idx(i), badLang...)
+	}
+	doc["languages"] = la
 	r.root("x", 5, []any{})
 	r.closed("")
-	r.required("", "version", "catalog", "default_level", "components")
+	r.required("", "version", "catalog", "default_level", "languages", "components")
 	r.bad("", "version", 1, "0")
 	r.bad("", "catalog", "0", "vx", 0)
 	r.bad("", "default_level", badLevel...)
+	r.bad("", "languages", "x", []any{}, []any{langs[0], langs[0]})
 	r.bad("", "components", "x", []any{"x"})
+	r.bad("", "protected", "x")
+	if rapid.Bool().Draw(t, "protected") {
+		prot := []any{}
+		for i := range rapid.IntRange(0, 2).Draw(t, "nprot") {
+			prot = append(prot, pathGen.Draw(t, "prot"))
+			r.bad("/protected", idx(i), badPath...)
+		}
+		doc["protected"] = prot
+	}
 	comps := []any{}
 	for i := range rapid.IntRange(0, 3).Draw(t, "ncomp") {
 		p := "/components/" + idx(i)
@@ -276,10 +293,16 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 	for range rapid.IntRange(0, 2).Draw(t, "nobj") {
 		objectives[objIDGen.Draw(t, "oid")] = map[string]any{"tool": textGen.Draw(t, "tool")}
 	}
-	doc := map[string]any{"protocol": 0, "languages": la, "patterns": patterns, "objectives": objectives}
+	claims := []any{}
+	for i := range rapid.IntRange(1, 2).Draw(t, "nclaims") {
+		claims = append(claims, pathGen.Draw(t, "claim"))
+		r.bad("/claims", idx(i), badPath...)
+	}
+	doc := map[string]any{"protocol": 0, "languages": la, "claims": claims, "patterns": patterns, "objectives": objectives}
 	r.root("x", []any{})
 	r.closed("")
-	r.required("", "protocol", "languages", "patterns", "objectives")
+	r.required("", "protocol", "languages", "claims", "patterns", "objectives")
+	r.bad("", "claims", "x", []any{})
 	r.bad("", "protocol", 1, "0")
 	r.bad("", "languages", "x", []any{}, []any{langs[0], langs[0]})
 	r.bad("", "patterns", "x", map[string]any{"source": []any{}}, map[string]any{"test": "x"}, map[string]any{"test": []any{"/abs"}})
@@ -342,7 +365,41 @@ var runGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
+var cacheGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	adapters := map[string]any{}
+	for _, lang := range rapid.SliceOfNDistinct(langGen, 0, 2, func(s string) string { return s }).Draw(t, "langs") {
+		p := "/adapters/" + lang
+		d := describeGen.Draw(t, "describe")
+		adapters[lang] = map[string]any{"path": "/bin/assure-adapter-" + lang, "sha256": rapid.StringMatching(`[0-9a-f]{64}`).Draw(t, "sha"), "describe": d.doc}
+		r.closed(p)
+		r.required(p, "path", "sha256", "describe")
+		r.bad("/adapters", lang, "x")
+		r.bad(p, "path", badText...)
+		r.bad(p, "sha256", strings.Repeat("A", 64), strings.Repeat("a", 63), 7)
+		for _, c := range d.cs {
+			ops := make([]op, len(c.ops))
+			for i, o := range c.ops {
+				if o.at == "" && o.key == "" {
+					ops[i] = op{at: p, key: "describe", val: o.val}
+				} else {
+					ops[i] = op{at: p + "/describe" + o.at, key: o.key, del: o.del, val: o.val}
+				}
+			}
+			r.add("describe: "+c.desc, p+"/describe"+c.want, ops...)
+		}
+	}
+	doc := map[string]any{"version": 0, "adapters": adapters}
+	r.root("x", []any{})
+	r.closed("")
+	r.required("", "version", "adapters")
+	r.bad("", "version", 1, "0")
+	r.bad("", "adapters", "x", map[string]any{"Go": map[string]any{}})
+	return sample{doc, r.cs}
+})
+
 var generators = map[Kind]*rapid.Generator[sample]{
+	AdapterCache:    cacheGen,
 	Manifest:        manifestGen,
 	Catalog:         catalogGen,
 	Waivers:         waiversGen,

@@ -105,8 +105,12 @@ func TestDogfoodManifestIsLevelB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := doc.Value.(map[string]any)["default_level"]; got != "B" {
+	m := doc.Value.(map[string]any)
+	if got := m["default_level"]; got != "B" {
 		t.Fatalf("default_level = %v; the charter requires this repo to apply the framework to itself at level B", got)
+	}
+	if !slices.Contains(m["languages"].([]any), any("go")) {
+		t.Fatalf("languages = %v; without go, no adapter classifies this repo's own code", m["languages"])
 	}
 }
 

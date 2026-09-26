@@ -34,12 +34,12 @@ func TestUnembeddedReferencesAreRefused(t *testing.T) {
 }
 
 func TestTwoViolationsAreBothReportedWithLines(t *testing.T) {
-	src := "version: 0\ncatalog: v0\ndefault_level: Z\ncomponents:\n  - level: A\n"
+	src := "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: Z\ncomponents:\n  - level: A\n"
 	vs, err := Validate(Manifest, []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]int{"/default_level": 3, "/components/0": 5}
+	want := map[string]int{"/default_level": 4, "/components/0": 6}
 	if len(vs) != len(want) {
 		t.Fatalf("got %v", vs)
 	}
