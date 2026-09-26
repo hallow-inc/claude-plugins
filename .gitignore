@@ -11,3 +11,4 @@ node_modules/
 **/.mcp.json.local
 
 **/.claude/state/
+**/.claude/handoff/
