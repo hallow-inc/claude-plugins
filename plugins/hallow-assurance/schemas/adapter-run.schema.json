@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/adapter-run.schema.json",
+  "title": "Adapter run response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "evidence", "tool_versions"],
+  "properties": {
+    "protocol": { "$ref": "common.schema.json#/$defs/protocol" },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "path"],
+        "properties": {
+          "type": { "$ref": "common.schema.json#/$defs/evidenceType" },
+          "path": { "$ref": "common.schema.json#/$defs/repoPath" }
+        }
+      }
+    },
+    "tool_versions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    }
+  }
+}

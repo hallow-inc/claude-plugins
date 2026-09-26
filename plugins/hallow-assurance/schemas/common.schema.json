@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/common.schema.json",
+  "title": "Shared definitions",
+  "$defs": {
+    "level": {
+      "enum": ["A", "B", "C", "D"]
+    },
+    "repoPath": {
+      "type": "string",
+      "pattern": "^[^/\\\\][^\\\\]*$",
+      "not": { "pattern": "(^|/)\\.\\.(/|$)" }
+    },
+    "objectiveId": {
+      "type": "string",
+      "pattern": "^[A-Z]+(-[A-Z0-9]+)+$"
+    },
+    "languageId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "evidenceType": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
+    },
+    "role": {
+      "enum": ["source", "test", "generated", "fuzz_corpus", "config"]
+    },
+    "protocol": {
+      "const": 0
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "levelStatus": {
+      "enum": ["required", "advisory"]
+    },
+    "tier": {
+      "enum": ["tier1", "tier2", "tier3"]
+    },
+    "percent": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    }
+  }
+}

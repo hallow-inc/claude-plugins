@@ -1,0 +1,7 @@
+/plugins/hallow-assurance/catalog/         @hello-world-bfree
+/plugins/hallow-assurance/schemas/         @hello-world-bfree
+/plugins/hallow-assurance/.assure/         @hello-world-bfree
+/plugins/hallow-assurance/assurance.yaml   @hello-world-bfree
+/.github/workflows/hallow-assurance.yml    @hello-world-bfree
+/.github/workflows/validate.yml            @hello-world-bfree
+/.github/CODEOWNERS                        @hello-world-bfree

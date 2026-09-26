@@ -1,0 +1,9 @@
+version: 0
+catalog: v0
+default_level: C
+components:
+  - path: internal/ledger/**
+    level: A
+    formal:
+      model: formal/Ledger
+      link: drt

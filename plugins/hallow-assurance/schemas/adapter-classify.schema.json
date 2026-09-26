@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/adapter-classify.schema.json",
+  "title": "Adapter classify response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "files"],
+  "properties": {
+    "protocol": { "$ref": "common.schema.json#/$defs/protocol" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "language", "role"],
+        "properties": {
+          "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+          "language": { "$ref": "common.schema.json#/$defs/languageId" },
+          "role": { "$ref": "common.schema.json#/$defs/role" }
+        }
+      }
+    }
+  }
+}

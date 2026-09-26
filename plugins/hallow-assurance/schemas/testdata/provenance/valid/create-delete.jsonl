@@ -1,0 +1,2 @@
+{"v":0,"session":"s1","tool":"Write","path":"a.go","role":"source","pre":null,"post":"9f2c3b1d0e7a6f5c4b3a29180716253443526170"}
+{"v":0,"session":"s1","tool":"Bash","path":"b.go","role":"source","pre":"a41e5d6c7b8a99887766554433221100ffeeddcc","post":null}

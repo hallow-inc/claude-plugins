@@ -1,0 +1,4 @@
+{
+  "future-protocol.json": [{"location": "/protocol", "keyword": "const"}],
+  "source-pattern-key.json": [{"location": "/patterns", "keyword": "additionalProperties"}]
+}

@@ -1,0 +1,6 @@
+version: 0
+catalog: v0
+default_level: C
+components:
+  - path: internal/**
+    level: E

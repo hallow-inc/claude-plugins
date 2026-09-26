@@ -1,0 +1,5 @@
+$ref: https://example.com/manifest.json
+version: 0
+catalog: v0
+default_level: C
+components: []

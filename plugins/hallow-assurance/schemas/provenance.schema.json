@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/provenance.schema.json",
+  "title": "Provenance record (one line of .assure/provenance/<session_id>.jsonl)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "session", "tool", "path", "role", "pre", "post"],
+  "properties": {
+    "v": { "const": 0 },
+    "session": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "agent_id": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "agent_type": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "tool": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+    "role": { "$ref": "common.schema.json#/$defs/role" },
+    "pre": { "$ref": "#/$defs/blob" },
+    "post": { "$ref": "#/$defs/blob" }
+  },
+  "not": {
+    "properties": {
+      "pre": { "const": null },
+      "post": { "const": null }
+    }
+  },
+  "$defs": {
+    "blob": {
+      "type": ["string", "null"],
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    }
+  }
+}

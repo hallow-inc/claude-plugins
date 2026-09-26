@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/adapter-describe.schema.json",
+  "title": "Adapter describe response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "languages", "patterns", "objectives"],
+  "properties": {
+    "protocol": { "$ref": "common.schema.json#/$defs/protocol" },
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "common.schema.json#/$defs/languageId" }
+    },
+    "patterns": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "test": { "$ref": "#/$defs/globs" },
+        "generated": { "$ref": "#/$defs/globs" },
+        "fuzz_corpus": { "$ref": "#/$defs/globs" },
+        "config": { "$ref": "#/$defs/globs" }
+      }
+    },
+    "objectives": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[A-Z]+(-[A-Z0-9]+)+$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool"],
+          "properties": {
+            "tool": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "globs": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/repoPath" }
+    }
+  }
+}

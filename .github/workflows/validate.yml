@@ -50,6 +50,7 @@ jobs:
           shopt -s nullglob
           fail=0
           for plugin_dir in plugins/*/; do
+            [ -f "$plugin_dir.claude-plugin/plugin.json" ] || continue
             echo "::group::$plugin_dir"
             if ! claude plugin validate "$plugin_dir"; then
               fail=1

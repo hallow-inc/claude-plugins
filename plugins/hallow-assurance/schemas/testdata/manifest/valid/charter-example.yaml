@@ -1,0 +1,18 @@
+version: 0
+catalog: v0
+components:
+  - path: internal/billing/**
+    level: A
+  - path: internal/chat/**
+    level: B
+  - path: cmd/tools/**
+    level: D
+  - path: internal/ledger/**
+    level: A
+    formal:
+      model: formal/Ledger
+      challenge: formal/Ledger/Challenge.lean
+      link: drt
+    dst:
+      harness: ./sim/ledger
+default_level: C

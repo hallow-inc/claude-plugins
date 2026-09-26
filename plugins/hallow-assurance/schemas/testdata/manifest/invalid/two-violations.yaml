@@ -1,0 +1,5 @@
+version: 0
+catalog: v0
+default_level: Z
+components:
+  - level: A

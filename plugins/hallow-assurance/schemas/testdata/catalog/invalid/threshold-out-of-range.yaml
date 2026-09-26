@@ -1,0 +1,6 @@
+- id: VER-MUTATION-CHANGED
+  title: Mutants killed
+  source: [DO-178B]
+  levels: { A: required }
+  evidence: mutation.report
+  threshold: { A: 120 }

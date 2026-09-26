@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/manifest.schema.json",
+  "title": "assurance.yaml manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "catalog", "default_level", "components"],
+  "properties": {
+    "version": { "const": 0 },
+    "catalog": { "type": "string", "pattern": "^v[0-9]+$" },
+    "default_level": { "$ref": "common.schema.json#/$defs/level" },
+    "components": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/component" }
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "level"],
+      "properties": {
+        "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+        "level": { "$ref": "common.schema.json#/$defs/level" },
+        "formal": { "$ref": "#/$defs/formal" },
+        "dst": { "$ref": "#/$defs/dst" }
+      }
+    },
+    "formal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "challenge", "link"],
+      "properties": {
+        "model": { "$ref": "common.schema.json#/$defs/repoPath" },
+        "challenge": { "$ref": "common.schema.json#/$defs/repoPath" },
+        "link": { "enum": ["drt", "conformance", "none"] }
+      }
+    },
+    "dst": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness"],
+      "properties": {
+        "harness": { "$ref": "common.schema.json#/$defs/repoPath" }
+      }
+    }
+  }
+}

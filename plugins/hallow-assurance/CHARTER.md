@@ -1,0 +1,438 @@
+# hallow-assurance — Charter & Build Outline
+
+> Owner: Brandon · Status: **Draft v0** · Last updated: 2026-09-25
+>
+> This document is the source of truth for what we're building and why. Design decisions that
+> contradict it need a charter change first. Items marked `TODO(decide)` are open decisions.
+
+---
+
+# Part 1 — Charter
+
+## Purpose
+
+Give every Hallow codebase, in any language, a consistent and enforceable way to verify software in
+proportion to how much its failure matters, and make coding agents operate inside those rules
+rather than around them.
+
+It is inspired by RTCA DO-178B (criticality levels, objectives tables, structural coverage
+resolution, tool qualification), NASA NPR 7150.2D (software classes, tailoring with rationale),
+NASA-STD-8739.8 (independent verification), NASA-STD-8739.9 (structured inspections), the
+Power of 10 rules, and SQLite's testing practice. Formal-methods objectives draw on RTCA DO-333 and
+AWS Cedar's verification-guided development (Lean model + differential random testing); simulation
+objectives draw on TigerBeetle's VOPR and TigerStyle. We take their **objectives and evidence
+model**, not their paperwork.
+
+## What we're building
+
+1. **`assure`** — a Go CLI and deterministic evaluator. Reads a repo's manifest, a versioned
+   objectives catalog, normalized evidence, waivers, and provenance; decides pass/fail per
+   objective; enforces a ratchet baseline.
+2. **Language adapters** — external executables (`assure-adapter-<lang>`) speaking a small JSON
+   protocol. They classify files, run tools, and emit normalized evidence. They never decide
+   pass/fail.
+3. **An objectives catalog** — language-neutral objectives (our Annex A), each with the levels it
+   applies at, independence requirements, evidence type, thresholds, and per-language
+   implementations or declared alternatives.
+4. **A Claude Code plugin** (`hallow-assurance`) — hooks, subagents, skills, and commands that make
+   agents follow the framework during development. Distributed through the existing Hallow plugin
+   marketplace.
+
+## Design invariants (non-negotiable)
+
+1. **The plugin contains no language knowledge.** It calls `assure`; `assure` asks adapters.
+   Adding a language must require zero changes to the plugin or the core.
+2. **Pass/fail is deterministic.** No LLM participates in any gate decision. Model judgment may
+   produce findings (inspections) but never verdicts.
+3. **CI is the authority.** Hooks are early warning. A hook passing locally is never evidence; CI
+   reruns everything.
+4. **Adapters emit evidence; the evaluator decides.** No thresholds live in adapters.
+5. **Fail closed.** Missing or malformed evidence fails the objective unless a valid waiver covers it.
+6. **Agents cannot move the goalposts.** Agents may not edit the catalog, thresholds, manifest
+   levels, waivers, baselines, provenance, formal-model challenge files, or gate config. Enforced
+   by `assure guard` locally and CODEOWNERS + CI server-side.
+7. **Every objective is computable from evidence.** If a check can't be computed, it doesn't belong
+   in the catalog.
+8. **Reproducible.** Every result is tied to a commit SHA and toolchain versions.
+9. **Hooks are fast.** Per-edit hooks < 3s p95. Stop-hook fast check < 2 min p95 on the pilot repo.
+10. **Standard formats first.** JUnit XML, LCOV/Cobertura, SARIF, and the Stryker
+    mutation-testing-report schema before anything custom.
+
+## Scope (v0 → v1)
+
+In scope:
+
+- `assure` CLI: `classify`, `context`, `guard`, `lint`, `check`, `evaluate`, `hook`, `record`,
+  `explain`
+- Manifest, catalog, waiver, provenance, evidence-index, and adapter-protocol schemas
+- Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test)
+- Claude Code plugin: hooks, four subagents, skills, commands
+- CI integration: required status check, PR report, nightly runs
+- Tool qualification fixtures (seeded-bug repos) for each adapter
+- Pilot: the Hallow AI repo (Go)
+
+## Non-goals (for now)
+
+- Formal certification or regulatory compliance
+- Building MC/DC instrumentation for languages that lack it (use declared alternatives)
+- Supply-chain attestations (in-toto/SLSA) — planned post-v1
+- Dashboards; cross-repo aggregation (evidence history goes to DuckLake post-v1)
+- Supporting agent harnesses other than Claude Code in the plugin (the CLI and evaluator stay
+  harness-neutral, so others can integrate later)
+- Python/Rust adapters before the TypeScript adapter proves the design
+
+## Success criteria
+
+v0 (pilot, report-only):
+
+- Pilot repo runs `assure check` locally via hooks and `assure evaluate` in CI
+- Agents are blocked from editing protected files and from stopping with failing fast checks
+- p95 hook latencies within invariant 9
+
+v1:
+
+- `assure evaluate` is a required check on the pilot repo, blocking on levels A–B
+- The TypeScript adapter ships with **zero** diffs to `plugin/` and `internal/core/`
+- Independence Tier 1 verified from provenance on every PR touching level A–B code
+- Each adapter passes its qualification fixtures in CI
+- Within six weeks of blocking mode: at least a few real bugs attributed to framework layers
+  (`found-by:*` labels), mutation efficacy on changed code trending up, test count flat or down
+
+## Roles
+
+| Role | Who | Responsibility |
+|---|---|---|
+| Owner | Brandon | Charter, architecture, final say on invariants |
+| Catalog approvers | `TODO(decide)` | Approve catalog versions, thresholds, level assignments |
+| Waiver approvers | `TODO(decide)` | Approve waivers per level (level A needs a named human) |
+| Pilot repo owners | `TODO(decide)` | Adopt v0, report friction |
+
+## Risks
+
+| Risk | Mitigation |
+|---|---|
+| Claude Code hook schema changes | All hook I/O goes through one `assure hook <event>` entrypoint that parses stdin; the rest of the CLI never sees hook JSON. Contract tests against recorded hook payloads. |
+| Agents gaming gates | Invariant 6; guard protects `.assure/`; CI reruns; mutation (not coverage) as the quality signal |
+| Stop-hook loops and cost | Retry cap in `.assure/state/`, honor the hook's stop-active flag, escalate to human after N attempts |
+| Rule-pack false positives cause suppression fatigue | New rules ship advisory for one catalog version before becoming required |
+| Mutation tooling maturity (esp. Go) | Adapter qualification fixtures; mutation starts advisory at level C |
+| Framework becomes paperwork | Invariant 7; anything not computable gets cut |
+| Evaluator bugs let bad code through | The repo applies the framework to itself at level B; qualification fixtures for the evaluator too |
+
+---
+
+# Part 2 — Build Outline
+
+## Repository layout
+
+Lives at `plugins/hallow-assurance/` inside the `hallow-claude-plugins` marketplace repo. OpenSpec
+changes and specs live in that repo's root `openspec/`; the marketplace entry's `source` points at
+`./plugins/hallow-assurance/plugin`. CI and CODEOWNERS for invariant 6 are that repo's.
+
+```
+plugins/hallow-assurance/
+  CHARTER.md
+  CLAUDE.md
+  assurance.yaml                 # dogfooding: this repo's own manifest
+  go.mod
+  cmd/
+    assure/                      # CLI entrypoint
+  internal/
+    core/                        # language-neutral: manifest, catalog, waivers, classify, evaluate
+    hookio/                      # ONLY place that knows Claude Code hook JSON
+    evidence/                    # parsers: JUnit, LCOV, SARIF, mutation report
+    adapterproto/                # adapter protocol client
+    provenance/
+    baseline/
+  adapters/
+    go/                          # assure-adapter-go (separate binary)
+    typescript/                  # assure-adapter-typescript (v1)
+  catalog/
+    v0/objectives.yaml
+  schemas/                       # JSON Schemas for every file format below
+  plugin/                        # the Claude Code plugin
+    .claude-plugin/plugin.json
+    hooks/hooks.json
+    bin/assure-hook              # shim: no manifest → exit 0; assure missing → exit 2; else exec
+    agents/{implementer,verifier,inspector,pruner}.md
+    skills/assure-testing/SKILL.md
+    skills/assure-testing/reference/   # per-language refs, shipped by adapters
+    commands/{check,bugfix,inspect}.md
+  qualification/
+    go/                          # seeded-bug fixture repos + expected results
+  testdata/
+    hooks/                       # recorded hook payloads for contract tests
+```
+
+## File formats (v0 sketches — formalize in `schemas/`)
+
+**Manifest** — `assurance.yaml` in each adopting repo:
+
+```yaml
+version: 0
+catalog: v0
+components:
+  - path: internal/billing/**
+    level: A
+  - path: internal/chat/**
+    level: B
+  - path: cmd/tools/**
+    level: D
+  - path: internal/ledger/**
+    level: A
+    formal:                                        # optional: Lean model of this component
+      model: formal/Ledger                         # lake package
+      challenge: formal/Ledger/Challenge.lean      # trusted theorem statements; protected
+      link: drt                                    # drt | conformance | none
+    dst:                                           # optional: deterministic simulation harness
+      harness: ./sim/ledger
+default_level: C
+```
+
+Path → level resolution: a path takes the level of the matching glob with the most literal
+(wildcard-free) segments. Ties go to the stricter level, and `assure lint` warns on every tie.
+`internal/billing/**` (2 literals) beats `internal/**` and `**/billing/**` (1 each); if only the
+latter two match, the stricter of their levels applies. Unmatched paths take `default_level`.
+
+**Catalog objective** — `catalog/v0/objectives.yaml`:
+
+```yaml
+- id: VER-MUTATION-CHANGED
+  title: Tests on changed code kill mutants
+  source: [DO-178B 6.4.4.2 (alternative to MC/DC)]
+  levels: { A: required, B: required, C: advisory }
+  independence: { A: tier3, B: tier1 }
+  evidence: mutation.report
+  threshold: { A: 80, B: 65, C: 50 }
+  implementations:
+    go: gremlins
+    typescript: stryker
+  alternative_for: VER-STRUCT-MCDC
+```
+
+Optional `applies_to: formal | dst` restricts an objective to components that declare that block.
+
+**Waiver** — `.assure/waivers.yaml` (human-only):
+
+```yaml
+- objective: VER-ROBUST-FUZZ
+  scope: internal/chat/legacy/**
+  rationale: Legacy parser scheduled for removal in Q4
+  approver: hello-world-bfree
+  expires: 2026-12-31
+```
+
+**Provenance** — `.assure/provenance/<session_id>.jsonl`, one committed file per session
+(append-only, written only by `assure record`; protected from agent edits):
+
+```json
+{"v":0,"session":"7f3a2c9e","agent_type":"hallow-assurance:verifier","agent_id":"a4d2c8f1e0b3a297","tool":"Edit","path":"internal/chat/stream_test.go","role":"test","pre":"9f2c3b1d0e7a6f5c4b3a29180716253443526170","post":"a41e5d6c7b8a99887766554433221100ffeeddcc"}
+```
+
+`pre` is the file's blob hash (`git hash-object --path`) captured by `guard` at PreToolUse; `post`
+is captured by `record` at PostToolUse. `null` means absent / deleted. Renames are delete + create.
+
+Threat model: a shortcut-taking agent (edits tests while implementing, edits through Bash), not a
+forging one. Any agent running as the developer's OS user can reach every local secret, so local
+provenance is detective, never preventive; CI is the authority.
+
+CI check, per changed file in a level A–B component: the records must form an unbroken blob chain
+`merge-base blob → pre→post → … → final blob`. Order comes from the hash links, not timestamps. Any
+break is a **gap**: unattributed, never assumed human. A gap fails IND-VERIFIER-DISTINCT for that
+file unless the PR has an approving review from a CODEOWNER who is not the PR author. Gaps where the
+file also changed on the base branch are reported as merge-shaped; v0 counts them to decide whether
+a 3-way check is worth building. CI also checks that a PR only appends to existing session files.
+
+Independence tiers (computed by the evaluator):
+
+| Tier | Meaning | Evidence |
+|---|---|---|
+| tier1 | Distinct context: test-role files' chains written only by the verifier agent type; source-role files never by it; distinct `agent_id` (the main thread is its own identity) | provenance chains |
+| tier2 | tier1 + inspector findings from a dissimilar model/vendor | inspector SARIF `tool.driver` |
+| tier3 | tier2 + approving review from a non-author CODEOWNER | GitHub review API |
+
+`guard` denies main-thread (no `agent_type`) edits to test-role files in level A–B components, with
+a message to spawn `hallow-assurance:verifier`, so the tier1 failure surfaces at edit time rather
+than in CI.
+
+**Adapter protocol v0** — subprocess, JSON on stdin/stdout:
+
+```
+assure-adapter-go describe            → {protocol:0, languages:["go"], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{...}}
+assure-adapter-go classify  <paths>   → {protocol:0, files:[{path, language, role}]}
+assure-adapter-go lint      <paths>   → SARIF
+assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:0, evidence:[{type, path}], tool_versions:{...}}
+```
+
+Every response except `lint` is an object carrying `protocol: 0`, so each message is versioned on its own.
+Schemas: `schemas/adapter-{describe,classify,run}.schema.json`; `lint` is validated against SARIF 2.1.0.
+
+## Starter catalog (v0)
+
+| ID | Intent | A | B | C | D |
+|---|---|---|---|---|---|
+| CODE-ZERO-WARNINGS | Compiler/vet/linters clean (ratcheted for old code) | req | req | req | adv |
+| CODE-RESOURCE-BOUNDS | Bounded reads, retries, loops, buffers (P10-2, P10-3) | req | req | adv | – |
+| CODE-CHECK-RETURNS | No dropped errors/promises (P10-7) | req | req | req | adv |
+| CODE-COMPLEXITY | Cyclomatic ≤ 15, function length limits (P10-4) | req | req | adv | – |
+| CODE-NO-UNSAFE | No unsafe/reflect/eval outside allow-list (P10-8, P10-9) | req | req | adv | – |
+| VER-TESTS-PASS | Tests pass with race/shuffle where supported | req | req | req | req |
+| VER-TRACE-REQ | Every requirement ID has tests; level A: every test traces to a requirement | req | adv | – | – |
+| VER-MUTATION-CHANGED | Mutation threshold on changed code | req | req | adv | – |
+| VER-FAIL-ON-BASE | Bugfix tests fail on base commit | req | req | req | adv |
+| VER-TEST-BUDGET | New test cases within budget or justified | req | req | req | adv |
+| VER-ROBUST-FUZZ | Fuzz targets exist and ran for input-handling code | req | req | adv | – |
+| VER-COVERAGE-RESOLUTION | Uncovered code has an approved verdict (missing test / missing req / dead / deactivated) | req | adv | – | – |
+| IND-VERIFIER-DISTINCT | Verification authored by a different agent/human than implementation | tier3 | tier1 | – | – |
+| CFG-PROTECTED | No agent-authored changes to protected files | req | req | req | req |
+| FM-COMPLETE | Lean model builds with `--wfail`; zero `sorry`; axiom-audit reports no violations | adv | adv | adv | – |
+| FM-AXIOMS | Axioms used ⊆ {propext, Classical.choice, Quot.sound}; native-evaluation axioms need a waiver | adv | adv | adv | – |
+| FM-RECHECK | Independent kernel re-check passes (`lake comparator` at A–B, `lean4checker` at C) | adv | adv | adv | – |
+| FM-TRACE | Each requirement claimed as formally verified maps to a theorem whose statement matches the reviewed challenge file | adv | adv | adv | – |
+| FM-LINK | Differential/conformance tests against the implementation: zero mismatches, ≥ N inputs, same commit | adv | adv | adv | – |
+| VER-DST-REPLAY | A failing seed replays to an identical trace digest | adv | adv | adv | – |
+| VER-DST-FAULTS | Every declared fault class fired at least once across the seed set | adv | adv | adv | – |
+| VER-DST-LIVENESS | At least one liveness run (faults heal or freeze; core must converge) | adv | adv | adv | – |
+| VER-DST-BUDGET | Aggregate simulated time ≥ T at a minimum acceleration ratio | adv | adv | adv | – |
+
+FM-* objectives apply only to components that declare `formal:`; VER-DST-* only to components that
+declare `dst:`. Both families are advisory in v1. Lean evidence without FM-LINK counts only toward
+design- and spec-level objectives, never code-level ones: a proof about a model is not a proof
+about the code. FM-LINK is statistical linkage, not a refinement proof.
+
+## Claude Code plugin design
+
+All hooks route through `plugin/bin/assure-hook` → `assure hook <event>`, which reads the hook JSON
+from stdin, calls the relevant core function, and translates the result into exit codes / JSON
+output.
+
+Claude Code treats a hook timeout, a missing binary (exit 127), and any exit code other than 0 or 2
+as non-blocking. The local guard is therefore best-effort; CI (invariant 3) is the enforcement. To
+keep local behavior as close to fail-closed as the harness allows:
+
+- The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted) and exits 2 when
+  `assure` is missing or the wrong version.
+- `internal/hookio` recovers from every internal error and emits a deny/block decision.
+- Every hook declares an explicit `timeout`; `guard` is a pure in-memory decision.
+- Edits made through Bash bypass the `Edit|Write` matcher. SessionStart records hashes of protected
+  files in `.assure/state/`; the Stop check blocks on any drift. CI checks the PR diff the same way.
+- The manifest is resolved from `tool_input.file_path` / `cwd`, not `CLAUDE_PROJECT_DIR`, which stays
+  at the session root inside worktrees.
+
+| Event | Matcher | Calls | Effect |
+|---|---|---|---|
+| SessionStart | – | `context` | Injects level map + applicable objectives for the working area |
+| SessionStart | – | `guard --snapshot` | Records protected-file hashes for the Stop drift check |
+| PreToolUse | `Edit\|Write\|NotebookEdit` | `guard` | Blocks protected files; enforces subagent role rules keyed on the hook input's `agent_type` (e.g. verifier can't edit source) |
+| PostToolUse | `Edit\|Write` | `lint` | Fast per-file rule-pack findings fed back to the agent |
+| PostToolUse | `Edit\|Write` | `record` | Appends provenance |
+| Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail or protected files drifted; retry cap (own counter + `stop_hook_active`) then escalate |
+| SubagentStop | `^hallow-assurance:(verifier\|inspector)$` | `check --role <agent>` | Verifier must leave passing tests; inspector must emit SARIF |
+
+Plugin subagent names are plugin-scoped (`hallow-assurance:verifier`), so the SubagentStop matcher is
+an anchored regex; an unanchored `verifier|inspector` never matches.
+
+Subagents: **implementer** (source only), **verifier** (tests/fuzz/properties only), **inspector**
+(read-only, checklist → SARIF), **pruner** (deletes/merges tests, must cite mutation report).
+
+Role rules are enforced by `guard`, keyed on the `agent_type` field that PreToolUse carries for
+subagent tool calls. Claude Code ignores `hooks` and `permissionMode` in plugin subagent frontmatter,
+so frontmatter cannot enforce roles; `tools` / `disallowedTools` stay as defense-in-depth.
+
+Skills: one generic `assure-testing` skill (philosophy, fail-first loop, coverage verdicts,
+how to read `assure` output, designing for deterministic simulation, Lean model + differential
+testing) + per-language reference files shipped by adapters.
+
+Commands: `/assure:check`, `/assure:bugfix <issue|seed>`, `/assure:inspect`.
+
+## Milestones
+
+Each milestone ends with its acceptance criteria met, tests passing, and this repo passing its own
+`assure evaluate`.
+
+**M0 — Scaffolding & schemas**
+- Repo layout, `go.mod`, CI, `CLAUDE.md`, `assurance.yaml`
+- JSON Schemas for manifest, catalog, waiver, provenance, adapter protocol
+- ✅ Schema validation tests with valid/invalid fixtures for each format
+
+**M1 — Core: classify, context, guard**
+- Manifest + catalog loaders; glob → component → level resolution
+- Adapter protocol client; `assure-adapter-go describe|classify`
+- `assure classify`, `assure context`, `assure guard` (protected paths + role rules)
+- ✅ Property tests for path→level resolution (most-specific match wins, deterministic)
+- ✅ Property tests: any generated path under a protected glob is denied; any generated
+  (agent_type, path role) pair gets the decision the role table specifies. Example tests only for
+  named regressions.
+
+**M2 — Plugin v0 (report-only pilot)**
+- `internal/hookio` + `assure hook` with contract tests against recorded payloads
+- `hooks.json`: SessionStart, PreToolUse guard, Stop fast check (build, vet, lint, `test -race` on
+  changed packages)
+- Retry cap / escalation for Stop
+- Install in the pilot repo, report-only in CI
+- ✅ Latency within invariant 9 on the pilot repo
+- ✅ Manual session: agent edits a protected file → blocked; agent stops with failing test → blocked
+
+**M3 — Evidence & evaluator**
+- Parsers: JUnit, LCOV, SARIF, mutation report
+- Go adapter `run` for: tests, race, lint/rule packs, fuzz (seed corpus in PR, time-boxed nightly),
+  mutation (Gremlins) on changed packages, fail-on-base, test budget
+- `assure evaluate` → `report.json` + markdown PR summary; waivers with expiry; baseline ratchet
+- ✅ Fail-closed: missing evidence fails; expired waiver fails
+- ✅ Required status check on the pilot repo (blocking levels A–B)
+
+**M4 — Subagents, provenance, skills**
+- Four subagents; role rules in `guard` keyed on `agent_type`; frontmatter `tools` /
+  `disallowedTools` as defense-in-depth
+- `assure record` + IND-VERIFIER-DISTINCT evaluation
+- `assure-testing` skill + `go.md` reference; `/assure:*` commands
+- ✅ Evaluator rejects a PR where implementer == verifier on level B code
+
+**M5 — Qualification & CI agents**
+- `qualification/go/`: seeded-bug fixtures with expected outcomes (mutants that must be killed,
+  known coverage, known lint findings)
+- Adapter must pass qualification in CI before release
+- Headless Claude Code inspector on level A–B PRs; nightly failure → `/assure:bugfix` PR
+- ✅ A deliberately broken adapter build fails qualification
+
+**M6 — TypeScript adapter (agnosticism proof)**
+- `assure-adapter-typescript` + `typescript.md` reference + qualification fixtures
+- ✅ **Zero diffs** to `plugin/` and `internal/core/` in the M6 PR. Any needed change is a design bug:
+  fix the abstraction first in a separate PR, then land the adapter.
+
+**M7 (post-v1) — Lean adapter**
+- `assure-adapter-lean`: `lake build --wfail`, axiom-audit `--json`, `lake comparator` /
+  `lean4checker`, differential-test stats → evidence for FM-*
+- Qualification fixtures: a seeded `sorry`, a seeded `native_decide`, and a custom axiom must each fail
+- ✅ Evidence about a Go component comes from a non-Go adapter with zero diffs to `internal/core/`
+
+**M8 (post-v1) — DST runner**
+- Seed runner (budget, timeout, concurrency) and seed-record store with failing-first retention
+- Replay check: run a seed twice, compare trace digests → VER-DST-REPLAY
+- ✅ A deliberately nondeterministic harness fails VER-DST-REPLAY
+
+**Post-v1:** attestations, DuckLake evidence history, Tier 2 dissimilar-model inspector, Python and
+Rust adapters, cross-repo reporting, Ziggy authoring front-end for manifest/catalog (JSON Schema
+stays authoritative) once a stable Go implementation and JSON mapping exist.
+
+## Open decisions
+
+- `TODO(decide)` Catalog and waiver approvers per level
+- `TODO(decide)` Where `assure` and adapters are distributed from (GitHub releases + `go install`?)
+- `TODO(decide)` Level assignments for the pilot repo's packages
+- `TODO(decide)` Retry cap for the Stop hook (starting proposal: 3, then escalate)
+- `TODO(decide)` Tier 2 inspector model/vendor for CI
+- Level A cannot block until the Tier 2 inspector vendor is decided, because tier3 includes tier2.
+  Level B (tier1) is unaffected.
+- `TODO(decide)` Whether FM-LINK + FM-COMPLETE may substitute for VER-MUTATION-CHANGED at level A
+  (`alternative_for`). Leaning no for v1.
+
+## Starting the first Claude Code session
+
+1. Add `CHARTER.md` and `CLAUDE.md` under `plugins/hallow-assurance/` in `hallow-claude-plugins`.
+2. Start in plan mode. Prompt:
+   > Read CHARTER.md and CLAUDE.md. Propose a plan for M0 only: file list, schemas, and the tests
+   > you'll write. Don't write code until I approve the plan.
+3. After M0 lands, repeat per milestone. Keep each milestone to its own PR.
+4. Check the current Claude Code hooks and plugin docs before M2 — field names and events have
+   been changing: https://code.claude.com/docs/en/hooks

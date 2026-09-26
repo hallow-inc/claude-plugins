@@ -1,0 +1,152 @@
+- id: CODE-ZERO-WARNINGS
+  title: Compiler, vet, and linters report no findings (ratcheted for old code)
+  source: [Power of 10 rule 10]
+  levels: { A: required, B: required, C: required, D: advisory }
+  evidence: lint.sarif
+
+- id: CODE-RESOURCE-BOUNDS
+  title: Reads, retries, loops, and buffers are bounded
+  source: [Power of 10 rule 2, Power of 10 rule 3]
+  levels: { A: required, B: required, C: advisory }
+  evidence: lint.sarif
+
+- id: CODE-CHECK-RETURNS
+  title: No dropped errors or promises
+  source: [Power of 10 rule 7]
+  levels: { A: required, B: required, C: required, D: advisory }
+  evidence: lint.sarif
+
+- id: CODE-COMPLEXITY
+  title: Cyclomatic complexity and function length within limits
+  source: [Power of 10 rule 4]
+  levels: { A: required, B: required, C: advisory }
+  evidence: lint.sarif
+  threshold: { A: 15, B: 15, C: 15 }
+
+- id: CODE-NO-UNSAFE
+  title: No unsafe, reflection, or eval outside the allow-list
+  source: [Power of 10 rule 8, Power of 10 rule 9]
+  levels: { A: required, B: required, C: advisory }
+  evidence: lint.sarif
+
+- id: VER-TESTS-PASS
+  title: Tests pass, with race detection and shuffling where supported
+  source: [SQLite testing practice]
+  levels: { A: required, B: required, C: required, D: required }
+  evidence: test.junit
+
+- id: VER-TRACE-REQ
+  title: Every requirement ID has tests; at level A every test traces to a requirement
+  source: [DO-178B requirements-based testing]
+  levels: { A: required, B: advisory }
+  evidence: trace.report
+
+- id: VER-MUTATION-CHANGED
+  title: Tests on changed code kill mutants
+  source: [DO-178B 6.4.4.2 (alternative to MC/DC)]
+  levels: { A: required, B: required, C: advisory }
+  evidence: mutation.report
+  threshold: { A: 80, B: 65, C: 50 }
+  implementations:
+    go: gremlins
+    typescript: stryker
+
+- id: VER-FAIL-ON-BASE
+  title: Bug-fix tests fail on the base commit
+  source: [hallow-assurance charter]
+  levels: { A: required, B: required, C: required, D: advisory }
+  evidence: test.fail_on_base
+
+- id: VER-TEST-BUDGET
+  title: New test cases are within budget or justified
+  source: [hallow-assurance charter]
+  levels: { A: required, B: required, C: required, D: advisory }
+  evidence: test.budget
+
+- id: VER-ROBUST-FUZZ
+  title: Fuzz targets exist and ran for input-handling code
+  source: [DO-178B robustness testing]
+  levels: { A: required, B: required, C: advisory }
+  evidence: fuzz.run
+
+- id: VER-COVERAGE-RESOLUTION
+  title: Uncovered code has an approved verdict (missing test, missing requirement, dead, deactivated)
+  source: [DO-178B structural coverage analysis resolution]
+  levels: { A: required, B: advisory }
+  evidence: coverage.resolution
+
+- id: IND-VERIFIER-DISTINCT
+  title: Verification authored by a different agent or human than implementation
+  source: [DO-178B independence, NASA-STD-8739.8]
+  levels: { A: required, B: required }
+  independence: { A: tier3, B: tier1 }
+  evidence: provenance.chain
+
+- id: CFG-PROTECTED
+  title: No agent-authored changes to protected files
+  source: [hallow-assurance charter invariant 6]
+  levels: { A: required, B: required, C: required, D: required }
+  evidence: protected.diff
+
+- id: FM-COMPLETE
+  title: Lean model builds with --wfail, has no sorry, and axiom-audit reports no violations
+  source: [RTCA DO-333, Lean reference manual (Validating a Lean Proof)]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: lean.build
+  applies_to: formal
+
+- id: FM-AXIOMS
+  title: Axioms used are within propext, Classical.choice, Quot.sound; native-evaluation axioms need a waiver
+  source: [RTCA DO-333, Lean reference manual (Validating a Lean Proof)]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: lean.axioms
+  applies_to: formal
+
+- id: FM-RECHECK
+  title: Independent kernel re-check passes (lake comparator at A-B, lean4checker at C)
+  source: [RTCA DO-333, Lean reference manual (Validating a Lean Proof)]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: lean.recheck
+  applies_to: formal
+
+- id: FM-TRACE
+  title: Each requirement claimed as formally verified maps to a theorem matching the reviewed challenge file
+  source: [RTCA DO-333]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: lean.trace
+  applies_to: formal
+
+- id: FM-LINK
+  title: Differential or conformance tests against the implementation show zero mismatches on the same commit
+  source: [AWS Cedar verification-guided development]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: drt.run
+  applies_to: formal
+
+- id: VER-DST-REPLAY
+  title: A failing seed replays to an identical trace digest
+  source: [TigerBeetle VOPR]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: dst.replay
+  applies_to: dst
+
+- id: VER-DST-FAULTS
+  title: Every declared fault class fired at least once across the seed set
+  source: [TigerBeetle VOPR]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: dst.faults
+  applies_to: dst
+
+- id: VER-DST-LIVENESS
+  title: At least one liveness run in which faults heal or freeze and the core converges
+  source: [TigerBeetle VOPR liveness mode]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: dst.liveness
+  applies_to: dst
+
+- id: VER-DST-BUDGET
+  title: Aggregate simulated time meets the target at a minimum acceleration ratio
+  source: [TigerBeetle VOPR]
+  levels: { A: advisory, B: advisory, C: advisory }
+  evidence: dst.budget
+  applies_to: dst

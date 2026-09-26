@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/waivers.schema.json",
+  "title": ".assure/waivers.yaml",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["objective", "scope", "rationale", "approver", "expires"],
+    "properties": {
+      "objective": { "$ref": "common.schema.json#/$defs/objectiveId" },
+      "scope": { "$ref": "common.schema.json#/$defs/repoPath" },
+      "rationale": { "type": "string", "minLength": 20 },
+      "approver": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9](-?[A-Za-z0-9])*$",
+        "not": { "const": "TODO" }
+      },
+      "expires": { "type": "string", "format": "date" }
+    }
+  }
+}
