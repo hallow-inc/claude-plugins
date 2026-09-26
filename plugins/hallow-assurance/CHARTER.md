@@ -1,6 +1,6 @@
 # hallow-assurance — Charter & Build Outline
 
-> Owner: Brandon · Status: **Draft v0** · Last updated: 2026-09-25
+> Owner: Brandon · Status: **Draft v0** · Last updated: 2026-09-26
 >
 > This document is the source of truth for what we're building and why. Design decisions that
 > contradict it need a charter change first. Items marked `TODO(decide)` are open decisions.
@@ -50,7 +50,8 @@ model**, not their paperwork.
 5. **Fail closed.** Missing or malformed evidence fails the objective unless a valid waiver covers it.
 6. **Agents cannot move the goalposts.** Agents may not edit the catalog, thresholds, manifest
    levels, waivers, baselines, provenance, formal-model challenge files, or gate config. Enforced
-   by `assure guard` locally and CODEOWNERS + CI server-side.
+   by `assure guard` locally and by CI server-side: a PR that changes a protected file needs an
+   approving review from someone other than the PR author.
 7. **Every objective is computable from evidence.** If a check can't be computed, it doesn't belong
    in the catalog.
 8. **Reproducible.** Every result is tied to a commit SHA and toolchain versions.
@@ -127,7 +128,7 @@ v1:
 
 Lives at `plugins/hallow-assurance/` inside the `hallow-claude-plugins` marketplace repo. OpenSpec
 changes and specs live in that repo's root `openspec/`; the marketplace entry's `source` points at
-`./plugins/hallow-assurance/plugin`. CI and CODEOWNERS for invariant 6 are that repo's.
+`./plugins/hallow-assurance/plugin`. CI for invariant 6 is that repo's.
 
 ```
 plugins/hallow-assurance/
@@ -239,9 +240,13 @@ provenance is detective, never preventive; CI is the authority.
 CI check, per changed file in a level A–B component: the records must form an unbroken blob chain
 `merge-base blob → pre→post → … → final blob`. Order comes from the hash links, not timestamps. Any
 break is a **gap**: unattributed, never assumed human. A gap fails IND-VERIFIER-DISTINCT for that
-file unless the PR has an approving review from a CODEOWNER who is not the PR author. Gaps where the
+file unless the PR has an approving review from someone other than the PR author. Gaps where the
 file also changed on the base branch are reported as merge-shaped; v0 counts them to decide whether
 a 3-way check is worth building. CI also checks that a PR only appends to existing session files.
+
+Any non-author approval counts; there is no approver list. GitHub rejects an author's approval of
+their own PR, so an agent running on the author's credentials cannot produce one. The PR template
+lists what a reviewer is attesting to.
 
 Independence tiers (computed by the evaluator):
 
@@ -249,7 +254,7 @@ Independence tiers (computed by the evaluator):
 |---|---|---|
 | tier1 | Distinct context: test-role files' chains written only by the verifier agent type; source-role files never by it; distinct `agent_id` (the main thread is its own identity) | provenance chains |
 | tier2 | tier1 + inspector findings from a dissimilar model/vendor | inspector SARIF `tool.driver` |
-| tier3 | tier2 + approving review from a non-author CODEOWNER | GitHub review API |
+| tier3 | tier2 + approving review from someone other than the PR author | GitHub review API |
 
 `guard` denies main-thread (no `agent_type`) edits to test-role files in level A–B components, with
 a message to spawn `hallow-assurance:verifier`, so the tier1 failure surfaces at edit time rather
