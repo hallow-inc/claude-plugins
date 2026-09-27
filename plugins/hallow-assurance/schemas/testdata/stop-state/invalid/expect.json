@@ -1,0 +1,5 @@
+{
+  "negative-blocks.json": [{"location": "/blocks", "keyword": "minimum"}],
+  "fractional-blocks.json": [{"location": "/blocks", "keyword": "type"}],
+  "future-version.json": [{"location": "/version", "keyword": "const"}]
+}

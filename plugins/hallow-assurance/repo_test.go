@@ -1,9 +1,12 @@
 package hallowassurance_test
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -131,6 +134,61 @@ func TestCharterExamplesValidate(t *testing.T) {
 	for label := range kinds {
 		if !found[label] {
 			t.Errorf("no %s example found in CHARTER.md", label)
+		}
+	}
+}
+
+func scan(t *testing.T, root string, keep func(path string) bool, re *regexp.Regexp) []string {
+	t.Helper()
+	var hits []string
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "testdata" || d.Name() == "__to_delete" || d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !keep(p) {
+			return nil
+		}
+		for i, line := range strings.Split(string(read(t, p)), "\n") {
+			if re.MatchString(line) {
+				hits = append(hits, p+":"+strconv.Itoa(i+1)+": "+strings.TrimSpace(line))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hits
+}
+
+var hookFields = regexp.MustCompile(`hook_event_name|stop_hook_active|hookSpecificOutput|permissionDecision|"tool_input"|additionalContext`)
+
+func TestOnlyHookioKnowsHookJSON(t *testing.T) {
+	outside := func(p string) bool {
+		return strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") && !strings.HasPrefix(filepath.ToSlash(p), "internal/hookio/")
+	}
+	for _, hit := range scan(t, ".", outside, hookFields) {
+		t.Errorf("hook JSON field outside internal/hookio (invariant: only hookio parses hook JSON): %s", hit)
+	}
+}
+
+var languageNames = regexp.MustCompile(`golangci|gremlins|\bgo (test|vet|build)\b|_test\.go|\.go"|"go"|gofmt|typescript|stryker`)
+
+func TestNoLanguageKnowledgeOutsideAdapters(t *testing.T) {
+	for _, dir := range []string{"internal/core", "internal/hookio", "internal/app", "plugin"} {
+		keep := func(p string) bool { return dir == "plugin" || !strings.HasSuffix(p, "_test.go") }
+		if _, err := os.Stat(dir); err != nil {
+			t.Errorf("%s: %v", dir, err)
+			continue
+		}
+		for _, hit := range scan(t, dir, keep, languageNames) {
+			t.Errorf("language-specific name outside adapters/ (design invariant 1): %s", hit)
 		}
 	}
 }

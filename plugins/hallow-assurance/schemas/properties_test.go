@@ -291,7 +291,11 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 	}
 	objectives := map[string]any{}
 	for range rapid.IntRange(0, 2).Draw(t, "nobj") {
-		objectives[objIDGen.Draw(t, "oid")] = map[string]any{"tool": textGen.Draw(t, "tool")}
+		entry := map[string]any{"tool": textGen.Draw(t, "tool")}
+		if rapid.Bool().Draw(t, "hasfast") {
+			entry["fast"] = rapid.Bool().Draw(t, "fast")
+		}
+		objectives[objIDGen.Draw(t, "oid")] = entry
 	}
 	claims := []any{}
 	for i := range rapid.IntRange(1, 2).Draw(t, "nclaims") {
@@ -308,7 +312,8 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "patterns", "x", map[string]any{"source": []any{}}, map[string]any{"test": "x"}, map[string]any{"test": []any{"/abs"}})
 	r.bad("", "objectives", "x", map[string]any{"ver-x": map[string]any{"tool": "t"}}, map[string]any{"VER-X": "x"},
 		map[string]any{"VER-X": map[string]any{}}, map[string]any{"VER-X": map[string]any{"tool": ""}},
-		map[string]any{"VER-X": map[string]any{"tool": "t", "zz": 1}})
+		map[string]any{"VER-X": map[string]any{"tool": "t", "zz": 1}},
+		map[string]any{"VER-X": map[string]any{"tool": "t", "fast": "yes"}})
 	return sample{doc, r.cs}
 })
 
@@ -398,7 +403,42 @@ var cacheGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
+var snapshotGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	files := []any{}
+	for i := range rapid.IntRange(0, 3).Draw(t, "nfiles") {
+		p := "/files/" + idx(i)
+		files = append(files, map[string]any{"path": pathGen.Draw(t, "path"), "blob": rapid.StringMatching(`[0-9a-f]{40}`).Draw(t, "blob")})
+		r.closed(p)
+		r.required(p, "path", "blob")
+		r.bad(p, "path", badPath...)
+		r.bad(p, "blob", strings.Repeat("A", 40), strings.Repeat("a", 39), 7)
+		r.bad("/files", idx(i), "x")
+	}
+	doc := map[string]any{"version": 0, "session": rapid.StringMatching(`[A-Za-z0-9_-]{1,40}`).Draw(t, "session"), "files": files}
+	r.root("x", []any{})
+	r.closed("")
+	r.required("", "version", "session", "files")
+	r.bad("", "version", 1, "0")
+	r.bad("", "session", "", "a/b", "..", strings.Repeat("a", 129), 7)
+	r.bad("", "files", "x", map[string]any{})
+	return sample{doc, r.cs}
+})
+
+var stopStateGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	doc := map[string]any{"version": 0, "blocks": rapid.IntRange(0, 10).Draw(t, "blocks")}
+	r.root("x", []any{})
+	r.closed("")
+	r.required("", "version", "blocks")
+	r.bad("", "version", 1, "0")
+	r.bad("", "blocks", -1, 1.5, "1")
+	return sample{doc, r.cs}
+})
+
 var generators = map[Kind]*rapid.Generator[sample]{
+	Snapshot:        snapshotGen,
+	StopState:       stopStateGen,
 	AdapterCache:    cacheGen,
 	Manifest:        manifestGen,
 	Catalog:         catalogGen,

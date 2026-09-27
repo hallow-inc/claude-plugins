@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/app"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
@@ -29,7 +30,7 @@ func cwdManifest(stderr io.Writer) *core.Manifest {
 	wd, err := os.Getwd()
 	if err == nil {
 		var m *core.Manifest
-		if m, err = manifestFor(wd); err == nil {
+		if m, err = app.ManifestFor(wd); err == nil {
 			return m
 		}
 	}
@@ -53,7 +54,7 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 	for _, w := range m.Warnings {
 		_, _ = fmt.Fprintf(stderr, "assure: warning: %s: %s\n", core.ManifestName, w)
 	}
-	_, failures, cacheErr := loadRoles(m)
+	_, failures, cacheErr := app.LoadRoles(m)
 	for _, err := range failures {
 		_, _ = fmt.Fprintf(stderr, "assure: warning: %v\n", err)
 	}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/stop-state.schema.json",
+  "title": "Stop-hook retry state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "blocks"],
+  "properties": {
+    "version": { "const": 0 },
+    "blocks": { "type": "integer", "minimum": 0 }
+  }
+}

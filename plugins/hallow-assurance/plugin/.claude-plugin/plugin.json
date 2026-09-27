@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "hallow-assurance",
+  "description": "Verification in proportion to criticality. Hooks call the assure CLI to block agent edits to protected files and role-violating edits, inject the repo's level map at session start, and block stopping while changed code fails its fast objectives. Inert in repos without an assurance.yaml.",
+  "author": {
+    "name": "Hallow Sandbox Platform",
+    "email": "sandbox@hallow.app"
+  },
+  "homepage": "https://github.com/hallow-inc/claude-plugins",
+  "repository": "https://github.com/hallow-inc/claude-plugins",
+  "license": "LicenseRef-Hallow-Internal",
+  "keywords": ["verification", "assurance", "hooks", "hallow"]
+}

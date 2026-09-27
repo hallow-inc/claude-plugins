@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/snapshot.schema.json",
+  "title": "Protected-file snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "session", "files"],
+  "properties": {
+    "version": { "const": 0 },
+    "session": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "blob"],
+        "properties": {
+          "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+          "blob": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+        }
+      }
+    }
+  }
+}

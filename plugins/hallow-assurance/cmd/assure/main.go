@@ -14,9 +14,11 @@ Usage:
   assure <command> [arguments]
 
 Commands:
+  check      Run the fast objectives on changed files
   classify   Print level, language, and role for each path
   context    Print the level map and applicable objectives
   guard      Decide whether an agent may edit each path
+  hook       Handle a Claude Code hook event (JSON on stdin)
   help       Show this help
   version    Print the assure version
 `
@@ -40,6 +42,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runGuard(args[1:], stdout, stderr)
 	case "context":
 		return runContext(args[1:], stdout, stderr)
+	case "check":
+		return runCheck(args[1:], stdout, stderr)
+	case "hook":
+		return runHook(args[1:], stdout, stderr)
 	case "classify":
 		return runClassify(args[1:], stdout, stderr)
 	default:

@@ -22,10 +22,26 @@ const (
 	maxArgBytes     = 128 << 10
 )
 
+type Objective struct {
+	Tool string `json:"tool"`
+	Fast bool   `json:"fast"`
+}
+
 type Describe struct {
-	Languages []string            `json:"languages"`
-	Claims    []string            `json:"claims"`
-	Patterns  map[string][]string `json:"patterns"`
+	Languages  []string             `json:"languages"`
+	Claims     []string             `json:"claims"`
+	Patterns   map[string][]string  `json:"patterns"`
+	Objectives map[string]Objective `json:"objectives"`
+}
+
+type Evidence struct {
+	Type string `json:"type"`
+	Path string `json:"path"`
+}
+
+type Run struct {
+	Evidence     []Evidence        `json:"evidence"`
+	ToolVersions map[string]string `json:"tool_versions"`
 }
 
 type File struct {
@@ -152,4 +168,21 @@ func Classify(dir, lang string, paths []string) ([]File, error) {
 		paths = paths[n:]
 	}
 	return files, nil
+}
+
+func RunObjective(dir, lang, objective, ref, out string, timeout time.Duration) (Run, error) {
+	exe, err := Resolve(lang)
+	if err != nil {
+		return Run{}, err
+	}
+	name := Executable(lang)
+	raw, err := invoke(exe, dir, name, "run", timeout, objective, "--changed-from", ref, "--out", out)
+	if err != nil {
+		return Run{}, err
+	}
+	var r Run
+	if err := conform(name, "run", schemas.AdapterRun, raw, &r); err != nil {
+		return Run{}, err
+	}
+	return r, nil
 }

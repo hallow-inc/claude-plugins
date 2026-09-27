@@ -29,7 +29,10 @@ var description = describe{
 		"fuzz_corpus": {"**/testdata/fuzz/**"},
 		"config":      {"**/go.mod", "**/go.sum", "**/go.work", "**/go.work.sum"},
 	},
-	Objectives: map[string]any{},
+	Objectives: map[string]any{
+		"VER-TESTS-PASS":     map[string]any{"tool": "go test", "fast": true},
+		"CODE-ZERO-WARNINGS": map[string]any{"tool": "golangci-lint", "fast": true},
+	},
 }
 
 var configFiles = map[string]bool{"go.mod": true, "go.sum": true, "go.work": true, "go.work.sum": true}
@@ -48,7 +51,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | classify <path>...")
+		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | classify <path>... | run <objective> --changed-from <ref> --out <dir>")
 		return 2
 	}
 	var out any
@@ -68,6 +71,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		out = map[string]any{"protocol": 0, "files": files}
+	case "run":
+		return runObjective(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "assure-adapter-go: unknown subcommand %q\n", args[0])
 		return 2

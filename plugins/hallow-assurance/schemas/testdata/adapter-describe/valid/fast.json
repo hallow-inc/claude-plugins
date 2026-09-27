@@ -1,0 +1,1 @@
+{"protocol":0,"languages":["go"],"claims":["**/*.go"],"patterns":{"test":["**/*_test.go"]},"objectives":{"VER-TESTS-PASS":{"tool":"go test","fast":true}}}

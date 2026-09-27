@@ -17,6 +17,7 @@ func stricter(a, b Level) bool { return a < b }
 type Objective struct {
 	ID        string
 	Title     string
+	Evidence  string
 	Levels    map[Level]string
 	AppliesTo string
 }
@@ -51,7 +52,7 @@ func parseCatalog(file string, data []byte) (Catalog, error) {
 	for i, it := range items {
 		m := it.(map[string]any)
 		ptr := fmt.Sprintf("/%d", i)
-		o := Objective{ID: m["id"].(string), Title: m["title"].(string), Levels: map[Level]string{}}
+		o := Objective{ID: m["id"].(string), Title: m["title"].(string), Evidence: m["evidence"].(string), Levels: map[Level]string{}}
 		if seen[o.ID] {
 			p.add(ptr+"/id", "unique", "duplicate objective id %s", o.ID)
 		}

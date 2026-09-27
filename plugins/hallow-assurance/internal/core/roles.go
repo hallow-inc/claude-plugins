@@ -104,3 +104,13 @@ func (r Roles) Of(p string) (Role, error) {
 	}
 	return role, nil
 }
+
+func (r Roles) Claimants(p string) []string {
+	var langs []string
+	for _, a := range r.adapters {
+		if _, ok := a.role(p); ok {
+			langs = append(langs, a.lang)
+		}
+	}
+	return langs
+}

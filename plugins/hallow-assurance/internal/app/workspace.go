@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-func loadRoles(m *core.Manifest) (roles core.Roles, failures []error, cacheErr error) {
+func LoadRoles(m *core.Manifest) (roles core.Roles, failures []error, cacheErr error) {
 	ds, errs := adapterproto.Descriptions(m.Root, m.Languages)
 	for _, lang := range m.Languages {
 		if err := errs[lang]; err != nil {
@@ -27,7 +27,7 @@ func loadRoles(m *core.Manifest) (roles core.Roles, failures []error, cacheErr e
 	return roles, failures, errs[""]
 }
 
-func joinErrors(errs []error) string {
+func JoinErrors(errs []error) string {
 	msgs := make([]string, len(errs))
 	for i, e := range errs {
 		msgs[i] = e.Error()
@@ -36,7 +36,7 @@ func joinErrors(errs []error) string {
 	return strings.Join(msgs, "; ")
 }
 
-func manifestFor(dir string) (*core.Manifest, error) {
+func ManifestFor(dir string) (*core.Manifest, error) {
 	file, err := core.FindManifest(dir)
 	if err != nil {
 		return nil, err

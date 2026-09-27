@@ -1,0 +1,303 @@
+package hookio
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/app"
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
+)
+
+const Protocol = 0
+
+var HarnessProtected = []string{".claude/settings.json", ".claude/settings.local.json"}
+
+const (
+	maxInput   = 16 << 20
+	maxMessage = 9000
+	pruneAge   = 14 * 24 * time.Hour
+)
+
+var eventNames = map[string]string{
+	"session-start": "SessionStart",
+	"pre-tool-use":  "PreToolUse",
+	"stop":          "Stop",
+}
+
+var guardedTools = map[string]bool{"Edit": true, "Write": true, "NotebookEdit": true}
+
+type input struct {
+	SessionID      string `json:"session_id"`
+	Cwd            string `json:"cwd"`
+	HookEventName  string `json:"hook_event_name"`
+	AgentType      string `json:"agent_type"`
+	ToolName       string `json:"tool_name"`
+	StopHookActive bool   `json:"stop_hook_active"`
+	ToolInput      struct {
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+	} `json:"tool_input"`
+}
+
+type specific struct {
+	HookEventName            string `json:"hookEventName"`
+	PermissionDecision       string `json:"permissionDecision,omitempty"`
+	PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
+	AdditionalContext        string `json:"additionalContext,omitempty"`
+}
+
+type output struct {
+	Decision           string    `json:"decision,omitempty"`
+	Reason             string    `json:"reason,omitempty"`
+	SystemMessage      string    `json:"systemMessage,omitempty"`
+	HookSpecificOutput *specific `json:"hookSpecificOutput,omitempty"`
+}
+
+type response struct {
+	out  *output
+	code int
+}
+
+func IsEvent(event string) bool {
+	_, ok := eventNames[event]
+	return ok
+}
+
+func Run(event string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
+	var resp response
+	defer func() {
+		if r := recover(); r != nil {
+			resp = failure(event, fmt.Errorf("internal error: %v", r))
+		}
+		code = write(resp, stdout, stderr)
+	}()
+	resp = handler(event, stdin)
+	return 0
+}
+
+var handler = handle
+
+func handle(event string, stdin io.Reader) response {
+	in, err := decode(event, stdin)
+	if err != nil {
+		return failure(event, err)
+	}
+	switch event {
+	case "pre-tool-use":
+		return preToolUse(in)
+	case "session-start":
+		return sessionStart(in)
+	default:
+		return stop(in)
+	}
+}
+
+func decode(event string, stdin io.Reader) (input, error) {
+	var in input
+	data, err := io.ReadAll(io.LimitReader(stdin, maxInput+1))
+	if err != nil {
+		return in, fmt.Errorf("reading hook input: %w", err)
+	}
+	if len(data) > maxInput {
+		return in, fmt.Errorf("hook input exceeds %d bytes", maxInput)
+	}
+	if err := json.Unmarshal(data, &in); err != nil {
+		return in, fmt.Errorf("decoding hook input: %w", err)
+	}
+	if want := eventNames[event]; in.HookEventName != want {
+		return in, fmt.Errorf("hook input is for %q, not %s", in.HookEventName, want)
+	}
+	if in.Cwd == "" || !filepath.IsAbs(in.Cwd) {
+		return in, errors.New("hook input has no absolute cwd")
+	}
+	if event != "pre-tool-use" && !core.ValidSession(in.SessionID) {
+		return in, fmt.Errorf("hook input session_id %q is not a valid session id", in.SessionID)
+	}
+	return in, nil
+}
+
+func failure(event string, err error) response {
+	msg := "assure hook " + event + " failed closed: " + err.Error()
+	switch event {
+	case "pre-tool-use":
+		return deny(msg)
+	case "stop":
+		return response{out: &output{Decision: "block", Reason: msg}, code: 2}
+	default:
+		return response{out: &output{HookSpecificOutput: &specific{HookEventName: "SessionStart", AdditionalContext: msg}}}
+	}
+}
+
+func deny(reason string) response {
+	return response{out: &output{HookSpecificOutput: &specific{
+		HookEventName: "PreToolUse", PermissionDecision: "deny", PermissionDecisionReason: reason,
+	}}, code: 2}
+}
+
+func capMessage(s string) string {
+	if len(s) <= maxMessage {
+		return s
+	}
+	return s[:maxMessage] + "\n… truncated"
+}
+
+func write(resp response, stdout, stderr io.Writer) int {
+	if resp.out == nil {
+		return resp.code
+	}
+	o := *resp.out
+	o.Reason, o.SystemMessage = capMessage(o.Reason), capMessage(o.SystemMessage)
+	if o.HookSpecificOutput != nil {
+		s := *o.HookSpecificOutput
+		s.PermissionDecisionReason, s.AdditionalContext = capMessage(s.PermissionDecisionReason), capMessage(s.AdditionalContext)
+		o.HookSpecificOutput = &s
+	}
+	data, err := json.Marshal(o)
+	if err == nil {
+		_, err = stdout.Write(append(data, '\n'))
+	}
+	if resp.code == 2 {
+		reason := o.Reason
+		if o.HookSpecificOutput != nil && reason == "" {
+			reason = o.HookSpecificOutput.PermissionDecisionReason
+		}
+		_, _ = fmt.Fprintln(stderr, reason)
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "assure hook: writing output: %v\n", err)
+		return 2
+	}
+	return resp.code
+}
+
+func adopted(dir string) (*core.Manifest, bool, error) {
+	if _, err := core.FindManifest(dir); errors.Is(err, core.ErrNoManifest) {
+		return nil, false, nil
+	}
+	m, err := app.ManifestFor(dir)
+	return m, true, err
+}
+
+func extraGlobs() []core.Glob {
+	var gs []core.Glob
+	for _, s := range HarnessProtected {
+		g, err := core.CompileGlob(s)
+		if err != nil {
+			panic(err)
+		}
+		gs = append(gs, g)
+	}
+	return gs
+}
+
+func preToolUse(in input) response {
+	if !guardedTools[in.ToolName] {
+		return response{}
+	}
+	p := in.ToolInput.FilePath
+	if in.ToolName == "NotebookEdit" {
+		p = in.ToolInput.NotebookPath
+	}
+	if p == "" {
+		return deny(fmt.Sprintf("%s input has no file path", in.ToolName))
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(in.Cwd, p)
+	}
+	if _, ok, _ := adopted(filepath.Dir(p)); !ok {
+		return response{}
+	}
+	g, err := app.NewGuard(HarnessProtected)
+	if err != nil {
+		return deny(err.Error())
+	}
+	if ok, reason := g.Check(p, in.AgentType); !ok {
+		return deny(reason)
+	}
+	return response{}
+}
+
+func sessionStart(in input) response {
+	m, ok, err := adopted(in.Cwd)
+	if !ok {
+		return response{}
+	}
+	if err != nil {
+		return failure("session-start", err)
+	}
+	var notes []string
+	_, failures, cacheErr := app.LoadRoles(m)
+	for _, e := range append(failures, cacheErr) {
+		if e != nil {
+			notes = append(notes, "warning: "+e.Error())
+		}
+	}
+	core.PruneState(m.Root, pruneAge, time.Now())
+	if _, err := os.Stat(core.SnapshotPath(m.Root, in.SessionID)); errors.Is(err, os.ErrNotExist) {
+		s, err := core.TakeSnapshot(m, in.SessionID, extraGlobs())
+		if err == nil {
+			err = core.WriteSnapshot(m, s)
+		}
+		if err != nil {
+			notes = append(notes, "warning: protected-file snapshot failed; the Stop check will block: "+err.Error())
+		}
+	}
+	text := core.RenderContext(m, nil)
+	if len(notes) > 0 {
+		text = strings.Join(notes, "\n") + "\n\n" + text
+	}
+	return response{out: &output{HookSpecificOutput: &specific{HookEventName: "SessionStart", AdditionalContext: text}}}
+}
+
+func drift(m *core.Manifest, session string) []string {
+	s, err := core.ReadSnapshot(m, session)
+	if err != nil {
+		return []string{"protected-file snapshot for this session is missing or invalid, so drift cannot be ruled out: " + err.Error()}
+	}
+	changes, err := core.Drift(m, s, extraGlobs())
+	if err != nil {
+		return []string{"drift check failed: " + err.Error()}
+	}
+	for i, c := range changes {
+		changes[i] = "protected file " + c + " since session start (a human must review or revert it)"
+	}
+	return changes
+}
+
+func stop(in input) response {
+	m, ok, err := adopted(in.Cwd)
+	if !ok {
+		return response{}
+	}
+	if err != nil {
+		return failure("stop", err)
+	}
+	rep := app.FastCheck(m, "HEAD", in.SessionID)
+	drifted := drift(m, in.SessionID)
+	passed := !rep.Blocking() && len(drifted) == 0
+	next, action := core.NextStop(core.ReadStopState(m.Root, in.SessionID), in.StopHookActive, passed)
+	stateErr := core.WriteStopState(m.Root, in.SessionID, next)
+	summary := rep.Render()
+	if len(drifted) > 0 {
+		summary += "\nProtected-file drift:\n  - " + strings.Join(drifted, "\n  - ") + "\n"
+	}
+	if stateErr != nil {
+		summary += "\nwarning: could not record the retry count: " + stateErr.Error() + "\n"
+	}
+	switch action {
+	case core.StopBlock:
+		return response{out: &output{Decision: "block", Reason: fmt.Sprintf(
+			"assure fast check failed (attempt %d of %d). Fix these before stopping:\n\n%s", next.Blocks, core.StopCap, summary)}, code: 2}
+	case core.StopEscalate:
+		return response{out: &output{SystemMessage: fmt.Sprintf(
+			"assure: checks still fail after %d attempts; the agent was allowed to stop. Review before merging:\n\n%s", core.StopCap, summary)}}
+	default:
+		return response{}
+	}
+}

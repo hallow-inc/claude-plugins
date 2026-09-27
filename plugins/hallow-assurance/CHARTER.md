@@ -266,7 +266,7 @@ than in CI.
 **Adapter protocol v0** — subprocess, JSON on stdin/stdout:
 
 ```
-assure-adapter-go describe            → {protocol:0, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{...}}
+assure-adapter-go describe            → {protocol:0, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{<id>:{tool, fast?}}}
 assure-adapter-go classify  <paths>   → {protocol:0, files:[{path, language, role}]}
 assure-adapter-go lint      <paths>   → SARIF
 assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:0, evidence:[{type, path}], tool_versions:{...}}
@@ -275,6 +275,9 @@ assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol
 Every response except `lint` is an object carrying `protocol: 0`, so each message is versioned on its own.
 `claims` lists the files the adapter owns. A claimed file's role is the first matching pattern list
 in the order `generated`, `fuzz_corpus`, `test`, `config`, and otherwise `source`.
+`fast: true` marks an objective cheap enough for the Stop-hook fast check. Cost belongs to the tool
+the adapter picks, so it lives here, not in the catalog. `run` exits 0 whenever it produced a valid
+response, including when the tools found failures.
 Schemas: `schemas/adapter-{describe,classify,run}.schema.json`; `lint` is validated against SARIF 2.1.0.
 
 ## Starter catalog (v0)
@@ -321,13 +324,20 @@ as non-blocking. The local guard is therefore best-effort; CI (invariant 3) is t
 keep local behavior as close to fail-closed as the harness allows:
 
 - The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted) and exits 2 when
-  `assure` is missing or the wrong version.
+  `assure` is missing or `assure hook protocol` prints a different hook-protocol number than the
+  shim expects. The shim checks a protocol number rather than a release version because there is no
+  release channel yet.
 - `internal/hookio` recovers from every internal error and emits a deny/block decision.
 - Every hook declares an explicit `timeout`; `guard` is a pure in-memory decision. It reads file
   roles from each adapter's `describe` globs, cached in `.assure/state/adapters.json` and keyed by
   the adapter executable's SHA-256, so no adapter runs at edit time while the cache is fresh.
 - Edits made through Bash bypass the `Edit|Write` matcher. SessionStart records hashes of protected
   files in `.assure/state/`; the Stop check blocks on any drift. CI checks the PR diff the same way.
+  SessionStart also fires on `clear` and `compact`, so it never replaces a session's existing
+  snapshot.
+- `.claude/settings.json` and `.claude/settings.local.json` under the manifest root are protected by
+  `internal/hookio` in addition to the manifest's set, because editing them can disable the hooks.
+  They live in `hookio` because they are Claude Code concepts; the core stays harness-neutral.
 - The manifest is resolved from `tool_input.file_path` / `cwd`, not `CLAUDE_PROJECT_DIR`, which stays
   at the session root inside worktrees.
 
@@ -382,14 +392,17 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
 - `hooks.json`: SessionStart, PreToolUse guard, Stop fast check (build, vet, lint, `test -race` on
   changed packages)
 - Retry cap / escalation for Stop
-- Install in the pilot repo, report-only in CI
+- Pulled forward from M3 so the Stop check has evidence to decide from: JUnit and SARIF parsers
+  (minimal), Go adapter `run` for `VER-TESTS-PASS` and `CODE-ZERO-WARNINGS`, `describe` `fast`
+- Install in the pilot repo (this repo first), report-only in CI
 - ✅ Latency within invariant 9 on the pilot repo
 - ✅ Manual session: agent edits a protected file → blocked; agent stops with failing test → blocked
 
 **M3 — Evidence & evaluator**
-- Parsers: JUnit, LCOV, SARIF, mutation report
-- Go adapter `run` for: tests, race, lint/rule packs, fuzz (seed corpus in PR, time-boxed nightly),
-  mutation (Gremlins) on changed packages, fail-on-base, test budget
+- Parsers: LCOV, mutation report; JUnit and SARIF extended beyond M2's fast-check slice
+- Go adapter `run` for: lint/rule packs mapped to the other `CODE-*` objectives, fuzz (seed corpus
+  in PR, time-boxed nightly), mutation (Gremlins) on changed packages, fail-on-base, test budget
+  (tests and race landed in M2)
 - `assure evaluate` → `report.json` + markdown PR summary; waivers with expiry; baseline ratchet
 - ✅ Fail-closed: missing evidence fails; expired waiver fails
 - ✅ Required status check on the pilot repo (blocking levels A–B)
@@ -433,7 +446,9 @@ stays authoritative) once a stable Go implementation and JSON mapping exist.
 - `TODO(decide)` Catalog and waiver approvers per level
 - `TODO(decide)` Where `assure` and adapters are distributed from (GitHub releases + `go install`?)
 - `TODO(decide)` Level assignments for the pilot repo's packages
-- `TODO(decide)` Retry cap for the Stop hook (starting proposal: 3, then escalate)
+- Retry cap for the Stop hook: resolved to 3 for v0 (M2), then allow the stop and escalate to the
+  human with a `systemMessage`. It sits under Claude Code's own 8-block cap, so the escalation
+  message always comes from `assure`.
 - `TODO(decide)` Tier 2 inspector model/vendor for CI
 - Level A cannot block until the Tier 2 inspector vendor is decided, because tier3 includes tier2.
   Level B (tier1) is unaffected.

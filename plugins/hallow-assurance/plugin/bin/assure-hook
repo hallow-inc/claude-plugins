@@ -1,0 +1,21 @@
+#!/bin/sh
+expected=0
+
+dir=$PWD
+while [ ! -f "$dir/assurance.yaml" ]; do
+  [ "$dir" = / ] && exit 0
+  dir=$(dirname "$dir")
+done
+
+if ! command -v assure >/dev/null 2>&1; then
+  echo "assure-hook: $dir/assurance.yaml adopts hallow-assurance, but assure is not on PATH. Install assure and assure-adapter-<lang> as the hallow-assurance plugin README describes." >&2
+  exit 2
+fi
+
+got=$(assure hook protocol 2>/dev/null)
+if [ "$got" != "$expected" ]; then
+  echo "assure-hook: this plugin speaks hook protocol $expected, but the assure on PATH prints '$got'. Install the assure build that matches this plugin." >&2
+  exit 2
+fi
+
+exec assure hook "$1"

@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
@@ -51,3 +53,17 @@ jobs:
 
       - name: Test
         run: go test -race -shuffle=on ./...
+
+      - name: Fast check (report-only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          command -v golangci-lint || { echo "::warning::golangci-lint is not on PATH; CODE-ZERO-WARNINGS will fail"; }
+          bin="$RUNNER_TEMP/assure-bin"
+          go build -o "$bin/assure" ./cmd/assure
+          go build -o "$bin/assure-adapter-go" ./adapters/go
+          base=$(git merge-base HEAD "origin/$BASE_REF")
+          PATH="$bin:$PATH" assure check --fast --changed-from "$base"
