@@ -1,0 +1,69 @@
+name: hallow-assurance
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/hallow-assurance/**'
+      - '.github/workflows/hallow-assurance.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'plugins/hallow-assurance/**'
+      - '.github/workflows/hallow-assurance.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hallow-assurance-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: plugins/hallow-assurance
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: plugins/hallow-assurance/go.mod
+          cache-dependency-path: plugins/hallow-assurance/go.sum
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9.3.0
+        with:
+          version: v2.13.2
+          working-directory: plugins/hallow-assurance
+
+      - name: Test
+        run: go test -race -shuffle=on ./...
+
+      - name: Fast check (report-only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          command -v golangci-lint || { echo "::warning::golangci-lint is not on PATH; CODE-ZERO-WARNINGS will fail"; }
+          bin="$RUNNER_TEMP/assure-bin"
+          go build -o "$bin/assure" ./cmd/assure
+          go build -o "$bin/assure-adapter-go" ./adapters/go
+          base=$(git merge-base HEAD "origin/$BASE_REF")
+          PATH="$bin:$PATH" assure check --fast --changed-from "$base"

@@ -1,0 +1,11 @@
+- id: VER-MUTATION-CHANGED
+  title: Tests on changed code kill mutants
+  source: [DO-178B 6.4.4.2 (alternative to MC/DC)]
+  levels: { A: required, B: required, C: advisory }
+  independence: { A: tier3, B: tier1 }
+  evidence: mutation.report
+  threshold: { A: 80, B: 65, C: 50 }
+  implementations:
+    go: gremlins
+    typescript: stryker
+  alternative_for: VER-STRUCT-MCDC

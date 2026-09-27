@@ -1,0 +1,5 @@
+- id: VER-TESTS-PASS
+  title: Tests pass
+  source: [SQLite]
+  levels: { A: mandatory }
+  evidence: junit

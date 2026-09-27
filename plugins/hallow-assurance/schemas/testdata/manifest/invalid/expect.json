@@ -1,0 +1,14 @@
+{
+  "misspelled-key.yaml": [{"location": "/components/0", "keyword": "additionalProperties"}, {"location": "/components/0", "keyword": "required"}],
+  "unsupported-version.yaml": [{"location": "/version", "keyword": "const"}],
+  "missing-default-level.yaml": [{"location": "", "keyword": "required"}],
+  "absolute-path.yaml": [{"location": "/components/0/path", "keyword": "pattern"}],
+  "parent-traversal.yaml": [{"location": "/components/0/path", "keyword": "not"}],
+  "invalid-level.yaml": [{"location": "/components/0/level", "keyword": "enum"}],
+  "formal-missing-challenge.yaml": [{"location": "/components/0/formal", "keyword": "required"}],
+  "two-violations.yaml": [{"location": "/default_level", "keyword": "enum"}, {"location": "/components/0", "keyword": "required"}],
+  "remote-ref.yaml": [{"location": "", "keyword": "additionalProperties"}],
+  "missing-languages.yaml": [{"location": "", "keyword": "required"}],
+  "empty-languages.yaml": [{"location": "/languages", "keyword": "minItems"}],
+  "protected-traversal.yaml": [{"location": "/protected/0", "keyword": "not"}]
+}

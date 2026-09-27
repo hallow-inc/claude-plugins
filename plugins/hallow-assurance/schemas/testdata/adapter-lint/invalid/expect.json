@@ -1,0 +1,3 @@
+{
+  "wrong-version.json": [{"location": "/version", "keyword": "enum"}]
+}

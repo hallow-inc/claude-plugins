@@ -1,0 +1,1 @@
+{"version":0,"adapters":{"Go":{"path":"/x","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","describe":{"protocol":0,"languages":["go"],"claims":["**/*.go"],"patterns":{},"objectives":{}}}}}

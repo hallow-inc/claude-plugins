@@ -1,0 +1,6 @@
+{
+  "placeholder-approver.yaml": [{"location": "/0/approver", "keyword": "not"}],
+  "missing-expiry.yaml": [{"location": "/0", "keyword": "required"}],
+  "token-rationale.yaml": [{"location": "/0/rationale", "keyword": "minLength"}],
+  "impossible-date.yaml": [{"location": "/0/expires", "keyword": "format"}]
+}

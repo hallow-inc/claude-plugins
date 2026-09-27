@@ -1,0 +1,6 @@
+{
+  "bad-hash.json": [{"location": "/files/0/blob", "keyword": "pattern"}],
+  "traversal-path.json": [{"location": "/files/0/path", "keyword": "not"}],
+  "bad-session.json": [{"location": "/session", "keyword": "pattern"}],
+  "missing-files.json": [{"location": "", "keyword": "required"}]
+}

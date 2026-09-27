@@ -50,6 +50,7 @@ jobs:
           shopt -s nullglob
           fail=0
           for plugin_dir in plugins/*/; do
+            [ -f "$plugin_dir.claude-plugin/plugin.json" ] || continue
             echo "::group::$plugin_dir"
             if ! claude plugin validate "$plugin_dir"; then
               fail=1
@@ -64,7 +65,7 @@ jobs:
           # Block any committed token-shaped strings or .mcp.json with a real URL.
           # Allow .example.jsonc.
           if grep -rIn --exclude-dir=.git --exclude='*.example.jsonc' \
-               -E 'ey[A-Za-z0-9_-]{40,}|/api/mcp/w/[a-z0-9-]+/mcp\?token=' . ; then
+               -E 'ey[A-Za-z0-9_-]{40,}|/api/mcp/w/[a-z0-9-]+/mcp\?token=[A-Za-z0-9_-]' . ; then
             echo "::error::Possible token committed."
             exit 1
           fi

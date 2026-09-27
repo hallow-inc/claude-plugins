@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/adapter-cache.schema.json",
+  "title": "Adapter describe cache",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "adapters"],
+  "properties": {
+    "version": { "const": 0 },
+    "adapters": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_-]*$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "describe"],
+          "properties": {
+            "path": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "describe": { "$ref": "adapter-describe.schema.json" }
+          }
+        }
+      }
+    }
+  }
+}

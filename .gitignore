@@ -9,3 +9,6 @@ node_modules/
 # REPLACE_ME placeholders) is allowed. If you create a real one for local
 # testing, drop it here:
 **/.mcp.json.local
+
+**/.claude/state/
+**/.claude/handoff/

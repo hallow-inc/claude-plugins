@@ -1,0 +1,4 @@
+{
+  "both-null.jsonl": [{"location": "", "keyword": "not", "line": 1}],
+  "uppercase-hash.jsonl": [{"location": "/post", "keyword": "pattern", "line": 1}]
+}

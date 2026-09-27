@@ -13,6 +13,13 @@
       "description": "Build automation tools on Hallow's self-hosted Windmill, no engineering background required. Get a working dev loop, build scripts and flows by describing what you want, run them from a UI or schedule. Includes /wmill-setup, /wmill-doctor, windmill-build entry point, an onboarder subagent, the full set of Windmill authoring skills (write-flow, write-script-*, raw-app, triggers, schedules, resources, preview, cli-commands), windmill-capture-learning for recording gotchas, and reference docs for patterns, shared tools, and ACLs. Supports macOS, Linux/WSL, native Windows.",
       "category": "onboarding",
       "tags": ["windmill", "onboarding", "hallow", "mcp", "tailscale", "automation", "no-code"]
+    },
+    {
+      "name": "hallow-assurance",
+      "source": "./plugins/hallow-assurance/plugin",
+      "description": "Verification in proportion to criticality. Hooks call the assure CLI to block agent edits to protected files and role-violating edits, inject the repo's level map at session start, and block stopping while changed code fails its fast objectives. Inert in repos without an assurance.yaml; needs assure and its adapters on PATH.",
+      "category": "development",
+      "tags": ["verification", "assurance", "hooks", "hallow"]
     }
   ]
 }

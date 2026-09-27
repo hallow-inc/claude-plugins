@@ -1,0 +1,5 @@
+- objective: VER-ROBUST-FUZZ
+  scope: internal/chat/legacy/**
+  rationale: Legacy parser scheduled for removal in Q4
+  approver: hello-world-bfree
+  expires: 2026-12-31

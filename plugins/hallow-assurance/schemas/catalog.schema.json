@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/catalog.schema.json",
+  "title": "Objectives catalog",
+  "type": "array",
+  "minItems": 1,
+  "items": { "$ref": "#/$defs/objective" },
+  "$defs": {
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "source", "levels", "evidence"],
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/objectiveId" },
+        "title": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "source": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "levels": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "A": { "$ref": "common.schema.json#/$defs/levelStatus" },
+            "B": { "$ref": "common.schema.json#/$defs/levelStatus" },
+            "C": { "$ref": "common.schema.json#/$defs/levelStatus" },
+            "D": { "$ref": "common.schema.json#/$defs/levelStatus" }
+          }
+        },
+        "evidence": { "$ref": "common.schema.json#/$defs/evidenceType" },
+        "independence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "A": { "$ref": "common.schema.json#/$defs/tier" },
+            "B": { "$ref": "common.schema.json#/$defs/tier" },
+            "C": { "$ref": "common.schema.json#/$defs/tier" },
+            "D": { "$ref": "common.schema.json#/$defs/tier" }
+          }
+        },
+        "threshold": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "A": { "$ref": "common.schema.json#/$defs/percent" },
+            "B": { "$ref": "common.schema.json#/$defs/percent" },
+            "C": { "$ref": "common.schema.json#/$defs/percent" },
+            "D": { "$ref": "common.schema.json#/$defs/percent" }
+          }
+        },
+        "implementations": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^[a-z][a-z0-9_-]*$": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+          }
+        },
+        "alternative_for": { "$ref": "common.schema.json#/$defs/objectiveId" },
+        "applies_to": { "enum": ["formal", "dst"] }
+      }
+    }
+  }
+}
