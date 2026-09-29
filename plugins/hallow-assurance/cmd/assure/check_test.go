@@ -10,7 +10,7 @@ import (
 
 func (r repo) git(args ...string) {
 	r.t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+	cmd := exec.CommandContext(r.t.Context(), "git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
 	cmd.Dir = r.root
 	if out, err := cmd.CombinedOutput(); err != nil {
 		r.t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -47,7 +47,7 @@ func goRepo(t *testing.T) repo {
 
 func TestCheckWithoutFastExitsTwo(t *testing.T) {
 	newRepo(t, levelB)
-	if code, _, stderr := assure("check"); code != 2 || !strings.Contains(stderr, "M3") {
+	if code, _, stderr := assure("check"); code != 2 || !strings.Contains(stderr, "assure evaluate") {
 		t.Fatalf("got %d %q", code, stderr)
 	}
 }
@@ -81,7 +81,7 @@ func TestCheckCleanChangePasses(t *testing.T) {
 	r := goRepo(t)
 	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
 	code, stdout, stderr := assure("check", "--fast")
-	if code != 0 || !strings.Contains(stdout, "pass\tVER-TESTS-PASS\tgo") || !strings.Contains(stdout, "pass\tCODE-ZERO-WARNINGS\tgo") {
+	if code != 0 || !strings.Contains(stdout, "pass\tVER-TESTS-PASS\tgo") || !strings.Contains(stdout, "pass\tCODE-ZERO-WARNINGS\tgo") || strings.Contains(stdout, "CODE-COMPLEXITY") {
 		t.Fatalf("got %d\n%s\n%s", code, stdout, stderr)
 	}
 }

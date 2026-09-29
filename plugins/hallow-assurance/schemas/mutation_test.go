@@ -2,6 +2,7 @@ package schemas
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"slices"
 	"sort"
@@ -109,9 +110,7 @@ func TestEveryConstraintIsLoadBearing(t *testing.T) {
 	}
 	for _, s := range sites {
 		mutant := make(map[string][]byte, len(srcs))
-		for f, d := range srcs {
-			mutant[f] = d
-		}
+		maps.Copy(mutant, srcs)
 		mutant[s.file] = mutate(srcs[s.file], s)
 		v, err := compile(mutant)
 		if err != nil {

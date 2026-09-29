@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	RunTimeout  = 150 * time.Second
-	EvidenceDir = ".assure/state/evidence"
+	RunTimeout      = 150 * time.Second
+	EvaluateTimeout = 10 * time.Minute
+	EvidenceDir     = ".assure/state/evidence"
 )
 
 type Result struct {
@@ -45,14 +46,13 @@ func git(root string, args ...string) ([]string, error) {
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 			return nil, fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(ee.Stderr)))
 		}
 		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	var lines []string
-	for _, l := range strings.Split(string(out), "\n") {
+	for l := range strings.SplitSeq(string(out), "\n") {
 		if l != "" {
 			lines = append(lines, l)
 		}
@@ -82,14 +82,14 @@ func ChangedFiles(root, ref string) ([]string, error) {
 }
 
 type job struct {
-	lang    string
-	obj     core.Objective
-	changed []core.Level
-	out     string
+	lang  string
+	obj   core.Objective
+	files []core.ChangedFile
+	out   string
 }
 
 func problem(lang, id, msg string) Result {
-	return Result{Lang: lang, Outcome: core.Outcome{ID: id, Status: core.Fail, Details: []string{msg}}}
+	return Result{Lang: lang, ID: id, Status: core.Fail, Details: []string{msg}}
 }
 
 func FastCheck(m *core.Manifest, ref, label string) Report {
@@ -107,16 +107,24 @@ func FastCheck(m *core.Manifest, ref, label string) Report {
 			rep.Results = append(rep.Results, problem(lang, "describe", err.Error()))
 		}
 	}
+	ws, err := core.LoadWaivers(m.Root)
+	if err != nil {
+		rep.Results = append(rep.Results, problem("-", "waivers", err.Error()))
+	}
+	bl, err := core.LoadBaseline(m.Root)
+	if err != nil {
+		rep.Results = append(rep.Results, problem("-", "baseline", err.Error()))
+	}
+	date := time.Now().UTC().Format(time.DateOnly)
 	jobs, bad := plan(m, descs, changed, filepath.Join(m.Root, EvidenceDir, label))
 	rep.Results = append(rep.Results, bad...)
 	results := make([]Result, len(jobs))
 	var wg sync.WaitGroup
 	for i, j := range jobs {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i] = Result{Lang: j.lang, Outcome: core.DecideFast(j.obj, j.changed, collect(m, j, ref))}
-		}()
+		wg.Go(func() {
+			ev, _ := collect(m, j, ref, RunTimeout)
+			results[i] = Result{Lang: j.lang, Outcome: core.DecideObjective(j.obj, j.files, ev, ws, bl.For(j.obj.ID), date)}
+		})
 	}
 	wg.Wait()
 	rep.Results = append(rep.Results, results...)
@@ -132,11 +140,10 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 	if err != nil {
 		return nil, []Result{problem("-", "describe", err.Error())}
 	}
-	levels := map[string][]core.Level{}
+	files := map[string][]core.ChangedFile{}
 	for _, p := range changed {
-		_, level := m.Resolve(p)
 		for _, lang := range roles.Claimants(p) {
-			levels[lang] = append(levels[lang], level)
+			files[lang] = append(files[lang], m.ChangedFile(p))
 		}
 	}
 	byID := map[string]core.Objective{}
@@ -147,7 +154,7 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 	var jobs []job
 	var bad []Result
 	for _, lang := range m.Languages {
-		if len(levels[lang]) == 0 {
+		if len(files[lang]) == 0 {
 			continue
 		}
 		ids := make([]string, 0, len(descs[lang].Objectives))
@@ -163,16 +170,16 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 				bad = append(bad, problem(lang, id, fmt.Sprintf("%s marks %s fast, but catalog %s has no such objective", adapterproto.Executable(lang), id, m.Catalog.Version)))
 				continue
 			}
-			jobs = append(jobs, job{lang: lang, obj: o, changed: levels[lang], out: filepath.Join(outRoot, lang, id)})
+			jobs = append(jobs, job{lang: lang, obj: o, files: files[lang], out: filepath.Join(outRoot, lang, id)})
 		}
 	}
 	return jobs, bad
 }
 
-func collect(m *core.Manifest, j job, ref string) core.Evidence {
-	run, err := adapterproto.RunObjective(m.Root, j.lang, j.obj.ID, ref, j.out, RunTimeout)
+func collect(m *core.Manifest, j job, ref string, timeout time.Duration) (core.Evidence, map[string]string) {
+	run, err := adapterproto.RunObjective(m.Root, j.lang, j.obj.ID, ref, j.out, timeout)
 	if err != nil {
-		return core.Evidence{Problems: []string{err.Error()}}
+		return core.Evidence{Problems: []string{err.Error()}}, nil
 	}
 	var ev core.Evidence
 	found := false
@@ -191,7 +198,7 @@ func collect(m *core.Manifest, j job, ref string) core.Evidence {
 	if !found {
 		ev.Problems = append(ev.Problems, fmt.Sprintf("%s run %s produced no %s evidence", adapterproto.Executable(j.lang), j.obj.ID, j.obj.Evidence))
 	}
-	return ev
+	return ev, run.ToolVersions
 }
 
 func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) {
@@ -202,8 +209,8 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 			ev.Problems = append(ev.Problems, err.Error())
 			return
 		}
-		for _, name := range j.Failing {
-			ev.Failing = append(ev.Failing, "failing test: "+name)
+		for _, f := range j.Failing {
+			ev.Failing = append(ev.Failing, failingText(f))
 		}
 	case "lint.sarif":
 		results, err := evidence.ParseSARIF(data)
@@ -212,7 +219,10 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 			return
 		}
 		for _, r := range results {
-			f := core.Finding{Text: fmt.Sprintf("%s: %s: %s", r.URI, r.RuleID, r.Message)}
+			f := core.Finding{Path: r.URI, Rule: r.RuleID, Message: r.Message, Metric: r.Metric, HasMetric: r.HasMetric, Text: fmt.Sprintf("%s: %s: %s", r.URI, r.RuleID, r.Message)}
+			if r.HasMetric {
+				f.Text += fmt.Sprintf(" (metric %g)", r.Metric)
+			}
 			if r.URI != "" {
 				_, f.Level = m.Resolve(r.URI)
 				f.Located = true
@@ -249,4 +259,15 @@ func (r Report) Render() string {
 		}
 	}
 	return b.String()
+}
+
+func failingText(f evidence.Failure) string {
+	s := "failing test: " + f.Name
+	if f.Message != "" {
+		s += ": " + f.Message
+	}
+	if text := strings.TrimSpace(f.Text); text != "" {
+		s += "\n" + text
+	}
+	return s
 }

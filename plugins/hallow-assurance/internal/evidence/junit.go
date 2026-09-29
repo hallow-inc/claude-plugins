@@ -11,15 +11,26 @@ type JUnit struct {
 	Failures int
 	Errors   int
 	Skipped  int
-	Failing  []string
+	Failing  []Failure
+}
+
+type Failure struct {
+	Name    string
+	Message string
+	Text    string
+}
+
+type xmlOutcome struct {
+	Message string `xml:"message,attr"`
+	Text    string `xml:",chardata"`
 }
 
 type xmlCase struct {
-	Name      string    `xml:"name,attr"`
-	Classname string    `xml:"classname,attr"`
-	Failure   *struct{} `xml:"failure"`
-	Error     *struct{} `xml:"error"`
-	Skipped   *struct{} `xml:"skipped"`
+	Name      string      `xml:"name,attr"`
+	Classname string      `xml:"classname,attr"`
+	Failure   *xmlOutcome `xml:"failure"`
+	Error     *xmlOutcome `xml:"error"`
+	Skipped   *struct{}   `xml:"skipped"`
 }
 
 type xmlSuite struct {
@@ -61,10 +72,10 @@ func (j *JUnit) add(s xmlSuite) {
 		switch {
 		case c.Failure != nil:
 			j.Failures++
-			j.Failing = append(j.Failing, name)
+			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Failure.Message, Text: c.Failure.Text})
 		case c.Error != nil:
 			j.Errors++
-			j.Failing = append(j.Failing, name)
+			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Error.Message, Text: c.Error.Text})
 		case c.Skipped != nil:
 			j.Skipped++
 		}

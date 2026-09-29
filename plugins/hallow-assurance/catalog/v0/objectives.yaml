@@ -17,7 +17,7 @@
   evidence: lint.sarif
 
 - id: CODE-COMPLEXITY
-  title: Cyclomatic complexity and function length within limits
+  title: Cyclomatic complexity within limits
   source: [Power of 10 rule 4]
   levels: { A: required, B: required, C: advisory }
   evidence: lint.sarif

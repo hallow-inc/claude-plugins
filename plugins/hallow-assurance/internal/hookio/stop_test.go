@@ -6,13 +6,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/app"
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
 func gitIn(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -21,11 +25,19 @@ func gitIn(t *testing.T, dir string, args ...string) {
 
 func goFixture(t *testing.T) string {
 	t.Helper()
+	return goFixtureWith(t, nil)
+}
+
+func goFixtureWith(t *testing.T, before func(root string)) string {
+	t.Helper()
 	root := fixture(t)
 	setPath(t, "go", "golangci-lint")
 	writeFile(t, root, ".gitignore", ".assure/state/\n")
 	writeFile(t, root, "go.mod", "module example.com/m\n\ngo 1.26\n")
 	writeFile(t, root, "p/p.go", "package p\n\nfunc One() int { return 1 }\n")
+	if before != nil {
+		before(root)
+	}
 	gitIn(t, root, "init", "-q")
 	gitIn(t, root, "add", "-A")
 	gitIn(t, root, "commit", "-qm", "init")
@@ -124,4 +136,36 @@ func FuzzPreToolUse(f *testing.F) {
 			t.Fatalf("edit inside the all-protected repo allowed: %q -> %q", data, out.String())
 		}
 	})
+}
+
+func TestStopIgnoresBaselinedFinding(t *testing.T) {
+	root := goFixtureWith(t, func(root string) {
+		writeFile(t, root, "p/old.go", "package p\n\nfunc old() {}\n")
+		gitIn(t, root, "init", "-q")
+		gitIn(t, root, "add", "-A")
+		gitIn(t, root, "commit", "-qm", "old finding")
+		m, err := app.ManifestFor(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := app.Baseline(m)
+		if err != nil || !slices.ContainsFunc(b.Entries, func(e core.BaselineEntry) bool { return e.Path == "p/old.go" && e.Objective == "CODE-ZERO-WARNINGS" }) {
+			t.Fatalf("fixture has no baselined finding in p/old.go: %+v %v", b.Entries, err)
+		}
+		writeFile(t, root, core.BaselineFile, string(b.Marshal()))
+	})
+	writeFile(t, root, "p/old.go", "package p\n\n// the finding moves down a line\nfunc old() {}\n")
+	if code, out := stopWith(t, root, false); code != 0 || out != nil {
+		t.Fatalf("baselined finding blocked stopping: %d %v", code, out)
+	}
+}
+
+func TestStopIgnoresExpiredWaiver(t *testing.T) {
+	root := goFixtureWith(t, func(root string) {
+		writeFile(t, root, core.WaiversFile, "- {objective: VER-TESTS-PASS, scope: '**', rationale: expired long before this test ran, approver: owner, expires: 2000-01-01}\n")
+	})
+	writeFile(t, root, "p/p.go", "package p\n\nfunc One() int { return 2 - 1 }\n")
+	if code, out := stopWith(t, root, false); code != 0 || out != nil {
+		t.Fatalf("expired waiver blocked stopping: %d %v", code, out)
+	}
 }

@@ -25,8 +25,7 @@ func (e *LoadError) Error() string {
 func validated(k schemas.Kind, file string, data []byte) (decode.Doc, error) {
 	vs, err := schemas.Validate(k, data)
 	if err != nil {
-		var de *decode.Error
-		if errors.As(err, &de) {
+		if de, ok := errors.AsType[*decode.Error](err); ok {
 			return decode.Doc{}, &LoadError{File: file, Problems: []schemas.Violation{{Line: de.Line, Column: de.Column, Keyword: "syntax", Message: de.Msg}}}
 		}
 		return decode.Doc{}, fmt.Errorf("%s: %w", file, err)
@@ -34,7 +33,7 @@ func validated(k schemas.Kind, file string, data []byte) (decode.Doc, error) {
 	if len(vs) > 0 {
 		return decode.Doc{}, &LoadError{File: file, Problems: vs}
 	}
-	if k == schemas.Manifest || k == schemas.Catalog {
+	if k == schemas.Manifest || k == schemas.Catalog || k == schemas.Waivers {
 		return decode.YAML(data)
 	}
 	return decode.JSON(data)

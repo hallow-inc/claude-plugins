@@ -18,7 +18,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if !*fast {
-		_, _ = fmt.Fprintln(stderr, "assure: check requires --fast; full evaluation arrives with assure evaluate in M3")
+		_, _ = fmt.Fprintln(stderr, "assure: check requires --fast; for full evaluation run assure evaluate")
 		return 2
 	}
 	m := cwdManifest(stderr)

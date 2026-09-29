@@ -35,6 +35,8 @@ const (
 	AdapterCache    Kind = "adapter-cache"
 	Snapshot        Kind = "snapshot"
 	StopState       Kind = "stop-state"
+	Baseline        Kind = "baseline"
+	Report          Kind = "report"
 )
 
 const base = "https://assure.invalid/schemas/v0/"
@@ -64,6 +66,8 @@ var kinds = map[Kind]struct {
 	AdapterCache:    {base + "adapter-cache.schema.json", jsonDoc},
 	Snapshot:        {base + "snapshot.schema.json", jsonDoc},
 	StopState:       {base + "stop-state.schema.json", jsonDoc},
+	Baseline:        {base + "baseline.schema.json", jsonDoc},
+	Report:          {base + "report.schema.json", jsonDoc},
 }
 
 type Violation struct {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,7 +20,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	build := exec.Command("go", "build", "-o", filepath.Join(dir, "assure-adapter-go"), "../../adapters/go")
+	build := exec.CommandContext(context.Background(), "go", "build", "-o", filepath.Join(dir, "assure-adapter-go"), "../../adapters/go/assure-adapter-go")
 	if out, err := build.CombinedOutput(); err != nil {
 		panic(fmt.Sprintf("building assure-adapter-go: %v\n%s", err, out))
 	}
@@ -70,7 +71,7 @@ const levelB = "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomp
 
 func decision(t *testing.T, stdout, path string) (string, string) {
 	t.Helper()
-	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(stdout), "\n") {
 		f := strings.Split(line, "\t")
 		if len(f) >= 2 && f[1] == path {
 			if len(f) == 3 {
@@ -201,7 +202,7 @@ func TestContextScenarios(t *testing.T) {
 }
 
 func regexpLine(out, id, status string) bool {
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		f := strings.Fields(line)
 		if len(f) >= 2 && f[0] == id && f[1] == status {
 			return true

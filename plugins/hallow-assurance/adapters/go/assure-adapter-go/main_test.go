@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,6 +43,23 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 	}
 	if c := v["claims"].([]any); len(c) != 1 || c[0] != "**/*.go" {
 		t.Fatalf("claims = %v", c)
+	}
+	var fast, slow []string
+	for id, o := range v["objectives"].(map[string]any) {
+		if _, ok := runners[id]; !ok {
+			t.Errorf("describe lists %s but run has no runner for it", id)
+		}
+		if o.(map[string]any)["fast"] == true {
+			fast = append(fast, id)
+		} else {
+			slow = append(slow, id)
+		}
+	}
+	slices.Sort(fast)
+	slices.Sort(slow)
+	if !slices.Equal(fast, []string{"CODE-ZERO-WARNINGS", "VER-TESTS-PASS"}) ||
+		!slices.Equal(slow, []string{"CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE", "CODE-RESOURCE-BOUNDS"}) {
+		t.Fatalf("fast %v, slow %v; only cheap objectives may run on the Stop path (per-turn latency budget)", fast, slow)
 	}
 }
 

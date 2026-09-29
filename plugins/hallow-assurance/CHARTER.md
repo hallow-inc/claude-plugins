@@ -146,8 +146,8 @@ plugins/hallow-assurance/
     provenance/
     baseline/
   adapters/
-    go/                          # assure-adapter-go (separate binary)
-    typescript/                  # assure-adapter-typescript (v1)
+    go/assure-adapter-go/        # assure-adapter-go (separate binary; dir named after the binary)
+    typescript/…                 # assure-adapter-typescript (v1)
   catalog/                       # embedded in the assure binary; adopting repos carry no copy
     v0/objectives.yaml
   schemas/                       # JSON Schemas for every file format below
@@ -226,6 +226,31 @@ Optional `applies_to: formal | dst` restricts an objective to components that de
   expires: 2026-12-31
 ```
 
+A waiver is active through its `expires` date (UTC calendar date). An active waiver suppresses
+located findings of its objective in files matching `scope`, and suppresses an unlocated failure or
+missing evidence only when `scope` matches every changed file at a level where the objective
+applies. Any expired waiver fails `assure evaluate`, whatever its scope; the Stop fast check ignores
+expired waivers because an agent cannot fix a protected file. Approver authority is not checked
+yet; `approver` is recorded as written.
+
+**Baseline** — `.assure/baseline.json` (human-only, written by `assure baseline`):
+
+```json
+{"version":0,"entries":[{"objective":"CODE-RESOURCE-BOUNDS","rule":"noctx","path":"internal/app/check.go","message":"os/exec.Command must not be called. use os/exec.CommandContext","count":1}]}
+```
+
+The ratchet for old code. A located `lint.sarif` finding matches an entry on objective, rule, path,
+and message (never line); an entry suppresses at most `count` matches. Entries with fewer matches
+than `count` are reported as removable. Schema: `schemas/baseline.schema.json`.
+
+**Report** — `.assure/state/report.json`, written by `assure evaluate` (schema
+`schemas/report.schema.json`): commit, base ref and SHA, evaluation date, catalog version, adapter
+tool versions, and one status per applicable objective and language (`pass`, `fail`,
+`advisory-fail`, `waived`), with details, applied waivers, and counts of baselined and
+under-threshold results. The markdown summary is rendered from the report alone, so a stored
+report reproduces it. For `lint.sarif`, catalog thresholds are ceilings on a result's
+`properties.metric`.
+
 **Provenance** — `.assure/provenance/<session_id>.jsonl`, one committed file per session
 (append-only, written only by `assure record`; protected from agent edits):
 
@@ -287,7 +312,7 @@ Schemas: `schemas/adapter-{describe,classify,run}.schema.json`; `lint` is valida
 | CODE-ZERO-WARNINGS | Compiler/vet/linters clean (ratcheted for old code) | req | req | req | adv |
 | CODE-RESOURCE-BOUNDS | Bounded reads, retries, loops, buffers (P10-2, P10-3) | req | req | adv | – |
 | CODE-CHECK-RETURNS | No dropped errors/promises (P10-7) | req | req | req | adv |
-| CODE-COMPLEXITY | Cyclomatic ≤ 15, function length limits (P10-4) | req | req | adv | – |
+| CODE-COMPLEXITY | Cyclomatic complexity ≤ 15 per function (P10-4) | req | req | adv | – |
 | CODE-NO-UNSAFE | No unsafe/reflect/eval outside allow-list (P10-8, P10-9) | req | req | adv | – |
 | VER-TESTS-PASS | Tests pass with race/shuffle where supported | req | req | req | req |
 | VER-TRACE-REQ | Every requirement ID has tests; level A: every test traces to a requirement | req | adv | – | – |
@@ -369,7 +394,7 @@ Commands: `/assure:check`, `/assure:bugfix <issue|seed>`, `/assure:inspect`.
 
 ## Milestones
 
-Each milestone ends with its acceptance criteria met, tests passing, and, from M3 on, this repo
+Each milestone ends with its acceptance criteria met, tests passing, and, from M3a on, this repo
 passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, and
 `go test -race -shuffle=on`.
 
@@ -398,13 +423,19 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
 - ✅ Latency within invariant 9 on the pilot repo
 - ✅ Manual session: agent edits a protected file → blocked; agent stops with failing test → blocked
 
-**M3 — Evidence & evaluator**
-- Parsers: LCOV, mutation report; JUnit and SARIF extended beyond M2's fast-check slice
-- Go adapter `run` for: lint/rule packs mapped to the other `CODE-*` objectives, fuzz (seed corpus
-  in PR, time-boxed nightly), mutation (Gremlins) on changed packages, fail-on-base, test budget
-  (tests and race landed in M2)
-- `assure evaluate` → `report.json` + markdown PR summary; waivers with expiry; baseline ratchet
+**M3a — Evaluator, waivers, baseline**
+- JUnit keeps failure text; SARIF results carry an optional numeric `properties.metric`
+- Go adapter `run` for the other `CODE-*` objectives: rule packs with adapter-written lint config,
+  complexity as raw metrics; `CODE-ZERO-WARNINGS` reports every finding (the ratchet is the baseline)
+- `assure evaluate` → `report.json` + markdown job summary; waivers with expiry; baseline ratchet;
+  `assure baseline`; the fast check applies the baseline and active waivers
+- CI runs `assure evaluate` (fails the job, not yet a required check)
 - ✅ Fail-closed: missing evidence fails; expired waiver fails
+
+**M3b — Remaining evidence, required check**
+- Parsers: LCOV, mutation report
+- Go adapter `run` for: fuzz (seed corpus in PR, time-boxed nightly), mutation (Gremlins) on
+  changed packages, fail-on-base, test budget; `VER-COVERAGE-RESOLUTION`
 - ✅ Required status check on the pilot repo (blocking levels A–B)
 
 **M4 — Subagents, provenance, skills**

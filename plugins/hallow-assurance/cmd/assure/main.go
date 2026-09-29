@@ -14,9 +14,11 @@ Usage:
   assure <command> [arguments]
 
 Commands:
+  baseline   Record current lint findings in .assure/baseline.json
   check      Run the fast objectives on changed files
   classify   Print level, language, and role for each path
   context    Print the level map and applicable objectives
+  evaluate   Decide every applicable objective and write the report
   guard      Decide whether an agent may edit each path
   hook       Handle a Claude Code hook event (JSON on stdin)
   help       Show this help
@@ -44,6 +46,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runContext(args[1:], stdout, stderr)
 	case "check":
 		return runCheck(args[1:], stdout, stderr)
+	case "baseline":
+		return runBaseline(args[1:], stdout, stderr)
+	case "evaluate":
+		return runEvaluate(args[1:], stdout, stderr)
 	case "hook":
 		return runHook(args[1:], stdout, stderr)
 	case "classify":

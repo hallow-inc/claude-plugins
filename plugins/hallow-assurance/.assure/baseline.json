@@ -1,0 +1,19 @@
+{
+  "version": 0,
+  "entries": [
+    {
+      "objective": "CODE-RESOURCE-BOUNDS",
+      "rule": "noctx",
+      "path": "adapters/go/assure-adapter-go/run.go",
+      "message": "os/exec.Command must not be called. use os/exec.CommandContext",
+      "count": 2
+    },
+    {
+      "objective": "CODE-RESOURCE-BOUNDS",
+      "rule": "noctx",
+      "path": "internal/app/check.go",
+      "message": "os/exec.Command must not be called. use os/exec.CommandContext",
+      "count": 1
+    }
+  ]
+}
