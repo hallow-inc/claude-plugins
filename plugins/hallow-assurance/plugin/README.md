@@ -7,7 +7,7 @@ the hooks exit immediately and do nothing.
 |---|---|
 | SessionStart | Injects the level map and applicable objectives; records hashes of protected files |
 | PreToolUse (`Edit`, `Write`, `NotebookEdit`) | Denies edits to protected files and edits the role rules forbid |
-| Stop | Blocks stopping while changed code fails a fast objective or a protected file changed; after 3 blocks it lets the agent stop and warns you |
+| Stop | Blocks stopping while changed code fails a fast objective or a protected file changed. Each distinct set of failures blocks at most 3 times per session; after that the agent may stop, and every later stop with the same failures warns you instead of blocking. Failures the agent cannot fix (no protected-file snapshot, an adapter not on `PATH`) warn you on the first stop and never block |
 
 Local hooks are early warning. CI reruns every check and is the authority.
 
@@ -32,8 +32,9 @@ Then install the plugin from the `hallow-claude-plugins` marketplace:
 /plugin install hallow-assurance@hallow-claude-plugins
 ```
 
-If `assure` is missing or was built from a different version than the plugin, every hook in an
-adopted repo exits 2 with a message saying which, and Claude Code blocks the action.
+If `assure` is missing or was built from a different version than the plugin, SessionStart and
+PreToolUse exit 2 with a message saying which, so edits stay blocked. Stop lets the agent stop and
+shows you the same message, because the agent cannot fix the install.
 
 ## Declaring a bug fix
 

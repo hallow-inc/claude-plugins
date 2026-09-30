@@ -255,19 +255,78 @@ func sessionStart(in input) response {
 	return response{out: &output{HookSpecificOutput: &specific{HookEventName: "SessionStart", AdditionalContext: text}}}
 }
 
-func drift(m *core.Manifest, session string) []string {
+func drift(m *core.Manifest, session string) ([]string, error) {
 	s, err := core.ReadSnapshot(m, session)
 	if err != nil {
-		return []string{"protected-file snapshot for this session is missing or invalid, so drift cannot be ruled out: " + err.Error()}
+		return nil, err
 	}
-	changes, err := core.Drift(m, s, extraGlobs())
-	if err != nil {
-		return []string{"drift check failed: " + err.Error()}
+	return core.Drift(m, s, extraGlobs())
+}
+
+type stopInput struct {
+	rep      app.Report
+	drifted  []string
+	driftErr error
+	active   bool
+}
+
+func (in stopInput) check() core.StopCheck {
+	failures := in.rep.Failures()
+	switch {
+	case in.driftErr == nil:
+	case core.OutsideReach(in.driftErr):
+		failures = append(failures, core.FailureKey{Objective: "drift", Keys: []string{"snapshot-missing"}})
+	default:
+		failures = append(failures, core.FailureKey{Objective: "drift", Keys: []string{"drift-error"}})
 	}
-	for i, c := range changes {
-		changes[i] = "protected file " + c + " since session start (a human must review or revert it)"
+	passed := !in.rep.Blocking() && len(in.drifted) == 0 && in.driftErr == nil
+	return core.StopCheck{
+		Passed:       passed,
+		OutsideReach: !passed && in.rep.OutsideReach() && len(in.drifted) == 0 && (in.driftErr == nil || core.OutsideReach(in.driftErr)),
+		Fingerprint:  core.StopFingerprint(failures, in.drifted),
 	}
-	return changes
+}
+
+func (in stopInput) remedies() []string {
+	out := in.rep.Remedies()
+	if core.OutsideReach(in.driftErr) {
+		out = append(out, "restart Claude Code: this session has no protected-file snapshot, so drift cannot be checked")
+	}
+	return out
+}
+
+func (in stopInput) summary() string {
+	s := in.rep.Render()
+	var lines []string
+	for _, d := range in.drifted {
+		lines = append(lines, "protected file "+d+" since session start (a human must review or revert it)")
+	}
+	if in.driftErr != nil {
+		lines = append(lines, "drift cannot be ruled out: "+in.driftErr.Error())
+	}
+	if len(lines) > 0 {
+		s += "\nProtected-file drift:\n  - " + strings.Join(lines, "\n  - ") + "\n"
+	}
+	if r := in.remedies(); len(r) > 0 {
+		s += "\nThe agent cannot fix these; a human must:\n  - " + strings.Join(r, "\n  - ") + "\n"
+	}
+	return s
+}
+
+func decideStop(in stopInput, state core.StopState) (core.StopState, response) {
+	next, action := core.NextStop(state, in.active, in.check())
+	switch action {
+	case core.StopAllow:
+		return next, response{}
+	case core.StopBlock:
+		return next, response{out: &output{Decision: "block", Reason: fmt.Sprintf(
+			"assure fast check failed (attempt %d of %d). Fix these before stopping:\n\n%s", next.Blocks, core.StopCap, in.summary())}, code: 2}
+	case core.StopOutsideReach:
+		return next, response{out: &output{SystemMessage: "assure: checks cannot run in this session and the agent cannot fix that; the agent was allowed to stop. Review before merging:\n\n" + in.summary()}}
+	default:
+		return next, response{out: &output{SystemMessage: fmt.Sprintf(
+			"assure: checks still fail after %d attempts; the agent was allowed to stop. Review before merging:\n\n%s", core.StopCap, in.summary())}}
+	}
 }
 
 func stop(in input) response {
@@ -278,26 +337,18 @@ func stop(in input) response {
 	if err != nil {
 		return failure("stop", err)
 	}
-	rep := app.FastCheck(m, "HEAD", in.SessionID)
-	drifted := drift(m, in.SessionID)
-	passed := !rep.Blocking() && len(drifted) == 0
-	next, action := core.NextStop(core.ReadStopState(m.Root, in.SessionID), in.StopHookActive, passed)
-	stateErr := core.WriteStopState(m.Root, in.SessionID, next)
-	summary := rep.Render()
-	if len(drifted) > 0 {
-		summary += "\nProtected-file drift:\n  - " + strings.Join(drifted, "\n  - ") + "\n"
+	si := stopInput{rep: app.FastCheck(m, "HEAD", in.SessionID), active: in.StopHookActive}
+	si.drifted, si.driftErr = drift(m, in.SessionID)
+	next, resp := decideStop(si, core.ReadStopState(m.Root, in.SessionID))
+	if err := core.WriteStopState(m.Root, in.SessionID, next); err != nil && resp.out != nil {
+		o := *resp.out
+		note := "\nwarning: could not record the retry count: " + err.Error() + "\n"
+		if o.Decision == "block" {
+			o.Reason += note
+		} else {
+			o.SystemMessage += note
+		}
+		resp.out = &o
 	}
-	if stateErr != nil {
-		summary += "\nwarning: could not record the retry count: " + stateErr.Error() + "\n"
-	}
-	switch action {
-	case core.StopBlock:
-		return response{out: &output{Decision: "block", Reason: fmt.Sprintf(
-			"assure fast check failed (attempt %d of %d). Fix these before stopping:\n\n%s", next.Blocks, core.StopCap, summary)}, code: 2}
-	case core.StopEscalate:
-		return response{out: &output{SystemMessage: fmt.Sprintf(
-			"assure: checks still fail after %d attempts; the agent was allowed to stop. Review before merging:\n\n%s", core.StopCap, summary)}}
-	default:
-		return response{}
-	}
+	return resp
 }

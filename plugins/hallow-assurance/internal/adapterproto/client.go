@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os/exec"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
@@ -59,12 +61,23 @@ type Error struct {
 func (e *Error) Error() string { return e.Adapter + " " + e.Sub + ": " + e.Err.Error() }
 func (e *Error) Unwrap() error { return e.Err }
 
+type unstartable struct{ error }
+
+func (u unstartable) Unwrap() []error { return []error{u.error, core.ErrAdapterUnstartable} }
+
+func startFailed(err error) bool {
+	if _, exited := errors.AsType[*exec.ExitError](err); exited {
+		return false
+	}
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) || errors.Is(err, exec.ErrNotFound)
+}
+
 func Executable(lang string) string { return "assure-adapter-" + lang }
 
 func Resolve(lang string) (string, error) {
 	path, err := exec.LookPath(Executable(lang))
 	if err != nil {
-		return "", &Error{Adapter: Executable(lang), Sub: "lookup", Err: fmt.Errorf("not found on PATH: %w", err)}
+		return "", &Error{Adapter: Executable(lang), Sub: "lookup", Err: unstartable{fmt.Errorf("not found on PATH: %w", err)}}
 	}
 	return path, nil
 }
@@ -99,6 +112,8 @@ func invoke(exe, dir, name, sub string, timeout time.Duration, args ...string) (
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		return nil, fail("killed after timeout of %s", timeout)
+	case startFailed(err):
+		return nil, &Error{Adapter: name, Sub: sub, Err: unstartable{err}}
 	case err != nil:
 		return nil, fail("%w; stderr: %s", err, strings.TrimSpace(stderr.buf.String()))
 	case stdout.overflow:

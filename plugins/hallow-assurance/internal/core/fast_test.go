@@ -25,7 +25,7 @@ func evidenceGen(t *rapid.T) Evidence {
 		ev.Problems = append(ev.Problems, "missing evidence")
 	}
 	for range rapid.IntRange(0, 2).Draw(t, "nfailing") {
-		ev.Failing = append(ev.Failing, "pkg.TestX")
+		ev.Failing = append(ev.Failing, TestFailure{Name: "pkg.TestX", Text: "failing test: pkg.TestX"})
 	}
 	for range rapid.IntRange(0, 3).Draw(t, "nfindings") {
 		ev.Findings = append(ev.Findings, Finding{Level: levelGen.Draw(t, "flevel"), Located: rapid.Bool().Draw(t, "located"), Text: "finding"})
