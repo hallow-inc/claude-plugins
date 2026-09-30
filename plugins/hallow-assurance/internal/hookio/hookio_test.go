@@ -2,6 +2,7 @@ package hookio
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,7 +26,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	build := exec.Command("go", "build", "-o", filepath.Join(dir, "assure-adapter-go"), "../../adapters/go")
+	build := exec.CommandContext(context.Background(), "go", "build", "-o", filepath.Join(dir, "assure-adapter-go"), "../../adapters/go/assure-adapter-go")
 	if out, err := build.CombinedOutput(); err != nil {
 		panic(fmt.Sprintf("building assure-adapter-go: %v\n%s", err, out))
 	}

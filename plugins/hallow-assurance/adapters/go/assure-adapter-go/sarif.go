@@ -25,7 +25,12 @@ type sarifResult struct {
 	Message struct {
 		Text string `json:"text"`
 	} `json:"message"`
-	Locations []sarifLocation `json:"locations,omitempty"`
+	Locations  []sarifLocation  `json:"locations,omitempty"`
+	Properties *sarifProperties `json:"properties,omitempty"`
+}
+
+type sarifProperties struct {
+	Metric *int `json:"metric,omitempty"`
 }
 
 type sarifRun struct {

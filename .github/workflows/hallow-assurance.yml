@@ -54,9 +54,8 @@ jobs:
       - name: Test
         run: go test -race -shuffle=on ./...
 
-      - name: Fast check (report-only)
+      - name: Evaluate
         if: github.event_name == 'pull_request'
-        continue-on-error: true
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
@@ -64,6 +63,6 @@ jobs:
           command -v golangci-lint || { echo "::warning::golangci-lint is not on PATH; CODE-ZERO-WARNINGS will fail"; }
           bin="$RUNNER_TEMP/assure-bin"
           go build -o "$bin/assure" ./cmd/assure
-          go build -o "$bin/assure-adapter-go" ./adapters/go
+          go build -o "$bin/assure-adapter-go" ./adapters/go/assure-adapter-go
           base=$(git merge-base HEAD "origin/$BASE_REF")
-          PATH="$bin:$PATH" assure check --fast --changed-from "$base"
+          PATH="$bin:$PATH" assure evaluate --changed-from "$base" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -436,7 +436,145 @@ var stopStateGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
+var shaGen = rapid.OneOf(rapid.StringMatching(`[0-9a-f]{40}`), rapid.StringMatching(`[0-9a-f]{64}`))
+
+var badSHA = []any{"7330276", strings.Repeat("A", 40), strings.Repeat("a", 41), 7}
+
+func baselineEntry(t *rapid.T, r *rec, p string) map[string]any {
+	r.closed(p)
+	r.required(p, "objective", "rule", "path", "message", "count")
+	r.bad(p, "objective", badObjID...)
+	r.bad(p, "rule", badText...)
+	r.bad(p, "path", badPath...)
+	r.bad(p, "message", 7)
+	r.bad(p, "count", 0, 1.5, "1")
+	return map[string]any{
+		"objective": objIDGen.Draw(t, "obj"),
+		"rule":      textGen.Draw(t, "rule"),
+		"path":      pathGen.Draw(t, "path"),
+		"message":   rapid.StringMatching(`[A-Za-z ]{0,20}`).Draw(t, "msg"),
+		"count":     rapid.IntRange(1, 5).Draw(t, "count"),
+	}
+}
+
+func waiverEntry(t *rapid.T, r *rec, p string) map[string]any {
+	r.closed(p)
+	r.bad(p, "expires", "2026-02-30")
+	return map[string]any{
+		"objective": objIDGen.Draw(t, "wobj"),
+		"scope":     pathGen.Draw(t, "wscope"),
+		"rationale": rapid.StringMatching(`[A-Za-z][A-Za-z ]{19,30}`).Draw(t, "why"),
+		"approver":  rapid.StringMatching(`@?[a-z][a-z0-9]{2,10}`).Draw(t, "who"),
+		"expires":   "2026-12-31",
+	}
+}
+
+var baselineGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	entries := []any{}
+	for i := range rapid.IntRange(0, 3).Draw(t, "n") {
+		entries = append(entries, baselineEntry(t, r, "/entries/"+idx(i)))
+		r.bad("/entries", idx(i), "x")
+	}
+	doc := map[string]any{"version": 0, "entries": entries}
+	r.root("x", []any{})
+	r.closed("")
+	r.required("", "version", "entries")
+	r.bad("", "version", 1, "0")
+	r.bad("", "entries", "x", map[string]any{})
+	return sample{doc, r.cs}
+})
+
+var reportGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	tv := map[string]any{}
+	for _, lang := range rapid.SliceOfNDistinct(langGen, 0, 2, func(s string) string { return s }).Draw(t, "langs") {
+		tv[lang] = map[string]any{textGen.Draw(t, "tool"): textGen.Draw(t, "ver")}
+		r.bad("/tool_versions", lang, "x", map[string]any{"go": ""}, map[string]any{"go": 7})
+	}
+	probs := []any{}
+	for i := range rapid.IntRange(0, 2).Draw(t, "np") {
+		probs = append(probs, textGen.Draw(t, "problem"))
+		r.bad("/problems", idx(i), badText...)
+	}
+	expired := []any{}
+	for i := range rapid.IntRange(0, 2).Draw(t, "ne") {
+		expired = append(expired, waiverEntry(t, r, "/expired_waivers/"+idx(i)))
+	}
+	removable := []any{}
+	for i := range rapid.IntRange(0, 2).Draw(t, "nr") {
+		p := "/removable_baseline/" + idx(i)
+		removable = append(removable, map[string]any{"entry": baselineEntry(t, r, p+"/entry"), "unused": rapid.IntRange(1, 3).Draw(t, "unused")})
+		r.closed(p)
+		r.required(p, "entry", "unused")
+		r.bad(p, "unused", 0, 1.5, "1")
+	}
+	objs := []any{}
+	for i := range rapid.IntRange(0, 3).Draw(t, "no") {
+		p := "/objectives/" + idx(i)
+		ws := []any{}
+		for j := range rapid.IntRange(0, 1).Draw(t, "nw") {
+			ws = append(ws, waiverEntry(t, r, p+"/waivers/"+idx(j)))
+		}
+		o := map[string]any{
+			"objective":       objIDGen.Draw(t, "oid"),
+			"status":          rapid.SampledFrom([]string{"pass", "fail", "advisory-fail", "waived"}).Draw(t, "status"),
+			"details":         []any{textGen.Draw(t, "detail")},
+			"waivers":         ws,
+			"baselined":       rapid.IntRange(0, 5).Draw(t, "bl"),
+			"under_threshold": rapid.IntRange(0, 5).Draw(t, "ut"),
+		}
+		if rapid.Bool().Draw(t, "haslang") {
+			o["language"] = langGen.Draw(t, "lang")
+		}
+		objs = append(objs, o)
+		r.closed(p)
+		r.required(p, "objective", "status", "details", "waivers", "baselined", "under_threshold")
+		r.bad(p, "objective", badObjID...)
+		r.bad(p, "language", badLang...)
+		r.bad(p, "status", "skipped", 1)
+		r.bad(p, "details", "x", []any{7})
+		r.bad(p, "waivers", "x", []any{"x"})
+		r.bad(p, "baselined", -1, 1.5)
+		r.bad(p, "under_threshold", -1, 1.5)
+	}
+	doc := map[string]any{
+		"version":            0,
+		"commit":             shaGen.Draw(t, "commit"),
+		"changed_from":       map[string]any{"ref": textGen.Draw(t, "ref"), "sha": shaGen.Draw(t, "base")},
+		"date":               "2026-09-27",
+		"catalog":            "v" + strconv.Itoa(rapid.IntRange(0, 9).Draw(t, "cat")),
+		"changed_files":      rapid.IntRange(0, 50).Draw(t, "changed"),
+		"tool_versions":      tv,
+		"problems":           probs,
+		"expired_waivers":    expired,
+		"removable_baseline": removable,
+		"objectives":         objs,
+	}
+	r.root("x", []any{})
+	r.closed("")
+	r.required("", "version", "commit", "changed_from", "date", "catalog", "changed_files", "tool_versions", "problems", "expired_waivers", "removable_baseline", "objectives")
+	r.bad("", "version", 1, "0")
+	r.bad("", "commit", badSHA...)
+	r.closed("/changed_from")
+	r.required("/changed_from", "ref", "sha")
+	r.bad("/changed_from", "ref", badText...)
+	r.bad("/changed_from", "sha", badSHA...)
+	r.bad("", "changed_from", "x")
+	r.bad("", "date", "2026-02-30", 20260927)
+	r.bad("", "catalog", "0", "vx", 0)
+	r.bad("", "changed_files", -1, 1.5, "1")
+	r.bad("", "tool_versions", "x")
+	r.bad("", "problems", "x")
+	r.bad("", "expired_waivers", "x", []any{"x"})
+	r.bad("", "removable_baseline", "x", []any{"x"})
+	r.bad("", "objectives", "x", []any{"x"})
+	return sample{doc, r.cs}
+})
+
 var generators = map[Kind]*rapid.Generator[sample]{
+	Baseline:        baselineGen,
+	Report:          reportGen,
 	Snapshot:        snapshotGen,
 	StopState:       stopStateGen,
 	AdapterCache:    cacheGen,
@@ -477,7 +615,7 @@ func apply(doc any, c corruption) any {
 		}
 		node := doc
 		if o.at != "" {
-			for _, tok := range strings.Split(o.at[1:], "/") {
+			for tok := range strings.SplitSeq(o.at[1:], "/") {
 				switch n := node.(type) {
 				case map[string]any:
 					node = n[tok]

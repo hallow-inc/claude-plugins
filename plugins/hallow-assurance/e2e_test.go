@@ -17,8 +17,8 @@ import (
 func buildBinaries(t *testing.T) string {
 	t.Helper()
 	bin := t.TempDir()
-	for name, pkg := range map[string]string{"assure": "./cmd/assure", "assure-adapter-go": "./adapters/go"} {
-		if out, err := exec.Command("go", "build", "-o", filepath.Join(bin, name), pkg).CombinedOutput(); err != nil {
+	for name, pkg := range map[string]string{"assure": "./cmd/assure", "assure-adapter-go": "./adapters/go/assure-adapter-go"} {
+		if out, err := exec.CommandContext(t.Context(), "go", "build", "-o", filepath.Join(bin, name), pkg).CombinedOutput(); err != nil {
 			t.Fatalf("building %s: %v\n%s", name, err, out)
 		}
 	}
@@ -34,12 +34,11 @@ func TestContextThenGuardEndToEnd(t *testing.T) {
 	}
 	env := append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+"/usr/bin:/bin")
 	assure := func(args ...string) (string, int) {
-		cmd := exec.Command(filepath.Join(bin, "assure"), args...)
+		cmd := exec.CommandContext(t.Context(), filepath.Join(bin, "assure"), args...)
 		cmd.Dir, cmd.Env = root, env
 		out, err := cmd.Output()
 		code := 0
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 			code = ee.ExitCode()
 		} else if err != nil {
 			t.Fatal(err)
@@ -74,7 +73,7 @@ func TestContextThenGuardEndToEnd(t *testing.T) {
 func TestAdapterClassifyAgreesWithItsDescribeGlobs(t *testing.T) {
 	bin := buildBinaries(t)
 	adapter := filepath.Join(bin, "assure-adapter-go")
-	out, err := exec.Command(adapter, "describe").Output()
+	out, err := exec.CommandContext(t.Context(), adapter, "describe").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,12 +91,13 @@ func TestAdapterClassifyAgreesWithItsDescribeGlobs(t *testing.T) {
 	seg := rapid.SampledFrom([]string{"a", "internal", "testdata", "fuzz", "FuzzX", "cmd"})
 	name := rapid.SampledFrom([]string{"x.go", "x_test.go", "_test.go", ".go", "go.mod", "go.sum", "go.work", "go.work.sum", "README.md", "seed", "x.gox"})
 	empty := t.TempDir()
+	ctx := t.Context()
 	rapid.Check(t, func(t *rapid.T) {
 		var paths []string
 		for range rapid.IntRange(1, 20).Draw(t, "n") {
 			paths = append(paths, strings.Join(append(rapid.SliceOfN(seg, 0, 4).Draw(t, "dirs"), name.Draw(t, "name")), "/"))
 		}
-		cmd := exec.Command(adapter, append([]string{"classify"}, paths...)...)
+		cmd := exec.CommandContext(ctx, adapter, append([]string{"classify"}, paths...)...)
 		cmd.Dir = empty
 		out, err := cmd.Output()
 		if err != nil {

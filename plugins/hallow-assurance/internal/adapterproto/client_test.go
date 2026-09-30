@@ -69,7 +69,7 @@ func TestClassifyRunsInManifestDirAndBatches(t *testing.T) {
 	fakeAdapter(t, "go", `printf '{"protocol":0,"files":['; sep=''; shift; for p in "$@"; do printf '%s{"path":"%s","language":"go","role":"source"}' "$sep" "$p"; sep=','; done; printf ']}'; pwd > "$PWD/.cwd"`)
 	dir := t.TempDir()
 	var paths []string
-	for i := 0; i < 3000; i++ {
+	for i := range 3000 {
 		paths = append(paths, strings.Repeat("d", 60)+"/f"+strings.Repeat("x", i%10)+".go")
 	}
 	files, err := Classify(dir, "go", paths)

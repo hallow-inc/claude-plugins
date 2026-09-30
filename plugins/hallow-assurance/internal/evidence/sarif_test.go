@@ -27,6 +27,12 @@ func TestSARIFResultsRoundTrip(t *testing.T) {
 				} else {
 					r.Level = "warning"
 				}
+				if rapid.Bool().Draw(t, "hasmetric") {
+					r.Metric, r.HasMetric = float64(rapid.IntRange(0, 200).Draw(t, "metric")), true
+					doc["properties"] = map[string]any{"metric": r.Metric, "other": "x"}
+				} else if rapid.Bool().Draw(t, "otherprops") {
+					doc["properties"] = map[string]any{"tags": []any{"x"}}
+				}
 				if rapid.Bool().Draw(t, "located") {
 					r.URI = rapid.StringMatching(`[a-z]{1,6}(/[a-z]{1,6}){0,2}\.go`).Draw(t, "uri")
 					doc["locations"] = []any{map[string]any{"physicalLocation": map[string]any{"artifactLocation": map[string]any{"uri": r.URI}}}}
@@ -62,5 +68,22 @@ func TestSARIFWrongVersion(t *testing.T) {
 	_, err := ParseSARIF([]byte(`{"version":"2.0.0","runs":[]}`))
 	if err == nil || !strings.Contains(err.Error(), "version") {
 		t.Fatalf("want version error, got %v", err)
+	}
+}
+
+func TestSARIFMetric(t *testing.T) {
+	doc := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"cyclo"}},"results":[{"ruleId":"cyclomatic","message":{"text":"f"},"properties":{"metric":16}}]}]}`
+	got, err := ParseSARIF([]byte(doc))
+	if err != nil || len(got) != 1 || !got[0].HasMetric || got[0].Metric != 16 {
+		t.Fatalf("got %+v, %v; thresholds are applied to this metric", got, err)
+	}
+}
+
+func TestSARIFNonNumericMetric(t *testing.T) {
+	for _, m := range []string{`"16"`, `null`, `[16]`} {
+		doc := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"cyclo"}},"results":[{"ruleId":"cyclomatic","message":{"text":"f"},"properties":{"metric":` + m + `}}]}]}`
+		if _, err := ParseSARIF([]byte(doc)); err == nil || !strings.Contains(err.Error(), "metric") {
+			t.Errorf("metric %s: want error, got %v; a non-numeric metric must not silently skip the threshold", m, err)
+		}
 	}
 }

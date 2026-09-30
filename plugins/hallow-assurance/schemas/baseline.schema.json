@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/baseline.schema.json",
+  "title": ".assure/baseline.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "entries"],
+  "properties": {
+    "version": { "const": 0 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["objective", "rule", "path", "message", "count"],
+        "properties": {
+          "objective": { "$ref": "common.schema.json#/$defs/objectiveId" },
+          "rule": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+          "message": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -19,6 +20,7 @@ type Objective struct {
 	Title     string
 	Evidence  string
 	Levels    map[Level]string
+	Threshold map[Level]float64
 	AppliesTo string
 }
 
@@ -71,6 +73,13 @@ func parseCatalog(file string, data []byte) (Catalog, error) {
 		if alt, ok := m["alternative_for"].(string); ok {
 			if _, exists := seen[alt]; !exists || alt == o.ID {
 				p.add(ptr+"/alternative_for", "reference", "alternative_for %s names no other objective in this catalog", alt)
+			}
+		}
+		if th, ok := m["threshold"].(map[string]any); ok {
+			o.Threshold = map[Level]float64{}
+			for l, v := range th {
+				f, _ := v.(json.Number).Float64()
+				o.Threshold[Level(l)] = f
 			}
 		}
 		o.AppliesTo, _ = m["applies_to"].(string)

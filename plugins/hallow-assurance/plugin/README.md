@@ -21,9 +21,10 @@ cd plugins/hallow-assurance
 go install ./cmd/assure
 ```
 
-Build each adapter from `adapters/<lang>/` into a directory on `PATH` under the name
-`assure-adapter-<lang>`. The tools an adapter runs are listed under `objectives` in its
-`describe` output (`assure-adapter-<lang> describe`); install those too.
+Build each adapter from `adapters/<lang>/assure-adapter-<lang>/` into a directory on `PATH`; the
+directory name makes `assure-adapter-<lang>` the default binary name. The tools an adapter runs
+are listed under `objectives` in its `describe` output (`assure-adapter-<lang> describe`); install
+those too.
 
 Then install the plugin from the `hallow-claude-plugins` marketplace:
 

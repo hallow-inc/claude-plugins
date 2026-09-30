@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -18,9 +19,7 @@ func TestUnembeddedReferencesAreRefused(t *testing.T) {
 	}
 	for _, ref := range []string{"https://assure.invalid/schemas/v0/missing.schema.json", "https://example.com/manifest.json"} {
 		withRef := map[string][]byte{}
-		for f, d := range srcs {
-			withRef[f] = d
-		}
+		maps.Copy(withRef, srcs)
 		withRef["manifest.schema.json"] = []byte(`{
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"$id": "https://assure.invalid/schemas/v0/manifest.schema.json",

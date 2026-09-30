@@ -117,13 +117,14 @@ func TestDogfoodManifestIsLevelB(t *testing.T) {
 	}
 }
 
-var charterExample = regexp.MustCompile("(?s)\\*\\*(Manifest|Catalog objective|Waiver|Provenance)\\*\\*[^\\n]*\\n(?:[^\\n]+\\n)*\\n```(?:yaml|json)\\n(.*?)```")
+var charterExample = regexp.MustCompile("(?s)\\*\\*(Manifest|Catalog objective|Waiver|Baseline|Provenance)\\*\\*[^\\n]*\\n(?:[^\\n]+\\n)*\\n```(?:yaml|json)\\n(.*?)```")
 
 func TestCharterExamplesValidate(t *testing.T) {
 	kinds := map[string]schemas.Kind{
 		"Manifest":          schemas.Manifest,
 		"Catalog objective": schemas.Catalog,
 		"Waiver":            schemas.Waivers,
+		"Baseline":          schemas.Baseline,
 		"Provenance":        schemas.Provenance,
 	}
 	found := map[string]bool{}

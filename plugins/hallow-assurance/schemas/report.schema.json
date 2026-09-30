@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/report.schema.json",
+  "title": "assure evaluate report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "commit", "changed_from", "date", "catalog", "changed_files", "tool_versions", "problems", "expired_waivers", "removable_baseline", "objectives"],
+  "properties": {
+    "version": { "const": 0 },
+    "commit": { "$ref": "#/$defs/sha" },
+    "changed_from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "sha"],
+      "properties": {
+        "ref": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "sha": { "$ref": "#/$defs/sha" }
+      }
+    },
+    "date": { "type": "string", "format": "date" },
+    "catalog": { "type": "string", "pattern": "^v[0-9]+$" },
+    "changed_files": { "type": "integer", "minimum": 0 },
+    "tool_versions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "expired_waivers": {
+      "type": "array",
+      "items": { "$ref": "waivers.schema.json#/items" }
+    },
+    "removable_baseline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entry", "unused"],
+        "properties": {
+          "entry": { "$ref": "baseline.schema.json#/properties/entries/items" },
+          "unused": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "objectives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["objective", "status", "details", "waivers", "baselined", "under_threshold"],
+        "properties": {
+          "objective": { "$ref": "common.schema.json#/$defs/objectiveId" },
+          "language": { "$ref": "common.schema.json#/$defs/languageId" },
+          "status": { "enum": ["pass", "fail", "advisory-fail", "waived"] },
+          "details": { "type": "array", "items": { "type": "string" } },
+          "waivers": { "type": "array", "items": { "$ref": "waivers.schema.json#/items" } },
+          "baselined": { "type": "integer", "minimum": 0 },
+          "under_threshold": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$" }
+  }
+}

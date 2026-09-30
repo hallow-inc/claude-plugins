@@ -102,7 +102,7 @@ func TestSnapshotHashesMatchGit(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	body := "version: 0\n\x00binary"
-	out, err := exec.Command("sh", "-c", "printf 'version: 0\\n\\000binary' | git hash-object --stdin").Output()
+	out, err := exec.CommandContext(t.Context(), "sh", "-c", "printf 'version: 0\\n\\000binary' | git hash-object --stdin").Output()
 	if err != nil {
 		t.Fatal(err)
 	}

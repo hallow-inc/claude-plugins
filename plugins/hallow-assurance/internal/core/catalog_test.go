@@ -117,3 +117,19 @@ func TestUnknownCatalogVersion(t *testing.T) {
 		t.Fatal("v9 loaded")
 	}
 }
+
+func TestStarterCatalogKeepsComplexityThreshold(t *testing.T) {
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range c.Objectives {
+		if o.ID == "CODE-COMPLEXITY" {
+			if got := o.Threshold["B"]; got != 15 {
+				t.Fatalf("CODE-COMPLEXITY threshold at B = %v, want 15; without it every function counts as a finding", got)
+			}
+			return
+		}
+	}
+	t.Fatal("CODE-COMPLEXITY missing from catalog v0")
+}

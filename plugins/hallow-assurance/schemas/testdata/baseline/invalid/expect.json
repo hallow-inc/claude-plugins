@@ -1,0 +1,6 @@
+{
+  "traversal-path.json": [{"location": "/entries/0/path", "keyword": "not"}],
+  "zero-count.json": [{"location": "/entries/0/count", "keyword": "minimum"}],
+  "missing-rule.json": [{"location": "/entries/0", "keyword": "required"}],
+  "future-version.json": [{"location": "/version", "keyword": "const"}]
+}

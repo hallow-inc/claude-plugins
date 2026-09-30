@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"encoding/xml"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,7 +11,7 @@ import (
 )
 
 type genCase struct {
-	name, class, kind string
+	name, class, kind, msg, text string
 }
 
 type genSuite struct {
@@ -28,6 +29,8 @@ func suiteGen(depth int) *rapid.Generator[genSuite] {
 				name:  rapid.StringMatching(`[A-Za-z][A-Za-z0-9_/]{0,8}`).Draw(t, "name"),
 				class: rapid.SampledFrom([]string{"", "pkg", "example.com/m/x"}).Draw(t, "class"),
 				kind:  rapid.SampledFrom(kinds).Draw(t, "kind"),
+				msg:   rapid.StringMatching(`[ -~\n]{0,12}`).Draw(t, "msg"),
+				text:  rapid.StringMatching(`[ -~\n]{0,24}`).Draw(t, "text"),
 			})
 		}
 		if depth > 0 {
@@ -45,10 +48,8 @@ func (s genSuite) xml(b *strings.Builder, t *rapid.T, tag string) {
 	for _, c := range s.cases {
 		fmt.Fprintf(b, `<testcase name="%s" classname="%s">`, c.name, c.class)
 		switch c.kind {
-		case "failure":
-			b.WriteString(`<failure message="boom">trace</failure>`)
-		case "error":
-			b.WriteString(`<error message="boom"/>`)
+		case "failure", "error":
+			fmt.Fprintf(b, `<%s message="%s">%s</%s>`, c.kind, escape(c.msg), escape(c.text), c.kind)
 		case "skipped":
 			b.WriteString(`<skipped/>`)
 		}
@@ -71,10 +72,10 @@ func (s genSuite) want() JUnit {
 		switch c.kind {
 		case "failure":
 			j.Failures++
-			j.Failing = append(j.Failing, name)
+			j.Failing = append(j.Failing, Failure{Name: name, Message: c.msg, Text: c.text})
 		case "error":
 			j.Errors++
-			j.Failing = append(j.Failing, name)
+			j.Failing = append(j.Failing, Failure{Name: name, Message: c.msg, Text: c.text})
 		case "skipped":
 			j.Skipped++
 		}
@@ -127,7 +128,7 @@ func TestJUnitStrictPrefixIsAnError(t *testing.T) {
 func TestJUnitAttributeCountsAreNotTrusted(t *testing.T) {
 	doc := `<testsuite failures="0"><testcase name="TestX" classname="p"><failure/></testcase></testsuite>`
 	got, err := ParseJUnit([]byte(doc))
-	if err != nil || got.Failures != 1 || !slices.Equal(got.Failing, []string{"p.TestX"}) {
+	if err != nil || got.Failures != 1 || !slices.Equal(got.Failing, []Failure{{Name: "p.TestX"}}) {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 }
@@ -135,5 +136,20 @@ func TestJUnitAttributeCountsAreNotTrusted(t *testing.T) {
 func TestJUnitUnknownRoot(t *testing.T) {
 	if _, err := ParseJUnit([]byte(`<results/>`)); err == nil || !strings.Contains(err.Error(), "<results>") {
 		t.Fatalf("want root error, got %v", err)
+	}
+}
+
+func escape(s string) string {
+	var b strings.Builder
+	_ = xml.EscapeText(&b, []byte(s))
+	return b.String()
+}
+
+func TestJUnitErrorTextIsKept(t *testing.T) {
+	doc := `<testsuites><testsuite><testcase name="(run)" classname="example.com/m"><error message="go test did not run">go: go.mod requires go &gt;= 1.27.1</error></testcase></testsuite></testsuites>`
+	got, err := ParseJUnit([]byte(doc))
+	want := []Failure{{Name: "example.com/m.(run)", Message: "go test did not run", Text: "go: go.mod requires go >= 1.27.1"}}
+	if err != nil || !slices.Equal(got.Failing, want) {
+		t.Fatalf("got %+v, %v; a build failure must name its cause, not only the package", got.Failing, err)
 	}
 }

@@ -12,6 +12,9 @@ type Result struct {
 	Level   string
 	Message string
 	URI     string
+
+	Metric    float64
+	HasMetric bool
 }
 
 type sarifLog struct {
@@ -29,6 +32,9 @@ type sarifLog struct {
 					} `json:"artifactLocation"`
 				} `json:"physicalLocation"`
 			} `json:"locations"`
+			Properties struct {
+				Metric json.RawMessage `json:"metric"`
+			} `json:"properties"`
 		} `json:"results"`
 	} `json:"runs"`
 }
@@ -54,6 +60,15 @@ func ParseSARIF(data []byte) ([]Result, error) {
 			}
 			if len(r.Locations) > 0 {
 				res.URI = r.Locations[0].PhysicalLocation.ArtifactLocation.URI
+			}
+			if m := r.Properties.Metric; m != nil {
+				var v any
+				_ = json.Unmarshal(m, &v)
+				f, ok := v.(float64)
+				if !ok {
+					return nil, fmt.Errorf("sarif: result %s: properties.metric %s is not a number", r.RuleID, m)
+				}
+				res.Metric, res.HasMetric = f, true
 			}
 			out = append(out, res)
 		}

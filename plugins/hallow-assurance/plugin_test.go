@@ -16,7 +16,7 @@ func shim(t *testing.T, dir, path, stdin string) (int, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("/bin/sh", abs, "stop")
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", abs, "stop")
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + path, "PWD=" + dir}
 	cmd.Stdin = strings.NewReader(stdin)
@@ -24,8 +24,7 @@ func shim(t *testing.T, dir, path, stdin string) (int, string, string) {
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err = cmd.Run()
 	code := 0
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		code = ee.ExitCode()
 	} else if err != nil {
 		t.Fatal(err)
