@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -338,4 +339,49 @@ func TestDecisionIgnoresInputOrder(t *testing.T) {
 			t.Fatalf("order changed the outcome: %+v vs %+v", a, b)
 		}
 	})
+}
+
+func TestFixObjectivesNeedAFixCommit(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		levelsGen := rapid.SampledFrom([]Level{"A", "B", "C", "D"})
+		o := Objective{ID: "VER-FAIL-ON-BASE", AppliesTo: "fix", Levels: map[Level]string{}}
+		for _, l := range []Level{"A", "B", "C", "D"} {
+			if s := rapid.SampledFrom([]string{"", "required", "advisory"}).Draw(t, "status"+string(l)); s != "" {
+				o.Levels[l] = s
+			}
+		}
+		fix := rapid.Bool().Draw(t, "fix")
+		var changed []ChangedFile
+		listed := false
+		for i := range rapid.IntRange(0, 4).Draw(t, "n") {
+			f := ChangedFile{Path: fmt.Sprintf("f%d.go", i), Level: levelsGen.Draw(t, "level"), Fix: fix, Formal: rapid.Bool().Draw(t, "formal")}
+			listed = listed || o.Levels[f.Level] != ""
+			changed = append(changed, f)
+		}
+		if got, want := Applicable(o, changed), fix && listed; got != want {
+			t.Fatalf("Applicable = %v, want %v (fix %v, listed %v); a fix objective must apply exactly to fix changes at a listed level", got, want, fix, listed)
+		}
+		plain := o
+		plain.AppliesTo = ""
+		if got := Applicable(plain, changed); got != listed {
+			t.Fatalf("unrestricted objective Applicable = %v, want %v; the Fix flag must not affect it", got, listed)
+		}
+	})
+}
+
+func TestContextListsFixObjectivesWithTheTrailer(t *testing.T) {
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := RenderContext(&Manifest{DefaultLevel: "B", Catalog: c}, nil)
+	var line string
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "VER-FAIL-ON-BASE") {
+			line = l
+		}
+	}
+	if !strings.Contains(line, "required") || !strings.Contains(line, "Assure-Kind: fix") {
+		t.Fatalf("context line for VER-FAIL-ON-BASE = %q; an agent that never sees the trailer cannot know a fix needs a failing-on-base test\n%s", line, out)
+	}
 }

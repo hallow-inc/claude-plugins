@@ -214,7 +214,9 @@ latter two match, the stricter of their levels applies. Unmatched paths take `de
   alternative_for: VER-STRUCT-MCDC
 ```
 
-Optional `applies_to: formal | dst` restricts an objective to components that declare that block.
+Optional `applies_to: formal | dst` restricts an objective to components that declare that block;
+`applies_to: fix` restricts it to changes with a commit, between the ref and `HEAD`, carrying the
+git trailer `Assure-Kind: fix`.
 
 **Waiver** — `.assure/waivers.yaml` (human-only):
 
@@ -250,6 +252,18 @@ tool versions, and one status per applicable objective and language (`pass`, `fa
 under-threshold results. The markdown summary is rendered from the report alone, so a stored
 report reproduces it. For `lint.sarif`, catalog thresholds are ceilings on a result's
 `properties.metric`.
+
+**Mutation** — `mutation.report` evidence is a Stryker mutation-testing report. `Killed` and
+`Timeout` mutants are detected; `Survived` and `NoCoverage` are undetected; compile and runtime
+errors are invalid; `Ignored` is left out; `Pending` fails the objective. Per level, over mutants
+outside active waivers' scopes, the score is detected ÷ (detected + undetected), and the catalog
+threshold is a floor: the level passes when `100 × detected ≥ threshold × valid`, or when it has no
+valid mutants. The baseline does not apply.
+
+**Fail-on-base** — `test.fail_on_base` evidence is JUnit from running, against the base commit, the
+top-level tests the change added or modified. It passes only when it has at least one case and every
+case failed; a passing, skipped, or erroring case (including base code that does not compile with
+the new tests) fails it.
 
 **Provenance** — `.assure/provenance/<session_id>.jsonl`, one committed file per session
 (append-only, written only by `assure record`; protected from agent edits):
@@ -432,10 +446,16 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
 - CI runs `assure evaluate` (fails the job, not yet a required check)
 - ✅ Fail-closed: missing evidence fails; expired waiver fails
 
-**M3b — Remaining evidence, required check**
-- Parsers: LCOV, mutation report
-- Go adapter `run` for: fuzz (seed corpus in PR, time-boxed nightly), mutation (Gremlins) on
-  changed packages, fail-on-base, test budget; `VER-COVERAGE-RESOLUTION`
+**M3b-1 — Mutation, fail-on-base**
+- Parser: Stryker mutation report
+- Go adapter `run` for mutation (Gremlins, changed lines, converted to Stryker) and fail-on-base
+- `applies_to: fix`, from the `Assure-Kind: fix` commit trailer
+- ✅ Three `evaluate` runs on one commit agree on `VER-MUTATION-CHANGED`
+
+**M3b-2 — Remaining evidence, required check**
+- Parser: LCOV
+- Go adapter `run` for: fuzz (seed corpus in PR, time-boxed nightly), test budget;
+  `VER-COVERAGE-RESOLUTION`
 - ✅ Required status check on the pilot repo (blocking levels A–B)
 
 **M4 — Subagents, provenance, skills**

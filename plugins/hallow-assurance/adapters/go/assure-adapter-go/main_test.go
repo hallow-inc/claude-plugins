@@ -58,7 +58,7 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 	slices.Sort(fast)
 	slices.Sort(slow)
 	if !slices.Equal(fast, []string{"CODE-ZERO-WARNINGS", "VER-TESTS-PASS"}) ||
-		!slices.Equal(slow, []string{"CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE", "CODE-RESOURCE-BOUNDS"}) {
+		!slices.Equal(slow, []string{"CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE", "CODE-RESOURCE-BOUNDS", "VER-FAIL-ON-BASE", "VER-MUTATION-CHANGED"}) {
 		t.Fatalf("fast %v, slow %v; only cheap objectives may run on the Stop path (per-turn latency budget)", fast, slow)
 	}
 }

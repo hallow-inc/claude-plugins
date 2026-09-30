@@ -37,11 +37,14 @@ const (
 	StopState       Kind = "stop-state"
 	Baseline        Kind = "baseline"
 	Report          Kind = "report"
+	MutationReport  Kind = "mutation-report"
 )
 
 const base = "https://assure.invalid/schemas/v0/"
 
 const sarifID = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json"
+
+const strykerID = "http://stryker-mutator.io/report.schema.json"
 
 type syntax int
 
@@ -68,6 +71,7 @@ var kinds = map[Kind]struct {
 	StopState:       {base + "stop-state.schema.json", jsonDoc},
 	Baseline:        {base + "baseline.schema.json", jsonDoc},
 	Report:          {base + "report.schema.json", jsonDoc},
+	MutationReport:  {strykerID, jsonDoc},
 }
 
 type Violation struct {

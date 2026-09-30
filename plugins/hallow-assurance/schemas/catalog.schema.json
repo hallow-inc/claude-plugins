@@ -58,7 +58,7 @@
           }
         },
         "alternative_for": { "$ref": "common.schema.json#/$defs/objectiveId" },
-        "applies_to": { "enum": ["formal", "dst"] }
+        "applies_to": { "enum": ["formal", "dst", "fix"] }
       }
     }
   }

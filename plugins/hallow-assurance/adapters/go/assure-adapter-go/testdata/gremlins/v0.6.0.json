@@ -1,0 +1,60 @@
+{
+  "go_module": "example.com/gm",
+  "files": [
+    {
+      "file_name": "gm.go",
+      "mutations": [
+        {
+          "type": "ARITHMETIC_BASE",
+          "status": "NOT COVERED",
+          "line": 16,
+          "column": 11
+        },
+        {
+          "type": "CONDITIONALS_NEGATION",
+          "status": "KILLED",
+          "line": 9,
+          "column": 16
+        },
+        {
+          "type": "CONDITIONALS_BOUNDARY",
+          "status": "KILLED",
+          "line": 9,
+          "column": 16
+        },
+        {
+          "type": "CONDITIONALS_NEGATION",
+          "status": "KILLED",
+          "line": 4,
+          "column": 11
+        },
+        {
+          "type": "CONDITIONALS_BOUNDARY",
+          "status": "LIVED",
+          "line": 4,
+          "column": 11
+        },
+        {
+          "type": "INCREMENT_DECREMENT",
+          "status": "TIMED OUT",
+          "line": 9,
+          "column": 22
+        }
+      ]
+    }
+  ],
+  "test_efficacy": 75,
+  "mutations_coverage": 80,
+  "mutants_total": 4,
+  "mutants_killed": 3,
+  "mutants_lived": 1,
+  "mutants_not_viable": 0,
+  "mutants_not_covered": 1,
+  "elapsed_time": 1.168742958,
+  "mutator_statistics": {
+    "arithmetic_base": 1,
+    "conditionals_negation": 2,
+    "conditionals_boundary": 2,
+    "increment_decrement": 1
+  }
+}

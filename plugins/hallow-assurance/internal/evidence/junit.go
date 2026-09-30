@@ -12,12 +12,15 @@ type JUnit struct {
 	Errors   int
 	Skipped  int
 	Failing  []Failure
+	Passed   []string
+	Skips    []string
 }
 
 type Failure struct {
 	Name    string
 	Message string
 	Text    string
+	Error   bool
 }
 
 type xmlOutcome struct {
@@ -75,9 +78,12 @@ func (j *JUnit) add(s xmlSuite) {
 			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Failure.Message, Text: c.Failure.Text})
 		case c.Error != nil:
 			j.Errors++
-			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Error.Message, Text: c.Error.Text})
+			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Error.Message, Text: c.Error.Text, Error: true})
 		case c.Skipped != nil:
 			j.Skipped++
+			j.Skips = append(j.Skips, name)
+		default:
+			j.Passed = append(j.Passed, name)
 		}
 	}
 	for _, sub := range s.Suites {

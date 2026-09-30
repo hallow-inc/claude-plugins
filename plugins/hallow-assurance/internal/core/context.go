@@ -21,8 +21,12 @@ func (m *Manifest) ProtectedList() []string {
 func writeObjectives(b *strings.Builder, objs []Objective, level Level, appliesTo string) {
 	for _, status := range []string{"required", "advisory"} {
 		for _, o := range objs {
-			if o.AppliesTo == appliesTo && o.Levels[level] == status {
-				fmt.Fprintf(b, "    %-24s %-8s %s\n", o.ID, status, o.Title)
+			if (o.AppliesTo == appliesTo || appliesTo == "" && o.AppliesTo == "fix") && o.Levels[level] == status {
+				title := o.Title
+				if o.AppliesTo == "fix" {
+					title += " (commits with trailer Assure-Kind: fix)"
+				}
+				fmt.Fprintf(b, "    %-24s %-8s %s\n", o.ID, status, title)
 			}
 		}
 	}

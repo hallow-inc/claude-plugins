@@ -16,7 +16,7 @@ func Baseline(m *core.Manifest) (core.Baseline, error) {
 		return core.Baseline{}, err
 	}
 	var rep EvalReport
-	planned, _ := planEvaluate(m, changed, &rep)
+	planned, _ := planEvaluate(m, changed, false, &rep)
 	var jobs []job
 	for _, j := range planned {
 		if j.obj.Evidence == "lint.sarif" {

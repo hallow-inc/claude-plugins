@@ -56,6 +56,7 @@
   source: [hallow-assurance charter]
   levels: { A: required, B: required, C: required, D: advisory }
   evidence: test.fail_on_base
+  applies_to: fix
 
 - id: VER-TEST-BUDGET
   title: New test cases are within budget or justified
