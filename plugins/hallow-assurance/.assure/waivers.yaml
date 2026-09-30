@@ -1,6 +1,4 @@
 - {objective: IND-VERIFIER-DISTINCT, scope: '**', rationale: provenance evidence arrives in milestone M4, approver: '@hello-world-bfree', expires: 2026-12-31}
 - {objective: CFG-PROTECTED, scope: '**', rationale: provenance evidence arrives in milestone M4, approver: '@hello-world-bfree', expires: 2026-12-31}
-- {objective: VER-MUTATION-CHANGED, scope: '**', rationale: mutation report evidence arrives in milestone M3b, approver: '@hello-world-bfree', expires: 2026-10-31}
-- {objective: VER-FAIL-ON-BASE, scope: '**', rationale: fail-on-base runner arrives in milestone M3b, approver: '@hello-world-bfree', expires: 2026-10-31}
 - {objective: VER-TEST-BUDGET, scope: '**', rationale: test budget check arrives in milestone M3b, approver: '@hello-world-bfree', expires: 2026-10-31}
 - {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in milestone M3b, approver: '@hello-world-bfree', expires: 2026-10-31}
