@@ -59,7 +59,7 @@ Layer these in only when the user asked for them:
 
 After `wmill app new` and any initial edits to `App.tsx` / `index.tsx`, **offer** to open the visual preview as a one-sentence next step (e.g. "Want me to open the visual preview?"). Don't auto-open — opening the dev page has side effects (browser window, possibly a `launch.json` entry when an embedded preview tool is in play) the user should consent to.
 
-For apps the preview command runs from the app folder (`cd <app_path>__raw_app && wmill app dev …`); the `preview` skill picks the proxy vs direct branch based on whether the runtime exposes a tool that can embed a localhost URL. If the user already asked to see/preview/visualize the app in their original request, skip the offer and just invoke the skill.
+For apps the preview command runs from the app folder (`cd <app_path>.raw_app && wmill app dev …`); the `preview` skill picks the proxy vs direct branch based on whether the runtime exposes a tool that can embed a localhost URL. If the user already asked to see/preview/visualize the app in their original request, skip the offer and just invoke the skill.
 
 ### Anti-patterns to avoid
 
@@ -80,7 +80,7 @@ This is the wizard. It only works when run by a human in a real terminal. Don't 
 ## App Structure
 
 ```
-my_app__raw_app/
+my_app.raw_app/
 ├── AGENTS.md              # AI agent instructions (auto-generated)
 ├── DATATABLES.md          # Database schemas (run 'wmill app generate-agents' to refresh)
 ├── raw_app.yaml           # App configuration (summary, path, data settings)
@@ -309,7 +309,7 @@ For everything else, tell the user which command fits their intent and let them 
 | `wmill app generate-agents` | Refresh AGENTS.md and DATATABLES.md |
 | `wmill generate-metadata` | Generate lock files for backend runnables |
 
-**Deploying to Windmill:** `wmill sync push` and `wmill sync pull` are banned at Hallow. Use the MCP `windmill` tools (e.g. `mcp__windmill__createApp`, `mcp__windmill__updateApp`) or the Windmill UI to mirror local changes to the server.
+**Deploying to Windmill:** `wmill sync push` and `wmill sync pull` are banned at Hallow. Deploy a raw app with `wmill --workspace dev app push` (it compiles the bundle) or the editor's Deploy button. **Never use `mcp__windmill__updateApp`** on a raw app — it blanks the app (see Hallow gotchas → "Deploy raw apps only with `wmill app push`").
 
 **Before mirroring, run the pre-push gate:** spawn the `windmill-build-reviewer` agent to check the authored app files against `${CLAUDE_PLUGIN_ROOT}/docs/build-policy.md` (APP.* + GEN.*). A finding blocks the push until fixed; a PASS proceeds. This is build-policy GATE.1.
 
@@ -349,3 +349,15 @@ When you publish an app to "anyone with the link", the deploy dialog now offers 
 - With an allowlist set, a visitor must enter their email → receives a one-time magic link (15-min token) → gets a short session (30 min) before the app runs. The backend never reveals whether an email is on the list (enumeration-safe) and rate-limits 5 req/min per app+email.
 - **SMTP is configured on Hallow** (verified 2026-06-22: `smtp.gmail.com`, from `sandbox@hallow.app`) so the magic-link email sends. If public users report "no email arrived", check spam + that the address is actually on the allowlist before suspecting SMTP.
 - The gate covers only the public app UI — it does NOT gate script/flow exports or the authenticated workspace view.
+
+### Deploy raw apps only with `wmill app push` — `updateApp` blanks them
+
+`mcp__windmill__updateApp` (API `POST /apps/update`) handles low-code apps only. On a raw app it flips `raw_app: true` to `false` and drops the compiled bundle, and the app renders blank. A raw app deploys only through `wmill --workspace dev app push` (compiles the bundle and sends the raw-app update) or the editor's Deploy button.
+
+The app folder suffix must match the workspace's `nonDottedPaths` setting in `wmill.yaml`. Hallow's `dev` uses dotted paths, so the folder ends in `.raw_app`; the CLI rejects `__raw_app` there.
+
+**Recovering a blanked app whose source is lost:** rebuild the tree from the live `apps/get` response — `value.files` plus each `value.runnables[*].inlineScript.content` — add `raw_app.yaml` and `backend/<id>.yaml`, then `wmill app lint` and `wmill app push`.
+
+### `wmill app push` makes you the app's run-as identity
+
+Every `wmill app push` regenerates the app policy from the pusher ("Generating fresh policy..."), so `policy.on_behalf_of` becomes whoever pushed, replacing the previous run-as. Before pushing someone else's app, check its current `policy.on_behalf_of`. If the app must keep running as another identity, ask a workspace admin to restore it after your push — resetting it (`wmill app set-permissioned-as`) is admin-only.

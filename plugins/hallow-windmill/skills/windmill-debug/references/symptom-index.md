@@ -32,6 +32,7 @@ One-stop lookup for "I see error X, where do I fix it?". Built from the windmill
 |---|---|---|
 | `runScriptAsync` returned `queued: true` but nothing ever ran | Called `runScriptAsync` against a FLOW path. Silent no-op. | `skills/write-script-bun/SKILL.md` (Hallow gotchas) + `docs/patterns.md` §6 rule 6 |
 | `HTTP trigger: 404` from caller / `Trigger not found at name /w/<ws>/<route>` | Two causes: (a) caller's URL has extra `w/` — should be `/api/r/<ws>/<route>`, no `w/`. (b) caller's identity can't READ trigger's folder (ACL gates lookup, even with `authentication_method: windmill`). | `skills/triggers/SKILL.md` (Hallow gotchas) + `docs/patterns.md` §8 |
+| External webhook (EventBridge, SaaS) never arrives; EventBridge shows `TriggeredRules > 0`, `Invocations = 0` | Sender targets the tailnet-only Windmill host. Use `https://hooks.platform.hallow.app/<ws>/<provider>/<event>` with route `webhooks/<provider>/<event>`. | `skills/triggers/SKILL.md` (Hallow gotchas: external callers) |
 | Slack post failed: `not_in_channel` | Bot not invited. | `windmill-debug` classify table |
 | Slack post failed: `channel_not_found` | Wrong channel ref. Use ID, not `#name`. | `windmill-debug` classify table |
 
@@ -59,6 +60,7 @@ One-stop lookup for "I see error X, where do I fix it?". Built from the windmill
 | `Unexpected identifier "Created"` parsing a `folders/create` or `folders/update` response | Those endpoints return a BARE STRING, not JSON. Only `JSON.parse` if the body starts with `{`/`[`. | `skills/cli-commands/SKILL.md` (Hallow gotchas: folders return bare strings) |
 | `folders/update` → `400 invalid state: owner would not have permission` | `folders/update` is PUT semantics — omitting `owners` empties them. Always send the current `owners` array. | `skills/cli-commands/SKILL.md` (Hallow gotchas: folders/update PUT) |
 | `DELETE /apps/delete/p/<path>` returns `200 "app deleted"` but the app persists | Generic delete only removes low-code apps, NOT `raw_app: true` apps. `apps/exists` also unreliable. Authoritative check = `apps/list`; delete via UI. | `skills/raw-app/SKILL.md` (Hallow gotchas: deleting a raw app) |
+| Raw app renders blank after `mcp__windmill__updateApp` / `POST /apps/update` | Low-code-only endpoint: flips `raw_app` to false, drops the bundle. Redeploy with `wmill app push`. | `skills/raw-app/SKILL.md` (Hallow gotchas: deploy only with `wmill app push`) |
 | `wmill flow push` exits 0 but preprocessor changes don't take effect | `flow push` doesn't update `preprocessor_module`. Patch via API: GET → edit `value.preprocessor_module.value.content` → POST `/flows/update/<path>` (with `path` in body). | `skills/write-flow/SKILL.md` (Hallow gotchas: flow push doesn't update preprocessor) |
 
 ## Cron / scheduling
@@ -82,7 +84,11 @@ One-stop lookup for "I see error X, where do I fix it?". Built from the windmill
 |---|---|---|
 | `wmill generate-metadata` says "no scripts found" on a hand-written file | Must `wmill script bootstrap <path> <lang>` first, then overwrite, then generate-metadata. | `skills/cli-commands/SKILL.md` (Hallow gotchas) |
 | `wmill script preview` of an S3 script intermittently succeeds/fails | Preview ignores tag routing — nondeterministic worker selection. Validate via flow with `tag: fargate`. | `skills/cli-commands/SKILL.md` (Hallow gotchas) + `docs/patterns.md` §8b |
-| `Job timed out` | Default per-job timeout hit (often 30s). Bump `timeout:` in `.script.yaml` or `flow.yaml` step. | `windmill-debug` classify table |
+| `Job timed out` | Per-job timeout hit. `timeout:` excludes queue wait — compare `started_at - created_at` with `duration_ms` before bumping `timeout:`. | `windmill-debug` classify table + `docs/patterns.md` §7 |
+| Job reports timeout/failure but its downstream impl succeeded at the same moment | Worker-pool starvation: long queue wait, then the timeout. Find the slot squatter on the same tag (often a schedule pinned to its ceiling). | `windmill-debug` classify table + `skills/schedules/SKILL.md` (Hallow gotchas: sync child dispatch) |
+| `preprocessed: false` + `args: null` in `wmill job get --json` | Final-job-success flag, not "preprocessor didn't run". Read `result.error.stack`. | `windmill-debug` classify table |
+| `wmill script delete` → unknown command | No such subcommand. Use `mcp__windmill__deleteScriptByPath`. | `skills/cli-commands/SKILL.md` (Hallow gotchas) |
+| `generate-metadata` errors on a `!inline …script.lock` reference | Lock file doesn't exist yet. Run `generate-metadata -i <glob>` first. | `skills/cli-commands/SKILL.md` (Hallow gotchas) |
 | Fargate queue stalled — many jobs `queued`, none progressing; logs of one job froze after `--- BUN CODE EXECUTION ---` with no output/error | A timeout-less job hung inside user code and pinned the single thin Fargate worker (concurrency 1). Worker keeps heartbeating so no reaper fires. Cancel the hung job; ALWAYS set an explicit `timeout`. | `docs/patterns.md` §7 ("Always set an explicit timeout") |
 | `429 Too Many Requests` | Downstream service rate-limit. Backoff/cache. | `windmill-debug` classify table |
 

@@ -51,7 +51,7 @@ wmill dev --proxy-port 4000 --path <wmill_path> --no-open
 
 For apps:
 ```bash
-cd <app_path>__raw_app && wmill app dev --no-open --port 4000
+cd <app_path>.raw_app && wmill app dev --no-open --port 4000
 ```
 
 Each command prints the URL on stdout. Line shapes differ:
@@ -88,12 +88,12 @@ For flows / scripts:
 }
 ```
 
-For apps (`*__raw_app/`), `wmill app dev` is the equivalent — runs from the app folder, no `--path`:
+For apps (`*.raw_app/`), `wmill app dev` is the equivalent — runs from the app folder, no `--path`:
 ```json
 {
   "name": "windmill: f/test/my_app",
   "runtimeExecutable": "bash",
-  "runtimeArgs": ["-c", "cd f/test/my_app__raw_app && wmill app dev --no-open --port ${PORT:-4001}"],
+  "runtimeArgs": ["-c", "cd f/test/my_app.raw_app && wmill app dev --no-open --port ${PORT:-4001}"],
   "port": 4001,
   "autoPort": true
 }

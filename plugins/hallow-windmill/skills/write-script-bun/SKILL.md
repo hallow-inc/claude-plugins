@@ -184,3 +184,5 @@ Pattern lives in `f/storage/s3_read_json` + `f/storage/s3_write_json`. Prefer ca
 ### Always set an explicit `timeout` in `.script.yaml` (lower is better)
 
 Every script MUST set an explicit `timeout:` (seconds) in its `*.script.yaml`. Never ship a timeout-less script. A hang on a `tag: fargate` script pins the single thin Fargate worker (concurrency 1) and blocks the entire shared queue — and nothing catches it (the stuck worker keeps heartbeating, so neither the ECS healthcheck nor Windmill's zombie reaper fires). The job's own timeout is the only bound. Pick the smallest value that comfortably covers expected runtime (fast API/Slack glue 60–120s, warehouse query 300–600s, heavy pipeline 900–1800s); a per-script timeout overrides the instance default. Full rationale: `${CLAUDE_PLUGIN_ROOT}/docs/patterns.md` §7 ("Always set an explicit timeout").
+
+`timeout:` excludes queue wait, so raising it never fixes a job that times out after waiting for a slot. Bound each `fetch` with `signal: AbortSignal.timeout(ms)` and keep that close to `timeout:` (e.g. 20s abort under `timeout: 25`). See patterns.md §7 ("`timeout` bounds execution, not queue wait").

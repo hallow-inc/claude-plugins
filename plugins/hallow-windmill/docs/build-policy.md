@@ -83,6 +83,8 @@ Any skill or agent that pushes a script, flow, trigger, schedule, resource, or a
 
 **TRIG.5 — Only SQS/WebSocket/Postgres-CDC/MQTT + HTTP are available; Kafka/NATS/GCP/Azure/email are EE-blocked.** Don't author a trigger of an unavailable kind. (SQS is enabled via a Hallow fork deviation; email-routing triggers were never enabled — see the triggers skill availability matrix.)
 
+**TRIG.6 — A trigger meant for callers outside the tailnet uses route `webhooks/<provider>/<event>`.** Windmill is tailnet-only; external senders (AWS EventBridge, SaaS webhooks) reach it only via `https://hooks.platform.hallow.app/<ws>/<provider>/<event>`, which rewrites to `/api/r/<ws>/webhooks/<provider>/<event>`. Any other route is unreachable from outside, and the failure is silent.
+
 ---
 
 ## SCHED — Schedules
@@ -92,6 +94,8 @@ Any skill or agent that pushes a script, flow, trigger, schedule, resource, or a
 **SCHED.2 — `email` is deployer-stamped; don't set an arbitrary value.** The server forces `email` to the pushing user's identity. A different value diverges and churns. A different run-as principal means that user pushes, or an admin runs `wmill schedule set-permissioned-as`.
 
 **SCHED.3 — Cron day-of-week RANGES use names, not numbers.** The parser rejects numeric DOW ranges (`0-4` → `Invalid range for Days of Week`). Use `SUN-THU`. Single numeric DOW (`0`) and lists (`0,3,5`) are fine — only ranges need names. (6-field cron.)
+
+**SCHED.4 — A schedule whose script dispatches synchronous child jobs sets `no_flow_overlap: true`.** If the target script calls `runScript`/`run_script` (sync, waits for the child), the parent holds a worker slot while its child needs another from the same pool. With the default `no_flow_overlap: false` and a short cadence, overlapping runs pile up until the whole tag is starved. `no_flow_overlap: true` skips a tick while the previous run is still going.
 
 ---
 
@@ -108,6 +112,8 @@ Any skill or agent that pushes a script, flow, trigger, schedule, resource, or a
 ## APP — Raw apps
 
 **APP.1 — Don't hand-write a `wmill.ts` shim.** `import { backend } from './wmill'` resolves to a build-time virtual module; `wmill app dev` generates the types + runtime exports. `wmill generate-metadata` is a no-op without a `wmill.yaml`.
+
+**APP.2 — Raw apps deploy with `wmill app push`, never `mcp__windmill__updateApp`; the folder ends in `.raw_app`.** `updateApp` / `POST /apps/update` is low-code only — on a raw app it flips `raw_app` to false and drops the bundle, blanking the app. The folder suffix follows `nonDottedPaths` in `wmill.yaml`; on Hallow `dev` that is `.raw_app` (the CLI rejects `__raw_app`).
 
 ---
 

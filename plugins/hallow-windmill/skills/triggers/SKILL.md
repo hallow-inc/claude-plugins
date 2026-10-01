@@ -91,3 +91,19 @@ Internal worker-to-trigger fetches use `${BASE_URL}/api/r/<workspace>/<route>`. 
 ### Create-then-update to start a trigger as `disabled`
 
 `POST /http_triggers/create` ignores `enabled`/`mode` fields and ALWAYS creates the trigger in `mode: "enabled"` — even when local YAML says `disabled`. There is no `setenabled` endpoint for HTTP triggers (returns 404, unlike schedules). The workflow: create the trigger, then immediately `POST /http_triggers/update/<path>` with `mode: "disabled"`. Also: create requires `is_static_website` + `static_asset_config` keys present or it 422s with `"missing field is_static_website"`. Contrast: `schedule create` honors `enabled: false` at create time.
+
+### External callers can't reach `windmill.platform.hallow.app` — use `hooks.platform.hallow.app`
+
+Windmill is tailnet-only: `windmill.platform.hallow.app` resolves to a Tailscale 100.x address. Anything outside the tailnet (AWS EventBridge, a SaaS webhook, a partner's server) MUST call the public ingress `https://hooks.platform.hallow.app/<ws>/<provider>/<event>`, which rewrites to `/api/r/<ws>/webhooks/<provider>/<event>`. So the trigger's route MUST be `webhooks/<provider>/<event>` — any other route is unreachable from outside.
+
+Symptom of pointing an external sender at the Windmill host: nothing arrives and nothing errors. On EventBridge it shows as `TriggeredRules > 0` with `Invocations = 0`.
+
+### AWS EventBridge delivers the raw AWS event — parse `body.detail`
+
+An EventBridge API-destination target with no `InputTransformer` POSTs the unmodified AWS event (e.g. "Batch Job State Change"). The preprocessor must read the native shape — `event.body.detail.jobId`, `.status`, `.statusReason` — not a flattened `{jobId, status}`.
+
+Callback-trigger shape that works: `authentication_method: none` + `request_type: async`, with a shared secret checked inside the preprocessor. Headers arrive lowercased in `event.headers`; compare with a constant-time check (`hmac.compare_digest` in Python). The secret must live where the trigger's run-as identity can read it — see "`permissioned_as` is server-set" above.
+
+### There is no "new Windmill user" event — don't build a signup-triggered flow
+
+No trigger kind fires on user signup; the workspace `webhook` setting is for job completion. Onboarding is already native: an `@hallow.app` Google login creates the account and auto-invite adds it to `dev` as a developer. A "notify me when someone joins Windmill" ask has no event to hang off — say so instead of building a poller.

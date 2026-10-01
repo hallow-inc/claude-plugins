@@ -198,3 +198,20 @@ tag: fargate          # mandatory for DuckLake
 ```
 
 Keep imports lean — only pull what you call.
+
+## Hallow gotchas (python3 scripts)
+
+### Raw API calls: `get`/`post` live on a `wmill.Windmill()` instance, and the path omits `/api`
+
+`wmill.get(...)` / `wmill.post(...)` do not exist at module level, despite how `references/sdk.md` lists them. Create a client and call the methods on it. Its `base_url` already ends in `/api`, so the endpoint starts at `/w/...`; writing `/api/w/...` doubles the prefix and 404s.
+
+```python
+import os
+import wmill
+
+client = wmill.Windmill()
+ws = os.environ["WM_WORKSPACE"]
+resp = client.get(f"/w/{ws}/jobs/list")   # not f"/api/w/{ws}/..."
+```
+
+Verified live 2026-07-23.

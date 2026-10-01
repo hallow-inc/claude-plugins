@@ -66,6 +66,16 @@ wmill --workspace dev script generate-metadata f/<folder>/<name>  # NOW it works
 
 `wmill script preview` has NO `--tag` flag. Even if you put `tag: fargate` in the script's sidecar `.script.yaml`, preview routes nondeterministically to whatever worker is free (usually `default`). To validate an S3 script's behavior against the Fargate worker (which has the IAM grant), wrap it in a flow with `tag: fargate` on the module and run the flow — bare script preview lies.
 
+Once the script is deployed, `wmill --workspace dev script run <path> --data '<json>'` also works: `run` executes the deployed entity and honors its sidecar `tag: fargate`. Verified for boto3 scripts that `AccessDenied` under preview.
+
+### `wmill script` has no `delete` subcommand
+
+There is no `wmill script delete`. Delete a script with the MCP tool `mcp__windmill__deleteScriptByPath`.
+
+### `generate-metadata` fails on a `!inline …lock` reference until the lock exists
+
+A `.script.yaml` whose `lock: !inline <name>.script.lock` points at a lock file that doesn't exist yet makes `generate-metadata` error. Run `wmill --workspace dev script generate-metadata -i <glob>` first to produce the locks, then push.
+
 ### Workspace dedup — `wmill workspace add` rejects (URL, workspace) duplicates
 
 `wmill workspace add` enforces a unique `(remote URL, workspace_id)` constraint regardless of the `name` arg. Error: `"Backend constraint violation: (URL, workspace) already exists as 'X'. Use --force to overwrite."` `--force` overwrites the existing entry (losing the prior token) — useless for keeping two aliases (e.g. `u/brandon` and `u/sandbox` against the same workspace).
