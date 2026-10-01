@@ -1,0 +1,5 @@
+- path: internal/core/fast.go
+  function: ""
+  resolution: dead
+  rationale: Error branch needs a fault-injecting filesystem
+  approver: hello-world-bfree

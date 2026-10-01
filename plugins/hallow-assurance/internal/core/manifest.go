@@ -18,6 +18,7 @@ type Component struct {
 	Challenge string
 	Formal    bool
 	DST       bool
+	Inputs    bool
 }
 
 type Manifest struct {
@@ -93,6 +94,7 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 			comp.Challenge = f["challenge"].(string)
 		}
 		_, comp.DST = cm["dst"]
+		_, comp.Inputs = cm["inputs"]
 		m.Components = append(m.Components, comp)
 	}
 	prot, _ := v["protected"].([]any)

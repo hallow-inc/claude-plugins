@@ -178,6 +178,7 @@ components:
     level: A
   - path: internal/chat/**
     level: B
+    inputs: true                                   # optional: handles external input (fuzzed)
   - path: cmd/tools/**
     level: D
   - path: internal/ledger/**
@@ -215,6 +216,7 @@ latter two match, the stricter of their levels applies. Unmatched paths take `de
 ```
 
 Optional `applies_to: formal | dst` restricts an objective to components that declare that block;
+`applies_to: inputs` restricts it to components that declare `inputs: true`;
 `applies_to: fix` restricts it to changes with a commit, between the ref and `HEAD`, carrying the
 git trailer `Assure-Kind: fix`.
 
@@ -264,6 +266,26 @@ valid mutants. The baseline does not apply.
 top-level tests the change added or modified. It passes only when it has at least one case and every
 case failed; a passing, skipped, or erroring case (including base code that does not compile with
 the new tests) fails it.
+
+**Fuzz** — `fuzz.run` evidence is JUnit from running each changed package's fuzz targets over their
+committed seed corpus only, one suite per package, with an `assure.source` property per changed
+source file. Each changed file in an `inputs: true` component fails when no suite names it, its suite
+has no cases, or any case did not pass. Coverage-guided fuzzing runs nightly in its own workflow; a
+crasher fails that workflow and is uploaded as an artifact, and feeds no objective (its result
+depends on wall-clock time).
+
+**Test budget** — `test.budget` evidence is a small JSON document (`schemas/test-budget.schema.json`;
+no standard format exists for test counts) listing added cases per test file and added lines per
+source file. Per level, the change may add max(`floor`, ⌈added source lines ÷ `lines_per_case`⌉)
+cases, from the catalog's `budget` field (not `threshold`, which stays a 0–100 percentage). Over
+budget fails the level; only an owner waiver justifies it.
+
+**Coverage resolution** — `coverage.resolution` evidence is LCOV with `FN` records.
+`.assure/coverage-resolutions.yaml` (human-only) holds `{path, function, resolution, rationale,
+approver}` entries, `resolution` one of `missing-test`, `missing-requirement`, `dead`, `deactivated`.
+Each added line with zero hits must fall in a function that has a resolution. Resolutions key on the
+function name, never the line, and do not expire; one whose function is gone is reported as
+removable. "Verdict" is reserved for gate decisions (invariant 2).
 
 **Provenance** — `.assure/provenance/<session_id>.jsonl`, one committed file per session
 (append-only, written only by `assure record`; protected from agent edits):
@@ -334,7 +356,7 @@ Schemas: `schemas/adapter-{describe,classify,run}.schema.json`; `lint` is valida
 | VER-FAIL-ON-BASE | Bugfix tests fail on base commit | req | req | req | adv |
 | VER-TEST-BUDGET | New test cases within budget or justified | req | req | req | adv |
 | VER-ROBUST-FUZZ | Fuzz targets exist and ran for input-handling code | req | req | adv | – |
-| VER-COVERAGE-RESOLUTION | Uncovered code has an approved verdict (missing test / missing req / dead / deactivated) | req | adv | – | – |
+| VER-COVERAGE-RESOLUTION | Uncovered code has an approved resolution (missing test / missing req / dead / deactivated) | req | adv | – | – |
 | IND-VERIFIER-DISTINCT | Verification authored by a different agent/human than implementation | tier3 | tier1 | – | – |
 | CFG-PROTECTED | No agent-authored changes to protected files | req | req | req | req |
 | FM-COMPLETE | Lean model builds with `--wfail`; zero `sorry`; axiom-audit reports no violations | adv | adv | adv | – |
@@ -400,7 +422,7 @@ Role rules are enforced by `guard`, keyed on the `agent_type` field that PreTool
 subagent tool calls. Claude Code ignores `hooks` and `permissionMode` in plugin subagent frontmatter,
 so frontmatter cannot enforce roles; `tools` / `disallowedTools` stay as defense-in-depth.
 
-Skills: one generic `assure-testing` skill (philosophy, fail-first loop, coverage verdicts,
+Skills: one generic `assure-testing` skill (philosophy, fail-first loop, coverage resolutions,
 how to read `assure` output, designing for deterministic simulation, Lean model + differential
 testing) + per-language reference files shipped by adapters.
 
@@ -456,6 +478,8 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
 - Parser: LCOV
 - Go adapter `run` for: fuzz (seed corpus in PR, time-boxed nightly), test budget;
   `VER-COVERAGE-RESOLUTION`
+- CI: an always-running `assure-gate` job is the required check, so a path-filtered skip never
+  leaves an unrelated PR Pending
 - ✅ Required status check on the pilot repo (blocking levels A–B)
 
 **M4 — Subagents, provenance, skills**

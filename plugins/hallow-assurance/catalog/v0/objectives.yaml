@@ -63,15 +63,21 @@
   source: [hallow-assurance charter]
   levels: { A: required, B: required, C: required, D: advisory }
   evidence: test.budget
+  budget:
+    A: { floor: 3, lines_per_case: 15 }
+    B: { floor: 3, lines_per_case: 15 }
+    C: { floor: 3, lines_per_case: 15 }
+    D: { floor: 3, lines_per_case: 15 }
 
 - id: VER-ROBUST-FUZZ
   title: Fuzz targets exist and ran for input-handling code
   source: [DO-178B robustness testing]
   levels: { A: required, B: required, C: advisory }
   evidence: fuzz.run
+  applies_to: inputs
 
 - id: VER-COVERAGE-RESOLUTION
-  title: Uncovered code has an approved verdict (missing test, missing requirement, dead, deactivated)
+  title: Uncovered code has an approved resolution (missing test, missing requirement, dead, deactivated)
   source: [DO-178B structural coverage analysis resolution]
   levels: { A: required, B: advisory }
   evidence: coverage.resolution

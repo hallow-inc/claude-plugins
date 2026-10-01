@@ -1,0 +1,15 @@
+{
+  "unknown-resolution.yaml": [{"location": "/0/resolution", "keyword": "enum"}],
+  "missing-approver.yaml": [{"location": "/0", "keyword": "required"}],
+  "short-rationale.yaml": [{"location": "/0/rationale", "keyword": "minLength"}],
+  "extra-field.yaml": [{"location": "/0", "keyword": "additionalProperties"}],
+  "placeholder-approver.yaml": [{"location": "/0/approver", "keyword": "not"}],
+  "malformed-approver.yaml": [{"location": "/0/approver", "keyword": "pattern"}],
+  "empty-function.yaml": [{"location": "/0/function", "keyword": "minLength"}],
+  "absolute-path.yaml": [{"location": "/0/path", "keyword": "pattern"}],
+  "approver-not-string.yaml": [{"location": "/0/approver", "keyword": "type"}],
+  "rationale-not-string.yaml": [{"location": "/0/rationale", "keyword": "type"}],
+  "not-array.yaml": [{"location": "", "keyword": "type"}],
+  "entry-not-object.yaml": [{"location": "/0", "keyword": "type"}],
+  "missing-function.yaml": [{"location": "/0", "keyword": "required"}]
+}

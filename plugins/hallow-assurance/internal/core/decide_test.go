@@ -366,6 +366,16 @@ func TestFixObjectivesNeedAFixCommit(t *testing.T) {
 		if got := Applicable(plain, changed); got != listed {
 			t.Fatalf("unrestricted objective Applicable = %v, want %v; the Fix flag must not affect it", got, listed)
 		}
+		inputs := o
+		inputs.AppliesTo = "inputs"
+		listedInputs := false
+		for i := range changed {
+			changed[i].Inputs = rapid.Bool().Draw(t, "inputs")
+			listedInputs = listedInputs || (changed[i].Inputs && o.Levels[changed[i].Level] != "")
+		}
+		if got := Applicable(inputs, changed); got != listedInputs {
+			t.Fatalf("inputs Applicable = %v, want %v; an inputs objective must apply exactly through listed-level files that declare inputs, however many other files changed", got, listedInputs)
+		}
 	})
 }
 

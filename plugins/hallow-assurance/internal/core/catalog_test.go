@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"pgregory.net/rapid"
@@ -148,4 +149,100 @@ func TestStarterCatalogRestrictsFailOnBaseToFixes(t *testing.T) {
 		}
 	}
 	t.Fatal("VER-FAIL-ON-BASE missing from catalog v0")
+}
+
+func TestStarterCatalogBudgetFuzzScopeAndNoVerdictTitles(t *testing.T) {
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, o := range c.Objectives {
+		if strings.Contains(strings.ToLower(o.Title), "verdict") {
+			t.Errorf("%s title %q says verdict; only the evaluator decides, so no objective may claim to", o.ID, o.Title)
+		}
+		switch o.ID {
+		case "VER-TEST-BUDGET":
+			found[o.ID] = true
+			for _, l := range levels {
+				if got := o.Budget[l]; got != (Budget{Floor: 3, LinesPerCase: 15}) {
+					t.Errorf("VER-TEST-BUDGET budget at %s = %+v, want {3 15}; the charter fixes the starter numbers", l, got)
+				}
+			}
+		case "VER-ROBUST-FUZZ":
+			found[o.ID] = true
+			if o.AppliesTo != "inputs" {
+				t.Errorf("VER-ROBUST-FUZZ applies_to = %q, want inputs; otherwise it demands fuzz targets for code that takes no external input", o.AppliesTo)
+			}
+		}
+	}
+	for _, id := range []string{"VER-TEST-BUDGET", "VER-ROBUST-FUZZ"} {
+		if !found[id] {
+			t.Errorf("%s missing from catalog v0", id)
+		}
+	}
+}
+
+type budgetBreakage struct {
+	name string
+	loc  string
+	edit func()
+}
+
+func budgetObjective(t *rapid.T) (o, bud map[string]any, present, absent []string) {
+	lv := map[string]any{}
+	for _, l := range levels {
+		if rapid.Bool().Draw(t, "has"+string(l)) {
+			lv[string(l)] = "required"
+		}
+	}
+	if len(lv) == 0 {
+		lv["C"] = "advisory"
+	}
+	bud = map[string]any{}
+	for _, l := range levels {
+		if _, ok := lv[string(l)]; ok {
+			present = append(present, string(l))
+			bud[string(l)] = map[string]any{"floor": rapid.IntRange(1, 9).Draw(t, "floor"), "lines_per_case": rapid.IntRange(1, 99).Draw(t, "lpc")}
+		} else {
+			absent = append(absent, string(l))
+		}
+	}
+	o = map[string]any{"id": "VER-X", "title": "t", "source": []any{"s"}, "levels": lv, "evidence": "e"}
+	return o, bud, present, absent
+}
+
+func TestBudgetRulesLoadFailsExactlyWhereBroken(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		o, bud, present, absent := budgetObjective(t)
+		isBudget := rapid.Bool().Draw(t, "isBudget")
+		var bs []budgetBreakage
+		switch {
+		case isBudget:
+			o["evidence"] = "test.budget"
+			o["budget"] = bud
+			l := rapid.SampledFrom(present).Draw(t, "dropped")
+			bs = append(bs,
+				budgetBreakage{"budget missing a level", "/0/budget/" + l, func() { delete(bud, l) }},
+				budgetBreakage{"threshold on test.budget", "/0/threshold", func() { o["threshold"] = map[string]any{l: 50} }})
+		case rapid.Bool().Draw(t, "stray"):
+			o["budget"] = bud
+			bs = []budgetBreakage{{"budget on non-test.budget evidence", "/0/budget", func() {}}}
+		}
+		if len(absent) > 0 && isBudget {
+			l := rapid.SampledFrom(absent).Draw(t, "inapplicable")
+			bs = append(bs, budgetBreakage{"budget for inapplicable level", "/0/budget/" + l, func() { bud[l] = map[string]any{"floor": 1, "lines_per_case": 1} }})
+		}
+		if len(bs) == 0 || (isBudget && rapid.Bool().Draw(t, "intact")) {
+			if _, err := parseCatalog("c.yaml", mustJSON([]any{o})); err != nil {
+				t.Fatalf("catalog obeying every budget rule rejected: %v", err)
+			}
+			return
+		}
+		b := bs[rapid.IntRange(0, len(bs)-1).Draw(t, "breakage")]
+		b.edit()
+		if _, err := parseCatalog("c.yaml", mustJSON([]any{o})); !problemAt(err, b.loc) {
+			t.Fatalf("%s: want problem at %s, got %v", b.name, b.loc, err)
+		}
+	})
 }

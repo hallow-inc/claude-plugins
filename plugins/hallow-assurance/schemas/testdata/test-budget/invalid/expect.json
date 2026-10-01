@@ -1,0 +1,21 @@
+{
+  "negative-cases.json": [{"location": "/files/0/added_cases", "keyword": "minimum"}],
+  "negative-lines.json": [{"location": "/files/0/changed_lines", "keyword": "minimum"}],
+  "fractional-count.json": [{"location": "/files/0/added_cases", "keyword": "type"}],
+  "unknown-role.json": [{"location": "/files/0/role", "keyword": "enum"}],
+  "test-role-with-lines.json": [{"location": "/files/0", "keyword": "required"}, {"location": "/files/0/changed_lines", "keyword": ""}],
+  "source-role-with-cases.json": [{"location": "/files/0", "keyword": "required"}, {"location": "/files/0/added_cases", "keyword": ""}],
+  "extra-field.json": [{"location": "/files/0", "keyword": "additionalProperties"}],
+  "source-extra-field.json": [{"location": "/files/0", "keyword": "additionalProperties"}],
+  "extra-top-level.json": [{"location": "", "keyword": "additionalProperties"}],
+  "wrong-version.json": [{"location": "/version", "keyword": "const"}],
+  "missing-files.json": [{"location": "", "keyword": "required"}],
+  "files-not-array.json": [{"location": "/files", "keyword": "type"}],
+  "file-not-object.json": [{"location": "/files/0", "keyword": "type"}],
+  "not-object.json": [{"location": "", "keyword": "type"}],
+  "absolute-path.json": [{"location": "/files/0/path", "keyword": "pattern"}],
+  "missing-path.json": [{"location": "/files/0", "keyword": "required"}],
+  "missing-count.json": [{"location": "/files/0", "keyword": "required"}],
+  "source-missing-lines.json": [{"location": "/files/0", "keyword": "required"}],
+  "missing-role.json": [{"location": "/files/0", "keyword": "required"}]
+}

@@ -54,11 +54,24 @@ var globGen = rapid.Custom(func(t *rapid.T) string {
 func TestSchemaValidManifestWithWellFormedGlobsLoads(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		var comps []string
+		var wantInputs []bool
 		for range rapid.IntRange(0, 4).Draw(t, "n") {
-			comps = append(comps, "{path: '"+globGen.Draw(t, "glob")+"', level: "+string(rapid.SampledFrom(levels).Draw(t, "lvl"))+"}")
+			inputs := rapid.Bool().Draw(t, "inputs")
+			wantInputs = append(wantInputs, inputs)
+			c := "{path: '" + globGen.Draw(t, "glob") + "', level: " + string(rapid.SampledFrom(levels).Draw(t, "lvl"))
+			if inputs {
+				c += ", inputs: true"
+			}
+			comps = append(comps, c+"}")
 		}
-		if _, err := parseManifest("m.yaml", []byte(manifestYAML(comps...))); err != nil {
+		m, err := parseManifest("m.yaml", []byte(manifestYAML(comps...)))
+		if err != nil {
 			t.Fatal(err)
+		}
+		for i, want := range wantInputs {
+			if m.Components[i].Inputs != want {
+				t.Fatalf("component %d Inputs = %v, want %v; fuzz scoping would select the wrong components", i, m.Components[i].Inputs, want)
+			}
 		}
 	})
 }

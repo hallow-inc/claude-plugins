@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/test-budget.schema.json",
+  "title": "test.budget evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "files"],
+  "properties": {
+    "version": { "const": 0 },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/file" } }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role"],
+      "properties": {
+        "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+        "role": { "enum": ["test", "source"] },
+        "added_cases": { "$ref": "#/$defs/count" },
+        "changed_lines": { "$ref": "#/$defs/count" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "test" } }, "required": ["role"] },
+          "then": { "required": ["added_cases"], "properties": { "changed_lines": false } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "source" } }, "required": ["role"] },
+          "then": { "required": ["changed_lines"], "properties": { "added_cases": false } }
+        }
+      ]
+    }
+  }
+}

@@ -2,9 +2,6 @@ name: hallow-assurance
 
 on:
   pull_request:
-    paths:
-      - 'plugins/hallow-assurance/**'
-      - '.github/workflows/hallow-assurance.yml'
   push:
     branches: [master]
     paths:
@@ -23,7 +20,40 @@ defaults:
     working-directory: plugins/hallow-assurance
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != pull_request ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base=$(git merge-base HEAD "origin/$BASE_REF")
+          changed=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml)
+          if [ -n "$changed" ]; then run=true; else run=false; fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   go:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -71,3 +101,26 @@ jobs:
           go build -o "$bin/assure-adapter-go" ./adapters/go/assure-adapter-go
           base=$(git merge-base HEAD "origin/$BASE_REF")
           PATH="$bin:$PATH" assure evaluate --changed-from "$base" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  assure-gate:
+    needs: [changes, go]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Decide
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RUN: ${{ needs.changes.outputs.run }}
+          GO: ${{ needs.go.result }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANGES" = success ] && { [ "$GO" = success ] || { [ "$RUN" = false ] && [ "$GO" = skipped ]; }; }; then
+            exit 0
+          fi
+          echo "::error::assure-gate: changes=$CHANGES run=$RUN go=$GO"
+          exit 1

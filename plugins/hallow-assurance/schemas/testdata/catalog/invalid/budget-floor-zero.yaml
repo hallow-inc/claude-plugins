@@ -1,0 +1,7 @@
+- id: VER-TEST-BUDGET
+  title: Added test cases stay proportionate
+  source: [DO-178C 6.4]
+  levels: { B: required }
+  evidence: test.budget
+  budget:
+    B: { floor: 0, lines_per_case: 15 }

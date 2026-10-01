@@ -33,7 +33,8 @@
         "path": { "$ref": "common.schema.json#/$defs/repoPath" },
         "level": { "$ref": "common.schema.json#/$defs/level" },
         "formal": { "$ref": "#/$defs/formal" },
-        "dst": { "$ref": "#/$defs/dst" }
+        "dst": { "$ref": "#/$defs/dst" },
+        "inputs": { "const": true }
       }
     },
     "formal": {

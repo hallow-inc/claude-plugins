@@ -21,8 +21,16 @@ type Objective struct {
 	Evidence  string
 	Levels    map[Level]string
 	Threshold map[Level]float64
+	Budget    map[Level]Budget
 	AppliesTo string
 }
+
+type Budget struct {
+	Floor        int
+	LinesPerCase int
+}
+
+const budgetEvidence = "test.budget"
 
 type Catalog struct {
 	Version    string
@@ -62,7 +70,7 @@ func parseCatalog(file string, data []byte) (Catalog, error) {
 		for l, s := range m["levels"].(map[string]any) {
 			o.Levels[Level(l)] = s.(string)
 		}
-		for _, field := range []string{"threshold", "independence"} {
+		for _, field := range []string{"threshold", "independence", "budget"} {
 			perLevel, _ := m[field].(map[string]any)
 			for _, l := range sortedKeys(perLevel) {
 				if _, ok := o.Levels[Level(l)]; !ok {
@@ -82,10 +90,39 @@ func parseCatalog(file string, data []byte) (Catalog, error) {
 				o.Threshold[Level(l)] = f
 			}
 		}
+		o.Budget = budgetOf(p, ptr, o, m)
 		o.AppliesTo, _ = m["applies_to"].(string)
 		c.Objectives = append(c.Objectives, o)
 	}
 	return c, p.err(file)
+}
+
+func budgetOf(p *problems, ptr string, o Objective, m map[string]any) map[Level]Budget {
+	perLevel, has := m["budget"].(map[string]any)
+	if o.Evidence != budgetEvidence {
+		if has {
+			p.add(ptr+"/budget", "budget", "budget is only allowed on %s objectives", budgetEvidence)
+		}
+		return nil
+	}
+	if _, ok := m["threshold"]; ok {
+		p.add(ptr+"/threshold", "budget", "%s objectives take a budget, not a threshold", budgetEvidence)
+	}
+	out := map[Level]Budget{}
+	for _, l := range levels {
+		if _, applies := o.Levels[l]; !applies {
+			continue
+		}
+		b, ok := perLevel[string(l)].(map[string]any)
+		if !ok {
+			p.add(ptr+"/budget/"+string(l), "budget", "%s has no budget for level %s", o.ID, l)
+			continue
+		}
+		floor, _ := b["floor"].(json.Number).Int64()
+		lpc, _ := b["lines_per_case"].(json.Number).Int64()
+		out[l] = Budget{Floor: int(floor), LinesPerCase: int(lpc)}
+	}
+	return out
 }
 
 func sortedKeys(m map[string]any) []string {

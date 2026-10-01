@@ -1,0 +1,4 @@
+- path: internal/core/fast.go
+  function: DecideFast
+  resolution: dead
+  rationale: Error branch needs a fault-injecting filesystem

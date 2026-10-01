@@ -38,6 +38,9 @@ type Evidence struct {
 	Mutation bool
 	Mutants  []Mutant
 	Base     *BaseRun
+	Fuzz     *FuzzRun
+	Budget   *TestBudget
+	Coverage *Coverage
 }
 
 type ChangedFile struct {
@@ -45,14 +48,18 @@ type ChangedFile struct {
 	Level  Level
 	Formal bool
 	DST    bool
+	Inputs bool
 	Fix    bool
+	Role   Role
+	Lines  []int
 }
 
 func (m *Manifest) ChangedFile(path string) ChangedFile {
 	comp, level := m.Resolve(path)
 	f := ChangedFile{Path: path, Level: level}
 	if comp >= 0 {
-		f.Formal, f.DST = m.Components[comp].Formal, m.Components[comp].DST
+		c := m.Components[comp]
+		f.Formal, f.DST, f.Inputs = c.Formal, c.DST, c.Inputs
 	}
 	return f
 }
@@ -63,6 +70,8 @@ func inScope(o Objective, f ChangedFile) bool {
 		return f.Formal
 	case "dst":
 		return f.DST
+	case "inputs":
+		return f.Inputs
 	case "fix":
 		return f.Fix
 	}
@@ -82,6 +91,7 @@ type Outcome struct {
 	Baselined      int
 	UnderThreshold int
 	BaselineUsed   map[Fingerprint]int
+	Resolutions    []Resolution
 }
 
 func changedStatus(o Objective, changed []ChangedFile) (req, adv bool, applicable []string) {
@@ -235,10 +245,26 @@ func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waive
 		if ev.Mutation && len(pending) == 0 {
 			d.mutation(o, ev.Mutants, active)
 		}
+		out.Resolutions = d.fileRules(o, changed, ev, req, active)
 	}
 	d.located(o, kept, req, active)
 	out.Details = append(d.details, d.excused...)
 	out.Waivers = d.applied
 	out.Status = d.status()
 	return out
+}
+
+func (d *decision) fileRules(o Objective, changed []ChangedFile, ev Evidence, req bool, active []Waiver) []Resolution {
+	if ev.Fuzz != nil {
+		d.located(o, fuzzFindings(o, changed, *ev.Fuzz), req, active)
+	}
+	if ev.Budget != nil {
+		d.budget(o, changed, *ev.Budget, active)
+	}
+	if ev.Coverage == nil {
+		return nil
+	}
+	fs, used := coverageFindings(o, changed, *ev.Coverage)
+	d.located(o, fs, req, active)
+	return used
 }

@@ -1,0 +1,5 @@
+{"version": 0, "files": [
+  {"path": "internal/core/catalog_test.go", "role": "test", "added_cases": 4},
+  {"path": "internal/core/catalog.go", "role": "source", "changed_lines": 42},
+  {"path": "internal/core/empty_test.go", "role": "test", "added_cases": 0}
+]}

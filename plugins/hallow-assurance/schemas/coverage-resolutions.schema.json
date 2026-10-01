@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/coverage-resolutions.schema.json",
+  "title": ".assure/coverage-resolutions.yaml",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["path", "function", "resolution", "rationale", "approver"],
+    "properties": {
+      "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+      "function": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "resolution": { "enum": ["missing-test", "missing-requirement", "dead", "deactivated"] },
+      "rationale": { "type": "string", "minLength": 20 },
+      "approver": {
+        "type": "string",
+        "pattern": "^@?[A-Za-z0-9](-?[A-Za-z0-9])*$",
+        "not": { "const": "TODO" }
+      }
+    }
+  }
+}

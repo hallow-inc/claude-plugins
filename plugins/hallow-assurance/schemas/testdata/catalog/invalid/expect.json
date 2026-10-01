@@ -3,5 +3,14 @@
   "lowercase-id.yaml": [{"location": "/0/id", "keyword": "pattern"}],
   "threshold-out-of-range.yaml": [{"location": "/0/threshold/A", "keyword": "maximum"}],
   "unknown-level-status.yaml": [{"location": "/0/levels/A", "keyword": "enum"}],
-  "unknown-applies-to.yaml": [{"location": "/0/applies_to", "keyword": "enum"}]
+  "unknown-applies-to.yaml": [{"location": "/0/applies_to", "keyword": "enum"}],
+  "budget-floor-zero.yaml": [{"location": "/0/budget/B/floor", "keyword": "minimum"}],
+  "budget-lines-zero.yaml": [{"location": "/0/budget/B/lines_per_case", "keyword": "minimum"}],
+  "budget-fractional.yaml": [{"location": "/0/budget/B/floor", "keyword": "type"}],
+  "budget-extra-field.yaml": [{"location": "/0/budget/B", "keyword": "additionalProperties"}],
+  "budget-missing-field.yaml": [{"location": "/0/budget/B", "keyword": "required"}],
+  "budget-unknown-level.yaml": [{"location": "/0/budget", "keyword": "additionalProperties"}],
+  "budget-lines-fractional.yaml": [{"location": "/0/budget/B/lines_per_case", "keyword": "type"}],
+  "budget-level-not-object.yaml": [{"location": "/0/budget/B", "keyword": "type"}],
+  "budget-not-object.yaml": [{"location": "/0/budget", "keyword": "type"}]
 }

@@ -2,5 +2,7 @@
   "unknown-status.json": [{"location": "/objectives/0/status", "keyword": "enum"}],
   "missing-date.json": [{"location": "", "keyword": "required"}],
   "short-sha.json": [{"location": "/commit", "keyword": "pattern"}],
-  "zero-count-removable.json": [{"location": "/removable_baseline/0/unused", "keyword": "minimum"}]
+  "zero-count-removable.json": [{"location": "/removable_baseline/0/unused", "keyword": "minimum"}],
+  "resolutions-not-array.json": [{"location": "/objectives/0/resolutions", "keyword": "type"}],
+  "removable-resolutions-not-array.json": [{"location": "/removable_resolutions", "keyword": "type"}]
 }

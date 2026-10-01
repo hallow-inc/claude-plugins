@@ -1,0 +1,8 @@
+version: 0
+catalog: v0
+languages: [go]
+default_level: C
+components:
+  - path: internal/chat/**
+    level: B
+    inputs: true

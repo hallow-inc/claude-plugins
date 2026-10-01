@@ -2,4 +2,10 @@ version: 0
 catalog: v0
 languages: [go]
 default_level: B
-components: []
+components:
+  - path: internal/hookio/**
+    level: B
+    inputs: true
+  - path: internal/evidence/**
+    level: B
+    inputs: true
