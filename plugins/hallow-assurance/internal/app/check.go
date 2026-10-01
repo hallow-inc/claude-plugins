@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -25,6 +26,8 @@ const (
 type Result struct {
 	Lang string
 	core.Outcome
+	Errs []error
+	Keys []string
 }
 
 type Report struct {
@@ -39,6 +42,36 @@ func (r Report) Blocking() bool {
 		}
 	}
 	return false
+}
+
+func (r Report) Failures() []core.FailureKey {
+	var fs []core.FailureKey
+	for _, res := range r.Results {
+		if res.Status == core.Fail {
+			fs = append(fs, core.FailureKey{Objective: res.ID, Lang: res.Lang, Keys: res.Keys})
+		}
+	}
+	return fs
+}
+
+func (r Report) OutsideReach() bool {
+	for _, res := range r.Results {
+		if res.Status == core.Fail && (len(res.Errs) == 0 || slices.ContainsFunc(res.Errs, func(e error) bool { return !core.OutsideReach(e) })) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r Report) Remedies() []string {
+	var out []string
+	for _, res := range r.Results {
+		if res.Status == core.Fail && slices.ContainsFunc(res.Errs, func(e error) bool { return errors.Is(e, core.ErrAdapterUnstartable) }) {
+			out = append(out, "install "+adapterproto.Executable(res.Lang)+" on PATH, then restart Claude Code")
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func git(root string, args ...string) ([]string, error) {
@@ -88,14 +121,14 @@ type job struct {
 	out   string
 }
 
-func problem(lang, id, msg string) Result {
-	return Result{Lang: lang, ID: id, Status: core.Fail, Details: []string{msg}}
+func problem(lang, id string, err error) Result {
+	return Result{Lang: lang, Outcome: core.Outcome{ID: id, Status: core.Fail, Details: []string{err.Error()}}, Errs: []error{err}}
 }
 
 func FastCheck(m *core.Manifest, ref, label string) Report {
 	changed, err := ChangedFiles(m.Root, ref)
 	if err != nil {
-		return Report{Results: []Result{problem("-", "changed-files", err.Error())}}
+		return Report{Results: []Result{problem("-", "changed-files", err)}}
 	}
 	rep := Report{Changed: len(changed)}
 	if len(changed) == 0 {
@@ -104,16 +137,16 @@ func FastCheck(m *core.Manifest, ref, label string) Report {
 	descs, errs := adapterproto.Descriptions(m.Root, m.Languages)
 	for _, lang := range m.Languages {
 		if err := errs[lang]; err != nil {
-			rep.Results = append(rep.Results, problem(lang, "describe", err.Error()))
+			rep.Results = append(rep.Results, problem(lang, "describe", err))
 		}
 	}
 	ws, err := core.LoadWaivers(m.Root)
 	if err != nil {
-		rep.Results = append(rep.Results, problem("-", "waivers", err.Error()))
+		rep.Results = append(rep.Results, problem("-", "waivers", err))
 	}
 	bl, err := core.LoadBaseline(m.Root)
 	if err != nil {
-		rep.Results = append(rep.Results, problem("-", "baseline", err.Error()))
+		rep.Results = append(rep.Results, problem("-", "baseline", err))
 	}
 	date := time.Now().UTC().Format(time.DateOnly)
 	jobs, bad := plan(m, descs, changed, filepath.Join(m.Root, EvidenceDir, label))
@@ -123,7 +156,7 @@ func FastCheck(m *core.Manifest, ref, label string) Report {
 	for i, j := range jobs {
 		wg.Go(func() {
 			ev, _ := collect(m, j, ref, RunTimeout)
-			results[i] = Result{Lang: j.lang, Outcome: core.DecideObjective(j.obj, j.files, ev, ws, bl.For(j.obj.ID), date)}
+			results[i] = Result{Lang: j.lang, Outcome: core.DecideObjective(j.obj, j.files, ev, ws, bl.For(j.obj.ID), date), Errs: ev.Errs, Keys: ev.Keys()}
 		})
 	}
 	wg.Wait()
@@ -138,7 +171,7 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 	}
 	roles, err := core.NewRoles(patterns)
 	if err != nil {
-		return nil, []Result{problem("-", "describe", err.Error())}
+		return nil, []Result{problem("-", "describe", err)}
 	}
 	files := map[string][]core.ChangedFile{}
 	for _, p := range changed {
@@ -167,7 +200,7 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 		for _, id := range ids {
 			o, ok := byID[id]
 			if !ok {
-				bad = append(bad, problem(lang, id, fmt.Sprintf("%s marks %s fast, but catalog %s has no such objective", adapterproto.Executable(lang), id, m.Catalog.Version)))
+				bad = append(bad, problem(lang, id, fmt.Errorf("%s marks %s fast, but catalog %s has no such objective", adapterproto.Executable(lang), id, m.Catalog.Version)))
 				continue
 			}
 			jobs = append(jobs, job{lang: lang, obj: o, files: files[lang], out: filepath.Join(outRoot, lang, id)})
@@ -179,7 +212,7 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 func collect(m *core.Manifest, j job, ref string, timeout time.Duration) (core.Evidence, map[string]string) {
 	run, err := adapterproto.RunObjective(m.Root, j.lang, j.obj.ID, ref, j.out, timeout)
 	if err != nil {
-		return core.Evidence{Problems: []string{err.Error()}}, nil
+		return core.Evidence{Problems: []string{err.Error()}, Errs: []error{err}}, nil
 	}
 	var ev core.Evidence
 	found := false
@@ -210,7 +243,7 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 			return
 		}
 		for _, f := range j.Failing {
-			ev.Failing = append(ev.Failing, failingText(f))
+			ev.Failing = append(ev.Failing, core.TestFailure{Name: f.Name, Text: failingText(f)})
 		}
 	case "lint.sarif":
 		results, err := evidence.ParseSARIF(data)

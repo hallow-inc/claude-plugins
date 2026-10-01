@@ -259,7 +259,7 @@ func TestCompactDoesNotReplaceTheSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d := drift(m, session); len(d) != 1 || !strings.Contains(d[0], ".assure/waivers.yaml") {
+	if d, err := drift(m, session); err != nil || len(d) != 1 || !strings.Contains(d[0], ".assure/waivers.yaml") {
 		t.Fatalf("drift after compact = %v", d)
 	}
 }

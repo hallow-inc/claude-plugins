@@ -12,11 +12,16 @@ import (
 
 func shim(t *testing.T, dir, path, stdin string) (int, string, string) {
 	t.Helper()
+	return shimEvent(t, "stop", dir, path, stdin)
+}
+
+func shimEvent(t *testing.T, event, dir, path, stdin string) (int, string, string) {
+	t.Helper()
 	abs, err := filepath.Abs("plugin/bin/assure-hook")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.CommandContext(t.Context(), "/bin/sh", abs, "stop")
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", abs, event)
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + path, "PWD=" + dir}
 	cmd.Stdin = strings.NewReader(stdin)
@@ -65,7 +70,7 @@ func TestShimIsInertWithoutManifest(t *testing.T) {
 }
 
 func TestShimBlocksWhenAssureMissing(t *testing.T) {
-	code, _, errb := shim(t, adoptedDir(t), "/usr/bin:/bin", "{}")
+	code, _, errb := shimEvent(t, "pre-tool-use", adoptedDir(t), "/usr/bin:/bin", "{}")
 	if code != 2 || !strings.Contains(errb, "not on PATH") || !strings.Contains(errb, "README") {
 		t.Fatalf("got %d %q", code, errb)
 	}
@@ -73,7 +78,7 @@ func TestShimBlocksWhenAssureMissing(t *testing.T) {
 
 func TestShimBlocksOnProtocolMismatch(t *testing.T) {
 	path := fakeAssure(t, `[ "$1 $2" = "hook protocol" ] && echo 7`)
-	code, _, errb := shim(t, adoptedDir(t), path, "{}")
+	code, _, errb := shimEvent(t, "session-start", adoptedDir(t), path, "{}")
 	if code != 2 || !strings.Contains(errb, "protocol 0") || !strings.Contains(errb, "'7'") {
 		t.Fatalf("got %d %q", code, errb)
 	}
@@ -140,4 +145,38 @@ func TestMarketplaceListsThePlugin(t *testing.T) {
 		}
 	}
 	t.Fatalf("marketplace has no hallow-assurance entry pointing at ./plugins/hallow-assurance/plugin: %+v", mk.Plugins)
+}
+
+func stopMessage(t *testing.T, code int, out string) string {
+	t.Helper()
+	var o struct {
+		SystemMessage string `json:"systemMessage"`
+	}
+	if code != 0 || json.Unmarshal([]byte(out), &o) != nil || o.SystemMessage == "" {
+		t.Fatalf("stop must allow with a JSON systemMessage: got %d %q", code, out)
+	}
+	return o.SystemMessage
+}
+
+func TestShimAllowsStopWhenAssureMissing(t *testing.T) {
+	code, out, _ := shim(t, adoptedDir(t), "/usr/bin:/bin", "{}")
+	if msg := stopMessage(t, code, out); !strings.Contains(msg, "not on PATH") || !strings.Contains(msg, "README") {
+		t.Fatalf("message %q does not say how to install assure", msg)
+	}
+}
+
+func TestShimAllowsStopOnProtocolMismatch(t *testing.T) {
+	path := fakeAssure(t, `[ "$1 $2" = "hook protocol" ] && echo 7`)
+	code, out, _ := shim(t, adoptedDir(t), path, "{}")
+	if msg := stopMessage(t, code, out); !strings.Contains(msg, "protocol 0") || !strings.Contains(msg, "speaks 7") {
+		t.Fatalf("message %q does not name both protocols", msg)
+	}
+}
+
+func TestShimStopMessageSurvivesHostileProtocolOutput(t *testing.T) {
+	path := fakeAssure(t, `[ "$1 $2" = "hook protocol" ] && printf '"\n{\\'`)
+	code, out, _ := shim(t, adoptedDir(t), path, "{}")
+	if msg := stopMessage(t, code, out); !strings.Contains(msg, "speaks unknown") {
+		t.Fatalf("message %q", msg)
+	}
 }

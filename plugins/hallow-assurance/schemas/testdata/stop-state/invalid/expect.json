@@ -1,5 +1,9 @@
 {
   "negative-blocks.json": [{"location": "/blocks", "keyword": "minimum"}],
   "fractional-blocks.json": [{"location": "/blocks", "keyword": "type"}],
-  "future-version.json": [{"location": "/version", "keyword": "const"}]
+  "future-version.json": [{"location": "/version", "keyword": "const"}],
+  "version-zero.json": [{"location": "/version", "keyword": "const"}],
+  "non-hex-fingerprint.json": [{"location": "/fingerprints/0/fingerprint", "keyword": "pattern"}],
+  "fingerprint-blocks-4.json": [{"location": "/fingerprints/0/blocks", "keyword": "maximum"}],
+  "too-many-fingerprints.json": [{"location": "/fingerprints", "keyword": "maxItems"}]
 }

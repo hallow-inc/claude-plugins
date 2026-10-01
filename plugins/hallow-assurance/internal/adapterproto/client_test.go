@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
 const goodDescribe = `{"protocol":0,"languages":["go"],"claims":["**/*.go"],"patterns":{"test":["**/*_test.go"]},"objectives":{}}`
@@ -95,4 +97,38 @@ func mustEval(t *testing.T, p string) string {
 		t.Fatal(err)
 	}
 	return r
+}
+
+func TestOnlyStartFailuresAreUnstartable(t *testing.T) {
+	t.Run("missing", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		if _, err := Resolve("go"); !errors.Is(err, core.ErrAdapterUnstartable) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("not executable on PATH", func(t *testing.T) {
+		exe := fakeAdapter(t, "go", "exit 0")
+		if err := os.Chmod(exe, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Resolve("go"); !errors.Is(err, core.ErrAdapterUnstartable) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("not executable at run", func(t *testing.T) {
+		exe := fakeAdapter(t, "go", "exit 0")
+		if err := os.Chmod(exe, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := RunDescribe(exe, t.TempDir(), "go"); !errors.Is(err, core.ErrAdapterUnstartable) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("exits 1", func(t *testing.T) {
+		exe := fakeAdapter(t, "go", "exit 1")
+		_, _, err := RunDescribe(exe, t.TempDir(), "go")
+		if err == nil || errors.Is(err, core.ErrAdapterUnstartable) {
+			t.Fatalf("an adapter that started and failed: %v", err)
+		}
+	})
 }

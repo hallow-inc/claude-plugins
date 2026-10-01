@@ -169,6 +169,14 @@ func writeState(file string, data []byte) error {
 }
 
 func ReadSnapshot(m *Manifest, session string) (Snapshot, error) {
+	s, err := readSnapshot(m, session)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("%w: %w", ErrSnapshotMissing, err)
+	}
+	return s, nil
+}
+
+func readSnapshot(m *Manifest, session string) (Snapshot, error) {
 	data, err := os.ReadFile(SnapshotPath(m.Root, session))
 	if err != nil {
 		return Snapshot{}, err

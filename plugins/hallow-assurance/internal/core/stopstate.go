@@ -4,11 +4,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
-const StopCap = 3
+const (
+	StopCap          = 3
+	stopStateVersion = 1
+	maxFingerprints  = 32
+)
 
 type StopAction int
 
@@ -16,25 +21,65 @@ const (
 	StopAllow StopAction = iota
 	StopBlock
 	StopEscalate
+	StopOutsideReach
 )
 
-type StopState struct {
-	Version int `json:"version"`
-	Blocks  int `json:"blocks"`
+type FingerprintBlocks struct {
+	Fingerprint string `json:"fingerprint"`
+	Blocks      int    `json:"blocks"`
 }
 
-func NextStop(s StopState, stopHookActive, passed bool) (StopState, StopAction) {
+type StopState struct {
+	Version      int                 `json:"version"`
+	Blocks       int                 `json:"blocks"`
+	Fingerprints []FingerprintBlocks `json:"fingerprints,omitempty"`
+}
+
+type StopCheck struct {
+	Passed       bool
+	OutsideReach bool
+	Fingerprint  string
+}
+
+func (s StopState) with(fp string, blocks int) StopState {
+	fs := slices.DeleteFunc(slices.Clone(s.Fingerprints), func(f FingerprintBlocks) bool { return f.Fingerprint == fp })
+	fs = append(fs, FingerprintBlocks{Fingerprint: fp, Blocks: blocks})
+	if len(fs) > maxFingerprints {
+		fs = fs[len(fs)-maxFingerprints:]
+	}
+	s.Fingerprints = fs
+	return s
+}
+
+func (s StopState) blocksFor(fp string) int {
+	for _, f := range s.Fingerprints {
+		if f.Fingerprint == fp {
+			return f.Blocks
+		}
+	}
+	return 0
+}
+
+func NextStop(s StopState, stopHookActive bool, c StopCheck) (StopState, StopAction) {
+	s.Version = stopStateVersion
+	n := s.blocksFor(c.Fingerprint)
+	switch {
+	case c.Passed:
+		return StopState{Version: stopStateVersion}, StopAllow
+	case c.OutsideReach:
+		return s, StopOutsideReach
+	case n >= StopCap:
+		return s, StopEscalate
+	}
 	if !stopHookActive {
 		s.Blocks = 0
 	}
-	switch {
-	case passed:
-		return StopState{}, StopAllow
-	case s.Blocks < StopCap:
-		return StopState{Blocks: s.Blocks + 1}, StopBlock
-	default:
-		return StopState{}, StopEscalate
+	if s.Blocks < StopCap {
+		s.Blocks++
+		return s.with(c.Fingerprint, n+1), StopBlock
 	}
+	s.Blocks = 0
+	return s.with(c.Fingerprint, StopCap), StopEscalate
 }
 
 func stopStatePath(root, session string) string {

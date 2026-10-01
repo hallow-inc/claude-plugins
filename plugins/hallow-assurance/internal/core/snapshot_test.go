@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -158,6 +159,20 @@ func TestPruneStateRemovesOnlyOldSessionFiles(t *testing.T) {
 	for f, want := range map[string]bool{"snapshot-old.json": false, "stop-old.json": false, "snapshot-new.json": true, "adapters.json": true} {
 		if _, err := os.Stat(filepath.Join(root, StateDir, f)); (err == nil) != want {
 			t.Errorf("%s exists=%v, want %v", f, err == nil, want)
+		}
+	}
+}
+
+func TestUnreadableSnapshotIsOutsideReach(t *testing.T) {
+	root := t.TempDir()
+	m, _ := snapshotManifest(t, root)
+	if _, err := ReadSnapshot(m, "s"); !errors.Is(err, ErrSnapshotMissing) {
+		t.Fatalf("missing snapshot: %v", err)
+	}
+	for _, body := range []string{"{", `{"version":0,"session":"s"}`, `{"version":0,"session":"other","files":[]}`} {
+		writeFile(t, root, filepath.Join(StateDir, "snapshot-s.json"), body)
+		if _, err := ReadSnapshot(m, "s"); !errors.Is(err, ErrSnapshotMissing) {
+			t.Fatalf("%q: %v", body, err)
 		}
 	}
 }

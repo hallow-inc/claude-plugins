@@ -25,9 +25,15 @@ type Finding struct {
 	Text      string
 }
 
+type TestFailure struct {
+	Name string
+	Text string
+}
+
 type Evidence struct {
 	Problems []string
-	Failing  []string
+	Errs     []error
+	Failing  []TestFailure
 	Findings []Finding
 	Mutation bool
 	Mutants  []Mutant
@@ -148,7 +154,10 @@ func (o Objective) UnderThreshold(f Finding) bool {
 }
 
 func split(o Objective, ev Evidence) (unlocated []string, located []Finding, under int) {
-	unlocated = slices.Concat(ev.Problems, ev.Failing)
+	unlocated = slices.Clone(ev.Problems)
+	for _, f := range ev.Failing {
+		unlocated = append(unlocated, f.Text)
+	}
 	findings := slices.Clone(ev.Findings)
 	slices.SortFunc(findings, compareFindings)
 	for _, f := range findings {

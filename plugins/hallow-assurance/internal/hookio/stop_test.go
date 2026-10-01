@@ -3,6 +3,7 @@ package hookio
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/app"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
+	"pgregory.net/rapid"
 )
 
 func gitIn(t *testing.T, dir string, args ...string) {
@@ -73,20 +75,60 @@ func TestStopAllowsCleanChange(t *testing.T) {
 	}
 }
 
-func TestStopBlocksOnDriftAndMissingSnapshot(t *testing.T) {
+func TestStopBlocksOnDrift(t *testing.T) {
 	root := goFixture(t)
 	writeFile(t, root, ".assure/waivers.yaml", "[] # edited through Bash\n")
-	_, out := stopWith(t, root, false)
-	if reason, _ := out["reason"].(string); !strings.Contains(reason, "changed .assure/waivers.yaml") {
-		t.Fatalf("drift not reported: %v", out)
+	code, out := stopWith(t, root, false)
+	if reason, _ := out["reason"].(string); code != 2 || !strings.Contains(reason, "changed .assure/waivers.yaml") {
+		t.Fatalf("drift not reported: %d %v", code, out)
 	}
+}
+
+func TestStopAllowsMissingSnapshotWithRestartMessage(t *testing.T) {
+	root := goFixture(t)
 	if err := os.Remove(filepath.Join(root, ".assure", "state", "snapshot-"+session+".json")); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, root, ".assure/waivers.yaml", "[]\n")
-	_, out = stopWith(t, root, false)
-	if reason, _ := out["reason"].(string); !strings.Contains(reason, "snapshot for this session is missing") {
-		t.Fatalf("missing snapshot not reported: %v", out)
+	code, out := stopWith(t, root, false)
+	if msg, _ := out["systemMessage"].(string); code != 0 || out["decision"] != nil || !strings.Contains(msg, "no protected-file snapshot") || !strings.Contains(msg, "restart Claude Code") {
+		t.Fatalf("missing snapshot: got %d %v", code, out)
+	}
+}
+
+func TestStopBlocksMissingSnapshotMixedWithFailingTest(t *testing.T) {
+	root := goFixture(t)
+	if err := os.Remove(filepath.Join(root, ".assure", "state", "snapshot-"+session+".json")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "p/p_test.go", "package p\n\nimport \"testing\"\n\nfunc TestOne(t *testing.T) { t.Fatal(\"no\") }\n")
+	code, out := stopWith(t, root, false)
+	reason, _ := out["reason"].(string)
+	if code != 2 || !strings.Contains(reason, "TestOne") || !strings.Contains(reason, "snapshot") {
+		t.Fatalf("mixed failures: got %d %v", code, out)
+	}
+}
+
+func TestStopReportsEscalatedDriftWithoutBlocking(t *testing.T) {
+	root := goFixture(t)
+	writeFile(t, root, ".assure/waivers.yaml", "[] # edited by the human\n")
+	for i := range 4 {
+		stopWith(t, root, i > 0)
+	}
+	for i := range 2 {
+		code, out := stopWith(t, root, false)
+		if msg, _ := out["systemMessage"].(string); code != 0 || out["decision"] != nil || !strings.Contains(msg, ".assure/waivers.yaml") {
+			t.Fatalf("prompt %d after escalation: got %d %v", i+1, code, out)
+		}
+	}
+}
+
+func TestStopAllowsMissingAdapterNamingIt(t *testing.T) {
+	root := goFixture(t)
+	writeFile(t, root, "p/p.go", "package p\n\nfunc One() int { return 2 - 1 }\n")
+	t.Setenv("PATH", "/usr/bin:/bin")
+	code, out := stopWith(t, root, false)
+	if msg, _ := out["systemMessage"].(string); code != 0 || out["decision"] != nil || !strings.Contains(msg, "install assure-adapter-go on PATH") {
+		t.Fatalf("missing adapter: got %d %v", code, out)
 	}
 }
 
@@ -168,4 +210,69 @@ func TestStopIgnoresExpiredWaiver(t *testing.T) {
 	if code, out := stopWith(t, root, false); code != 0 || out != nil {
 		t.Fatalf("expired waiver blocked stopping: %d %v", code, out)
 	}
+}
+
+func stopInputGen(t *rapid.T) stopInput {
+	var in stopInput
+	errs := []error{
+		fmt.Errorf("lookup: %w", core.ErrAdapterUnstartable),
+		fmt.Errorf("adapter exited 1"),
+	}
+	for i := range rapid.IntRange(0, 4).Draw(t, "results") {
+		res := app.Result{Lang: "l", Outcome: core.Outcome{
+			ID:     fmt.Sprintf("OBJ-%d", i),
+			Status: rapid.SampledFrom([]core.Status{core.Pass, core.Fail, core.AdvisoryFail}).Draw(t, "status"),
+		}}
+		for range rapid.IntRange(0, 2).Draw(t, "errs") {
+			res.Errs = append(res.Errs, rapid.SampledFrom(errs).Draw(t, "err"))
+		}
+		res.Details = []string{"detail"}
+		in.rep.Results = append(in.rep.Results, res)
+	}
+	in.rep.Changed = 1
+	in.drifted = rapid.SliceOfN(rapid.SampledFrom([]string{"changed a", "added b", "removed c"}), 0, 2).Draw(t, "drifted")
+	switch rapid.IntRange(0, 2).Draw(t, "drift err") {
+	case 1:
+		in.driftErr = fmt.Errorf("%w: gone", core.ErrSnapshotMissing)
+	case 2:
+		in.driftErr = fmt.Errorf("walk failed")
+	}
+	in.active = rapid.Bool().Draw(t, "active")
+	return in
+}
+
+func TestNoSilentAllowOfAFailingStop(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		var state core.StopState
+		for range rapid.IntRange(0, 6).Draw(t, "prior") {
+			state, _ = decideStop(stopInputGen(t), state)
+		}
+		in := stopInputGen(t)
+		_, resp := decideStop(in, state)
+		if !in.rep.Blocking() && len(in.drifted) == 0 && in.driftErr == nil {
+			if resp.out != nil {
+				t.Fatalf("passing stop produced output %+v", resp.out)
+			}
+			return
+		}
+		if resp.out == nil {
+			t.Fatal("failing stop allowed silently")
+		}
+		text := resp.out.SystemMessage
+		if resp.out.Decision == "block" {
+			text = resp.out.Reason
+		} else if resp.code != 0 || text == "" {
+			t.Fatalf("allow of a failing stop: code %d, message %q", resp.code, text)
+		}
+		for _, res := range in.rep.Results {
+			if res.Status == core.Fail && !strings.Contains(text, res.ID) {
+				t.Fatalf("message does not name failing %s:\n%s", res.ID, text)
+			}
+		}
+		for _, d := range in.drifted {
+			if !strings.Contains(text, d) {
+				t.Fatalf("message does not name drift %q:\n%s", d, text)
+			}
+		}
+	})
 }

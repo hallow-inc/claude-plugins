@@ -427,12 +427,27 @@ var snapshotGen = rapid.Custom(func(t *rapid.T) sample {
 
 var stopStateGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
-	doc := map[string]any{"version": 0, "blocks": rapid.IntRange(0, 10).Draw(t, "blocks")}
+	fps := rapid.SliceOfNDistinct(rapid.StringMatching(`[0-9a-f]{64}`), 1, 32, rapid.ID[string]).Draw(t, "fingerprints")
+	entries := make([]any, len(fps))
+	for i, f := range fps {
+		entries[i] = map[string]any{"fingerprint": f, "blocks": rapid.IntRange(1, 3).Draw(t, "fp blocks")}
+	}
+	tooMany := make([]any, 33)
+	for i := range tooMany {
+		tooMany[i] = map[string]any{"fingerprint": fmt.Sprintf("%064x", i), "blocks": 1}
+	}
+	doc := map[string]any{"version": 1, "blocks": rapid.IntRange(0, 10).Draw(t, "blocks"), "fingerprints": entries}
 	r.root("x", []any{})
 	r.closed("")
 	r.required("", "version", "blocks")
-	r.bad("", "version", 1, "0")
+	r.bad("", "version", 0, 2, "1")
 	r.bad("", "blocks", -1, 1.5, "1")
+	r.bad("", "fingerprints", "x", tooMany)
+	r.bad("/fingerprints", "0", "x")
+	r.closed("/fingerprints/0")
+	r.required("/fingerprints/0", "fingerprint", "blocks")
+	r.bad("/fingerprints/0", "fingerprint", 7, fps[0][:63], fps[0][:63]+"G")
+	r.bad("/fingerprints/0", "blocks", 0, 4, 1.5)
 	return sample{doc, r.cs}
 })
 

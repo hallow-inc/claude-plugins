@@ -499,7 +499,10 @@ stays authoritative) once a stable Go implementation and JSON mapping exist.
 - `TODO(decide)` Level assignments for the pilot repo's packages
 - Retry cap for the Stop hook: resolved to 3 for v0 (M2), then allow the stop and escalate to the
   human with a `systemMessage`. It sits under Claude Code's own 8-block cap, so the escalation
-  message always comes from `assure`.
+  message always comes from `assure`. M4 (`stop-hook-no-dead-loops`): the cap also counts blocks
+  per failure fingerprint for the whole session, so an unchanged failure stops blocking after 3
+  even across prompts; failures outside the agent's reach (missing snapshot, adapter that cannot
+  start, `assure` itself missing) allow the stop with a `systemMessage` on the first attempt.
 - `TODO(decide)` Tier 2 inspector model/vendor for CI
 - Level A cannot block until the Tier 2 inspector vendor is decided, because tier3 includes tier2.
   Level B (tier1) is unaffected.
