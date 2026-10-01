@@ -148,3 +148,27 @@ func TestFingerprintListDropsOldestPastCap(t *testing.T) {
 		t.Fatalf("a full list did not round-trip through the schema: %d entries", len(got.Fingerprints))
 	}
 }
+
+func TestFingerprintListKeepsEverythingAtExactlyTheCap(t *testing.T) {
+	pool := fpPool(maxFingerprints)
+	var s StopState
+	for _, fp := range pool {
+		s, _ = NextStop(s, false, failing(fp))
+	}
+	if len(s.Fingerprints) != maxFingerprints || s.Fingerprints[0].Fingerprint != pool[0] {
+		t.Fatalf("a list at exactly the cap lost its oldest entry: kept %d, first %s", len(s.Fingerprints), s.Fingerprints[0].Fingerprint[60:])
+	}
+}
+
+func TestBlockBudgetEndsExactlyAtStopCap(t *testing.T) {
+	fp := fpPool(1)[0]
+	s := StopState{Version: stopStateVersion, Fingerprints: []FingerprintBlocks{{Fingerprint: fp, Blocks: StopCap - 1}}}
+	next, a := NextStop(s, false, failing(fp))
+	if a != StopBlock || next.blocksFor(fp) != StopCap {
+		t.Fatalf("one block left: got %v with %d recorded, want a block recording %d", a, next.blocksFor(fp), StopCap)
+	}
+	s = StopState{Version: stopStateVersion, Fingerprints: []FingerprintBlocks{{Fingerprint: fp, Blocks: StopCap}}}
+	if _, a := NextStop(s, false, failing(fp)); a != StopEscalate {
+		t.Fatalf("a spent budget got %v, want an escalation", a)
+	}
+}

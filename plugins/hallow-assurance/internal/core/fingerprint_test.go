@@ -137,3 +137,50 @@ func TestFingerprintTracksFailureIdentity(t *testing.T) {
 		}
 	})
 }
+
+func TestBaseRunKeysNameEachWayAFixFailsToProveItself(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		names := func(label string) []string {
+			return rapid.SliceOfNDistinct(rapid.StringMatching(`[a-c]{1,3}`), 0, 2, rapid.ID[string]).Draw(t, label)
+		}
+		b := BaseRun{Failed: rapid.IntRange(0, 2).Draw(t, "failed"), Passed: names("passed"), Skipped: names("skipped"), Errored: names("errored")}
+		var want []string
+		if b.Failed+len(b.Passed)+len(b.Skipped)+len(b.Errored) == 0 {
+			want = append(want, "base-no-test")
+		}
+		for _, n := range b.Passed {
+			want = append(want, "base-pass:"+n)
+		}
+		for _, n := range b.Skipped {
+			want = append(want, "base-skip:"+n)
+		}
+		if len(b.Errored) > 0 {
+			want = append(want, "base-error")
+		}
+		slices.Sort(want)
+		if got := (Evidence{Base: &b}).Keys(); !slices.Equal(got, want) {
+			t.Fatalf("base run %+v keyed %q, want %q", b, got, want)
+		}
+	})
+}
+
+func TestFingerprintKeepsFailuresThatDifferInAnyField(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		a := FailureKey{Objective: "O", Lang: "go", Keys: []string{"test:T"}}
+		if StopFingerprint([]FailureKey{a, a}, nil) != StopFingerprint([]FailureKey{a}, nil) {
+			t.Fatal("an identical failure listed twice changed the fingerprint")
+		}
+		b := FailureKey{Objective: a.Objective, Lang: a.Lang, Keys: slices.Clone(a.Keys)}
+		switch field := rapid.SampledFrom([]string{"objective", "lang", "keys"}).Draw(t, "field"); field {
+		case "objective":
+			b.Objective = "P"
+		case "lang":
+			b.Lang = "ts"
+		default:
+			b.Keys = []string{"test:U"}
+		}
+		if StopFingerprint([]FailureKey{a, b}, nil) == StopFingerprint([]FailureKey{a}, nil) {
+			t.Fatalf("a second failure differing only in %v was merged into the first, so they would share a block budget", b)
+		}
+	})
+}
