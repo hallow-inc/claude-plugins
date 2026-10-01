@@ -36,6 +36,8 @@ var description = describe{
 		"CODE-RESOURCE-BOUNDS": map[string]any{"tool": "golangci-lint resource-bounds/v1 (bodyclose, noctx, gosec G110 G112 G114)"},
 		"CODE-COMPLEXITY":      map[string]any{"tool": "gocyclo"},
 		"CODE-NO-UNSAFE":       map[string]any{"tool": "assure-adapter-go no-unsafe/v1"},
+		"VER-MUTATION-CHANGED": map[string]any{"tool": "gremlins"},
+		"VER-FAIL-ON-BASE":     map[string]any{"tool": "go test on the base commit"},
 	},
 }
 

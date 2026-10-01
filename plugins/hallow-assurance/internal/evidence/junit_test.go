@@ -75,9 +75,12 @@ func (s genSuite) want() JUnit {
 			j.Failing = append(j.Failing, Failure{Name: name, Message: c.msg, Text: c.text})
 		case "error":
 			j.Errors++
-			j.Failing = append(j.Failing, Failure{Name: name, Message: c.msg, Text: c.text})
+			j.Failing = append(j.Failing, Failure{Name: name, Message: c.msg, Text: c.text, Error: true})
 		case "skipped":
 			j.Skipped++
+			j.Skips = append(j.Skips, name)
+		default:
+			j.Passed = append(j.Passed, name)
 		}
 	}
 	for _, sub := range s.suites {
@@ -87,6 +90,8 @@ func (s genSuite) want() JUnit {
 		j.Errors += w.Errors
 		j.Skipped += w.Skipped
 		j.Failing = append(j.Failing, w.Failing...)
+		j.Passed = append(j.Passed, w.Passed...)
+		j.Skips = append(j.Skips, w.Skips...)
 	}
 	return j
 }
@@ -148,7 +153,7 @@ func escape(s string) string {
 func TestJUnitErrorTextIsKept(t *testing.T) {
 	doc := `<testsuites><testsuite><testcase name="(run)" classname="example.com/m"><error message="go test did not run">go: go.mod requires go &gt;= 1.27.1</error></testcase></testsuite></testsuites>`
 	got, err := ParseJUnit([]byte(doc))
-	want := []Failure{{Name: "example.com/m.(run)", Message: "go test did not run", Text: "go: go.mod requires go >= 1.27.1"}}
+	want := []Failure{{Name: "example.com/m.(run)", Message: "go test did not run", Text: "go: go.mod requires go >= 1.27.1", Error: true}}
 	if err != nil || !slices.Equal(got.Failing, want) {
 		t.Fatalf("got %+v, %v; a build failure must name its cause, not only the package", got.Failing, err)
 	}

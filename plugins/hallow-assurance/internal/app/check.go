@@ -229,8 +229,39 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 			}
 			ev.Findings = append(ev.Findings, f)
 		}
+	case "mutation.report":
+		readMutation(m, data, ev)
+	case "test.fail_on_base":
+		readBaseRun(data, ev)
 	default:
 		ev.Problems = append(ev.Problems, "the fast check cannot read "+typ+" evidence")
+	}
+}
+
+func readMutation(m *core.Manifest, data []byte, ev *core.Evidence) {
+	ms, err := evidence.ParseMutationReport(data)
+	if err != nil {
+		ev.Problems = append(ev.Problems, err.Error())
+		return
+	}
+	ev.Mutation = true
+	for _, x := range ms {
+		_, level := m.Resolve(x.Path)
+		ev.Mutants = append(ev.Mutants, core.Mutant{Path: x.Path, Level: level, Line: x.Line, Mutator: x.Mutator, Status: x.Status})
+	}
+}
+
+func readBaseRun(data []byte, ev *core.Evidence) {
+	j, err := evidence.ParseJUnit(data)
+	if err != nil {
+		ev.Problems = append(ev.Problems, err.Error())
+		return
+	}
+	ev.Base = &core.BaseRun{Failed: j.Failures, Passed: j.Passed, Skipped: j.Skips}
+	for _, f := range j.Failing {
+		if f.Error {
+			ev.Base.Errored = append(ev.Base.Errored, strings.TrimPrefix(failingText(f), "failing test: "))
+		}
 	}
 }
 

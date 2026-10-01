@@ -2,5 +2,6 @@
   "empty.yaml": [{"location": "", "keyword": "minItems"}],
   "lowercase-id.yaml": [{"location": "/0/id", "keyword": "pattern"}],
   "threshold-out-of-range.yaml": [{"location": "/0/threshold/A", "keyword": "maximum"}],
-  "unknown-level-status.yaml": [{"location": "/0/levels/A", "keyword": "enum"}]
+  "unknown-level-status.yaml": [{"location": "/0/levels/A", "keyword": "enum"}],
+  "unknown-applies-to.yaml": [{"location": "/0/applies_to", "keyword": "enum"}]
 }

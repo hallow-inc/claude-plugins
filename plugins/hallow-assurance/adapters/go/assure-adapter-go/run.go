@@ -36,6 +36,8 @@ var runners = map[string]runner{
 	"CODE-RESOURCE-BOUNDS": resourceBoundsPack.run,
 	"CODE-COMPLEXITY":      runComplexity,
 	"CODE-NO-UNSAFE":       runNoUnsafe,
+	"VER-MUTATION-CHANGED": runMutation,
+	"VER-FAIL-ON-BASE":     runFailOnBase,
 }
 
 func runObjective(args []string, stdout, stderr io.Writer) int {

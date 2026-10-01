@@ -275,7 +275,7 @@ func TestRunMissingLinterFails(t *testing.T) {
 
 func TestRunUnknownObjective(t *testing.T) {
 	var out, errb bytes.Buffer
-	if code := run([]string{"run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", "x"}, &out, &errb); code == 0 {
+	if code := run([]string{"run", "VER-ROBUST-FUZZ", "--changed-from", "HEAD", "--out", t.TempDir()}, &out, &errb); code == 0 {
 		t.Fatal("unknown objective exited 0")
 	}
 }

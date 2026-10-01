@@ -29,6 +29,9 @@ type Evidence struct {
 	Problems []string
 	Failing  []string
 	Findings []Finding
+	Mutation bool
+	Mutants  []Mutant
+	Base     *BaseRun
 }
 
 type ChangedFile struct {
@@ -36,6 +39,7 @@ type ChangedFile struct {
 	Level  Level
 	Formal bool
 	DST    bool
+	Fix    bool
 }
 
 func (m *Manifest) ChangedFile(path string) ChangedFile {
@@ -53,6 +57,8 @@ func inScope(o Objective, f ChangedFile) bool {
 		return f.Formal
 	case "dst":
 		return f.DST
+	case "fix":
+		return f.Fix
 	}
 	return true
 }
@@ -211,8 +217,15 @@ func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waive
 		out.Baselined += n
 	}
 	d := &decision{}
+	pending := pendingMutants(ev.Mutants)
+	if ev.Base != nil {
+		unlocated = append(unlocated, baseRunFailures(*ev.Base)...)
+	}
 	if req || adv {
-		d.unlocated(unlocated, req, cover, covered)
+		d.unlocated(slices.Concat(unlocated, pending), req, cover, covered)
+		if ev.Mutation && len(pending) == 0 {
+			d.mutation(o, ev.Mutants, active)
+		}
 	}
 	d.located(o, kept, req, active)
 	out.Details = append(d.details, d.excused...)

@@ -193,3 +193,14 @@ func TestNoLanguageKnowledgeOutsideAdapters(t *testing.T) {
 		}
 	}
 }
+
+var gremlinsFormat = regexp.MustCompile(`(?i)gremlins|"LIVED"|"NOT COVERED"|"TIMED OUT"|file_name`)
+
+func TestEvidenceReadsOnlyStandardMutationFormat(t *testing.T) {
+	keep := func(p string) bool { return !strings.HasSuffix(p, "_test.go") }
+	for _, dir := range []string{"internal/evidence", "internal/core", "internal/app"} {
+		for _, hit := range scan(t, dir, keep, gremlinsFormat) {
+			t.Errorf("Gremlins' own output format outside the Go adapter (charter invariant 10: Stryker report only): %s", hit)
+		}
+	}
+}

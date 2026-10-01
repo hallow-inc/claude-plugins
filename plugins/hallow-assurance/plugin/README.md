@@ -34,3 +34,17 @@ Then install the plugin from the `hallow-claude-plugins` marketplace:
 
 If `assure` is missing or was built from a different version than the plugin, every hook in an
 adopted repo exits 2 with a message saying which, and Claude Code blocks the action.
+
+## Declaring a bug fix
+
+End a fix commit's message with the trailer `Assure-Kind: fix`, in the last paragraph:
+
+```
+Fix off-by-one in Last
+
+Assure-Kind: fix
+```
+
+`assure evaluate` then requires every test the change adds or modifies to fail on the base commit
+(`VER-FAIL-ON-BASE`). Only committed messages count, and a squash merge usually turns the trailer
+into body text, so the check happens on the pull request.

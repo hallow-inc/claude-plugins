@@ -57,18 +57,20 @@ func TestDecodeErrorsSurfaceFromValidate(t *testing.T) {
 	}
 }
 
-func TestVendoredSARIFMatchesPinnedHash(t *testing.T) {
-	data, err := files.ReadFile("external/sarif-schema-2.1.0.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	pin, err := os.ReadFile("external/sarif-schema-2.1.0.json.source")
-	if err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256(data)
-	if want := "sha256: " + hex.EncodeToString(sum[:]); !strings.Contains(string(pin), want) {
-		t.Fatalf("vendored SARIF schema changed: %s not in pin file", want)
+func TestVendoredSchemasMatchPinnedHash(t *testing.T) {
+	for _, name := range []string{"sarif-schema-2.1.0.json", "mutation-testing-report-schema.json"} {
+		data, err := files.ReadFile("external/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pin, err := os.ReadFile("external/" + name + ".source")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		if want := "sha256: " + hex.EncodeToString(sum[:]); !strings.Contains(string(pin), want) {
+			t.Errorf("vendored %s changed: %s not in pin file", name, want)
+		}
 	}
 }
 

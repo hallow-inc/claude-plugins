@@ -148,7 +148,11 @@ func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
 	if len(changed) == 0 {
 		return rep, nil
 	}
-	jobs, rest := planEvaluate(m, changed, &rep)
+	fix, err := FixCommit(m.Root, ref)
+	if err != nil {
+		rep.Problems = append(rep.Problems, err.Error())
+	}
+	jobs, rest := planEvaluate(m, changed, fix, &rep)
 	results := make([]evalResult, len(jobs))
 	var wg sync.WaitGroup
 	for i, j := range jobs {
@@ -160,7 +164,7 @@ func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
 	}
 	wg.Wait()
 	used, ran := rep.fold(jobs, results)
-	all := allChanged(m, changed)
+	all := allChanged(m, changed, fix)
 	for _, o := range rest {
 		ev := core.Evidence{Problems: []string{"no adapter lists " + o.ID}}
 		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, all, ev, ws, bl.For(o.ID), date)))
@@ -205,15 +209,24 @@ func entryOf(lang string, o core.Outcome) Entry {
 	return Entry{Objective: o.ID, Language: lang, Status: o.Status, Details: o.Details, Waivers: o.Waivers, Baselined: o.Baselined, UnderThreshold: o.UnderThreshold}
 }
 
-func allChanged(m *core.Manifest, changed []string) []core.ChangedFile {
+func allChanged(m *core.Manifest, changed []string, fix bool) []core.ChangedFile {
 	out := make([]core.ChangedFile, len(changed))
 	for i, p := range changed {
 		out[i] = m.ChangedFile(p)
+		out[i].Fix = fix
 	}
 	return out
 }
 
-func planEvaluate(m *core.Manifest, changed []string, rep *EvalReport) (jobs []job, unlisted []core.Objective) {
+func FixCommit(root, ref string) (bool, error) {
+	values, err := git(root, "log", "--format=%(trailers:key=Assure-Kind,valueonly)", ref+"..HEAD")
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(values, func(v string) bool { return strings.TrimSpace(v) == "fix" }), nil
+}
+
+func planEvaluate(m *core.Manifest, changed []string, fix bool, rep *EvalReport) (jobs []job, unlisted []core.Objective) {
 	descs, errs := adapterproto.Descriptions(m.Root, m.Languages)
 	for _, lang := range m.Languages {
 		if err := errs[lang]; err != nil {
@@ -231,7 +244,9 @@ func planEvaluate(m *core.Manifest, changed []string, rep *EvalReport) (jobs []j
 	files := map[string][]core.ChangedFile{}
 	for _, p := range changed {
 		for _, lang := range roles.Claimants(p) {
-			files[lang] = append(files[lang], m.ChangedFile(p))
+			f := m.ChangedFile(p)
+			f.Fix = fix
+			files[lang] = append(files[lang], f)
 		}
 	}
 	byID := map[string]core.Objective{}
@@ -256,7 +271,7 @@ func planEvaluate(m *core.Manifest, changed []string, rep *EvalReport) (jobs []j
 		}
 	}
 	for _, o := range m.Catalog.Objectives {
-		if !listed[o.ID] && core.Applicable(o, allChanged(m, changed)) {
+		if !listed[o.ID] && core.Applicable(o, allChanged(m, changed, fix)) {
 			unlisted = append(unlisted, o)
 		}
 	}

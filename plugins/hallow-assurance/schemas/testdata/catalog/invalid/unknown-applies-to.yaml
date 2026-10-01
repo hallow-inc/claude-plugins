@@ -1,0 +1,6 @@
+- id: VER-FAIL-ON-BASE
+  title: Bug-fix tests fail on the base commit
+  source: [hallow-assurance charter]
+  levels: { A: required }
+  evidence: test.fail_on_base
+  applies_to: bugfix

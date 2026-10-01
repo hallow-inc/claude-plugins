@@ -133,3 +133,19 @@ func TestStarterCatalogKeepsComplexityThreshold(t *testing.T) {
 	}
 	t.Fatal("CODE-COMPLEXITY missing from catalog v0")
 }
+
+func TestStarterCatalogRestrictsFailOnBaseToFixes(t *testing.T) {
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range c.Objectives {
+		if o.ID == "VER-FAIL-ON-BASE" {
+			if o.AppliesTo != "fix" {
+				t.Fatalf("VER-FAIL-ON-BASE applies_to = %q, want fix; without it every feature change fails on base by not compiling", o.AppliesTo)
+			}
+			return
+		}
+	}
+	t.Fatal("VER-FAIL-ON-BASE missing from catalog v0")
+}

@@ -79,7 +79,7 @@ func TestDecideFastIgnoresInputOrder(t *testing.T) {
 		rc, rf := slices.Clone(changed), slices.Clone(ev.Findings)
 		slices.Reverse(rc)
 		slices.Reverse(rf)
-		if DecideFast(o, changed, ev).Status != DecideFast(o, rc, Evidence{ev.Problems, ev.Failing, rf}).Status {
+		if DecideFast(o, changed, ev).Status != DecideFast(o, rc, Evidence{Problems: ev.Problems, Failing: ev.Failing, Findings: rf}).Status {
 			t.Fatal("status depends on input order")
 		}
 	})
@@ -90,7 +90,7 @@ func TestMoreEvidenceNeverImprovesTheStatus(t *testing.T) {
 		o := objectiveGen(t)
 		changed := rapid.SliceOfN(levelGen, 1, 4).Draw(t, "changed")
 		ev, extra := evidenceGen(t), evidenceGen(t)
-		more := Evidence{append(slices.Clone(ev.Problems), extra.Problems...), append(slices.Clone(ev.Failing), extra.Failing...), append(slices.Clone(ev.Findings), extra.Findings...)}
+		more := Evidence{Problems: append(slices.Clone(ev.Problems), extra.Problems...), Failing: append(slices.Clone(ev.Failing), extra.Failing...), Findings: append(slices.Clone(ev.Findings), extra.Findings...)}
 		if rank(DecideFast(o, changed, more).Status) < rank(DecideFast(o, changed, ev).Status) {
 			t.Fatal("adding evidence of failure improved the status")
 		}

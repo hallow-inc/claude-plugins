@@ -1,0 +1,5 @@
+{
+  "unknown-status.json": [{"location": "/files/internal~1app~1check.go/mutants/0/status", "keyword": "enum"}],
+  "missing-source.json": [{"location": "/files/internal~1app~1check.go", "keyword": "required"}],
+  "missing-id.json": [{"location": "/files/internal~1app~1check.go/mutants/0", "keyword": "required"}]
+}

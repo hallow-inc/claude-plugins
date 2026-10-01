@@ -51,6 +51,11 @@ jobs:
           version: v2.13.2
           working-directory: plugins/hallow-assurance
 
+      - name: Install Gremlins
+        run: |
+          GOBIN="$RUNNER_TEMP/tools" go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+
       - name: Test
         run: go test -race -shuffle=on ./...
 
