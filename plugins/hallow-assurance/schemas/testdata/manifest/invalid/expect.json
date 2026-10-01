@@ -10,5 +10,6 @@
   "remote-ref.yaml": [{"location": "", "keyword": "additionalProperties"}],
   "missing-languages.yaml": [{"location": "", "keyword": "required"}],
   "empty-languages.yaml": [{"location": "/languages", "keyword": "minItems"}],
-  "protected-traversal.yaml": [{"location": "/protected/0", "keyword": "not"}]
+  "protected-traversal.yaml": [{"location": "/protected/0", "keyword": "not"}],
+  "inputs-false.yaml": [{"location": "/components/0/inputs", "keyword": "const"}]
 }

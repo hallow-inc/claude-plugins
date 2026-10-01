@@ -1,0 +1,14 @@
+- id: VER-ROBUST-FUZZ
+  title: Input parsers are fuzzed
+  source: [DO-178C 6.4.2.2]
+  levels: { A: required, B: required }
+  evidence: fuzz.run
+  applies_to: inputs
+- id: VER-TEST-BUDGET
+  title: Added test cases stay proportionate to changed source
+  source: [DO-178C 6.4]
+  levels: { A: required, B: required }
+  evidence: test.budget
+  budget:
+    A: { floor: 3, lines_per_case: 15 }
+    B: { floor: 1, lines_per_case: 1 }

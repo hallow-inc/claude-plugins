@@ -33,7 +33,7 @@ func validated(k schemas.Kind, file string, data []byte) (decode.Doc, error) {
 	if len(vs) > 0 {
 		return decode.Doc{}, &LoadError{File: file, Problems: vs}
 	}
-	if k == schemas.Manifest || k == schemas.Catalog || k == schemas.Waivers {
+	if k == schemas.Manifest || k == schemas.Catalog || k == schemas.Waivers || k == schemas.Resolutions {
 		return decode.YAML(data)
 	}
 	return decode.JSON(data)

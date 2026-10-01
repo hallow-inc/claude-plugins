@@ -1,0 +1,20 @@
+- path: internal/core/fast.go
+  function: DecideFast
+  resolution: missing-test
+  rationale: Error branch needs a fault-injecting filesystem
+  approver: hello-world-bfree
+- path: internal/core/old.go
+  function: oldHelper
+  resolution: dead
+  rationale: Unreachable since the loader validates input first
+  approver: "@hello-world-bfree"
+- path: internal/core/spec.go
+  function: Unspecified
+  resolution: missing-requirement
+  rationale: Behaviour has no requirement yet; spec change pending
+  approver: hello-world-bfree
+- path: internal/core/flag.go
+  function: debugOnly
+  resolution: deactivated
+  rationale: Compiled out in release builds by build tag
+  approver: hello-world-bfree

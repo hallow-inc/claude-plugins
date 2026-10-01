@@ -64,7 +64,27 @@ func (r EvalReport) Summary() string {
 			fmt.Fprintf(&b, "- %s `%s` in `%s`: %s (%d of %d unused)\n", e.Objective, e.Rule, e.Path, indent(e.Message), x.Unused, e.Count)
 		}
 	}
+	r.resolutionSummary(&b)
 	return b.String()
+}
+
+func (r EvalReport) resolutionSummary(b *strings.Builder) {
+	var applied []core.Resolution
+	for _, e := range r.Objectives {
+		applied = append(applied, e.Resolutions...)
+	}
+	if len(applied) > 0 {
+		b.WriteString("\n### Applied coverage resolutions\n\n")
+		for _, x := range applied {
+			fmt.Fprintf(b, "- `%s` %s: %s, approver %s: %s\n", x.Path, x.Function, x.Resolution, x.Approver, indent(x.Rationale))
+		}
+	}
+	if len(r.RemovableResolutions) > 0 {
+		b.WriteString("\n### Removable coverage resolutions\n\n")
+		for _, x := range r.RemovableResolutions {
+			fmt.Fprintf(b, "- `%s` %s: %s, approver %s\n", x.Path, x.Function, x.Resolution, x.Approver)
+		}
+	}
 }
 
 func indent(s string) string { return strings.ReplaceAll(s, "\n", "\n  ") }

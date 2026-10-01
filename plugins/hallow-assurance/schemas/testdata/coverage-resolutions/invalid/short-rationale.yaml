@@ -1,0 +1,5 @@
+- path: internal/core/fast.go
+  function: DecideFast
+  resolution: dead
+  rationale: too short
+  approver: hello-world-bfree

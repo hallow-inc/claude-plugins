@@ -266,6 +266,12 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 		readMutation(m, data, ev)
 	case "test.fail_on_base":
 		readBaseRun(data, ev)
+	case "fuzz.run":
+		readFuzz(data, ev)
+	case "test.budget":
+		readBudget(m, data, ev)
+	case "coverage.resolution":
+		readCoverage(m, data, ev)
 	default:
 		ev.Problems = append(ev.Problems, "the fast check cannot read "+typ+" evidence")
 	}
@@ -334,4 +340,59 @@ func failingText(f evidence.Failure) string {
 		s += "\n" + text
 	}
 	return s
+}
+
+func readFuzz(data []byte, ev *core.Evidence) {
+	j, err := evidence.ParseJUnit(data)
+	if err != nil {
+		ev.Problems = append(ev.Problems, err.Error())
+		return
+	}
+	ev.Fuzz = &core.FuzzRun{}
+	for _, s := range j.Suites {
+		var fs core.FuzzSuite
+		for _, p := range s.Properties {
+			if p.Name == "assure.source" {
+				fs.Sources = append(fs.Sources, p.Value)
+			}
+		}
+		for _, c := range s.Cases {
+			fs.Cases = append(fs.Cases, core.FuzzCase{Name: c.Name, Outcome: string(c.Outcome)})
+		}
+		ev.Fuzz.Suites = append(ev.Fuzz.Suites, fs)
+	}
+}
+
+func readBudget(m *core.Manifest, data []byte, ev *core.Evidence) {
+	files, err := evidence.ParseTestBudget(data)
+	if err != nil {
+		ev.Problems = append(ev.Problems, err.Error())
+		return
+	}
+	ev.Budget = &core.TestBudget{}
+	for _, f := range files {
+		_, level := m.Resolve(f.Path)
+		ev.Budget.Files = append(ev.Budget.Files, core.BudgetEntry{Path: f.Path, Level: level, Test: f.Role == "test", Cases: f.AddedCases, Lines: f.ChangedLines})
+	}
+}
+
+func readCoverage(m *core.Manifest, data []byte, ev *core.Evidence) {
+	files, err := evidence.ParseLCOV(data)
+	if err != nil {
+		ev.Problems = append(ev.Problems, err.Error())
+		return
+	}
+	res, err := core.LoadResolutions(m.Root)
+	if err != nil {
+		ev.Problems = append(ev.Problems, err.Error())
+		return
+	}
+	ev.Coverage = &core.Coverage{Resolutions: res}
+	for _, f := range files {
+		cf := core.CoverFile{Path: f.Path, Lines: f.Lines}
+		for _, fn := range f.Functions {
+			cf.Funcs = append(cf.Funcs, core.CoverFunc{Name: fn.Name, Start: fn.Start, End: fn.End})
+		}
+		ev.Coverage.Files = append(ev.Coverage.Files, cf)
+	}
 }

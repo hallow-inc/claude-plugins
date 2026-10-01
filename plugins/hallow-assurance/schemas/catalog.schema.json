@@ -50,6 +50,16 @@
             "D": { "$ref": "common.schema.json#/$defs/percent" }
           }
         },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "A": { "$ref": "#/$defs/budget" },
+            "B": { "$ref": "#/$defs/budget" },
+            "C": { "$ref": "#/$defs/budget" },
+            "D": { "$ref": "#/$defs/budget" }
+          }
+        },
         "implementations": {
           "type": "object",
           "additionalProperties": false,
@@ -58,7 +68,16 @@
           }
         },
         "alternative_for": { "$ref": "common.schema.json#/$defs/objectiveId" },
-        "applies_to": { "enum": ["formal", "dst", "fix"] }
+        "applies_to": { "enum": ["formal", "dst", "inputs", "fix"] }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["floor", "lines_per_case"],
+      "properties": {
+        "floor": { "type": "integer", "minimum": 1 },
+        "lines_per_case": { "type": "integer", "minimum": 1 }
       }
     }
   }

@@ -47,6 +47,10 @@
         }
       }
     },
+    "removable_resolutions": {
+      "type": "array",
+      "items": { "$ref": "coverage-resolutions.schema.json#/items" }
+    },
     "objectives": {
       "type": "array",
       "items": {
@@ -60,7 +64,8 @@
           "details": { "type": "array", "items": { "type": "string" } },
           "waivers": { "type": "array", "items": { "$ref": "waivers.schema.json#/items" } },
           "baselined": { "type": "integer", "minimum": 0 },
-          "under_threshold": { "type": "integer", "minimum": 0 }
+          "under_threshold": { "type": "integer", "minimum": 0 },
+          "resolutions": { "type": "array", "items": { "$ref": "coverage-resolutions.schema.json#/items" } }
         }
       }
     }

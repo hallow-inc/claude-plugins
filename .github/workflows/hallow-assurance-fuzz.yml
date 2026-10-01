@@ -1,0 +1,65 @@
+name: hallow-assurance-fuzz
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hallow-assurance-fuzz
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: plugins/hallow-assurance
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: plugins/hallow-assurance/go.mod
+          cache-dependency-path: plugins/hallow-assurance/go.sum
+
+      - name: Fuzz
+        run: |
+          set -euo pipefail
+          status=0
+          for pkg in $(go list ./...); do
+            list=$(go test -list '^Fuzz' "$pkg")
+            for name in $(grep '^Fuzz' <<<"$list" || true); do
+              echo "::group::$pkg $name"
+              go test -run '^$' -fuzz "^${name}\$" -fuzztime 60s "$pkg" || status=1
+              echo "::endgroup::"
+            done
+          done
+          exit "$status"
+
+      - name: Collect new corpus entries
+        if: failure()
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/fuzz-corpus"
+          mkdir -p "$out"
+          git ls-files --others --exclude-standard | { grep '/testdata/fuzz/' || true; } | while IFS= read -r f; do
+            mkdir -p "$out/$(dirname "$f")"
+            cp "$f" "$out/$f"
+          done
+
+      - name: Upload new corpus entries
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: fuzz-corpus
+          path: ${{ runner.temp }}/fuzz-corpus
+          if-no-files-found: warn

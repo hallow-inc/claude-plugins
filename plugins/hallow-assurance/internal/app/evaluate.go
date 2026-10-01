@@ -25,13 +25,14 @@ type ChangedFrom struct {
 }
 
 type Entry struct {
-	Objective      string        `json:"objective"`
-	Language       string        `json:"language,omitempty"`
-	Status         core.Status   `json:"status"`
-	Details        []string      `json:"details"`
-	Waivers        []core.Waiver `json:"waivers"`
-	Baselined      int           `json:"baselined"`
-	UnderThreshold int           `json:"under_threshold"`
+	Objective      string            `json:"objective"`
+	Language       string            `json:"language,omitempty"`
+	Status         core.Status       `json:"status"`
+	Details        []string          `json:"details"`
+	Waivers        []core.Waiver     `json:"waivers"`
+	Baselined      int               `json:"baselined"`
+	UnderThreshold int               `json:"under_threshold"`
+	Resolutions    []core.Resolution `json:"resolutions,omitempty"`
 }
 
 type RemovableEntry struct {
@@ -40,17 +41,18 @@ type RemovableEntry struct {
 }
 
 type EvalReport struct {
-	Version           int                          `json:"version"`
-	Commit            string                       `json:"commit"`
-	ChangedFrom       ChangedFrom                  `json:"changed_from"`
-	Date              string                       `json:"date"`
-	Catalog           string                       `json:"catalog"`
-	ChangedFiles      int                          `json:"changed_files"`
-	ToolVersions      map[string]map[string]string `json:"tool_versions"`
-	Problems          []string                     `json:"problems"`
-	ExpiredWaivers    []core.Waiver                `json:"expired_waivers"`
-	RemovableBaseline []RemovableEntry             `json:"removable_baseline"`
-	Objectives        []Entry                      `json:"objectives"`
+	Version              int                          `json:"version"`
+	Commit               string                       `json:"commit"`
+	ChangedFrom          ChangedFrom                  `json:"changed_from"`
+	Date                 string                       `json:"date"`
+	Catalog              string                       `json:"catalog"`
+	ChangedFiles         int                          `json:"changed_files"`
+	ToolVersions         map[string]map[string]string `json:"tool_versions"`
+	Problems             []string                     `json:"problems"`
+	ExpiredWaivers       []core.Waiver                `json:"expired_waivers"`
+	RemovableBaseline    []RemovableEntry             `json:"removable_baseline"`
+	RemovableResolutions []core.Resolution            `json:"removable_resolutions"`
+	Objectives           []Entry                      `json:"objectives"`
 }
 
 func (r EvalReport) Blocking() bool {
@@ -69,6 +71,7 @@ func (r EvalReport) Marshal() ([]byte, error) {
 	r.Problems = orEmpty(r.Problems)
 	r.ExpiredWaivers = orEmpty(r.ExpiredWaivers)
 	r.RemovableBaseline = orEmpty(r.RemovableBaseline)
+	r.RemovableResolutions = orEmpty(r.RemovableResolutions)
 	r.Objectives = slices.Clone(orEmpty(r.Objectives))
 	for i := range r.Objectives {
 		r.Objectives[i].Details = orEmpty(r.Objectives[i].Details)
@@ -153,6 +156,9 @@ func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
 		rep.Problems = append(rep.Problems, err.Error())
 	}
 	jobs, rest := planEvaluate(m, changed, fix, &rep)
+	if err := annotate(m.Root, ref, jobs); err != nil {
+		rep.Problems = append(rep.Problems, err.Error())
+	}
 	results := make([]evalResult, len(jobs))
 	var wg sync.WaitGroup
 	for i, j := range jobs {
@@ -175,6 +181,7 @@ func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
 	for _, r := range bl.Removable(used, func(e core.BaselineEntry) bool { return ran[e.Objective][e.Path] }) {
 		rep.RemovableBaseline = append(rep.RemovableBaseline, RemovableEntry{Entry: r.Entry, Unused: r.Unused})
 	}
+	rep.RemovableResolutions = removableResolutions(m.Root, results, &rep)
 	return rep, nil
 }
 
@@ -206,7 +213,7 @@ func (rep *EvalReport) fold(jobs []job, results []evalResult) (used map[core.Fin
 }
 
 func entryOf(lang string, o core.Outcome) Entry {
-	return Entry{Objective: o.ID, Language: lang, Status: o.Status, Details: o.Details, Waivers: o.Waivers, Baselined: o.Baselined, UnderThreshold: o.UnderThreshold}
+	return Entry{Objective: o.ID, Language: lang, Status: o.Status, Details: o.Details, Waivers: o.Waivers, Baselined: o.Baselined, UnderThreshold: o.UnderThreshold, Resolutions: o.Resolutions}
 }
 
 func allChanged(m *core.Manifest, changed []string, fix bool) []core.ChangedFile {
@@ -276,4 +283,78 @@ func planEvaluate(m *core.Manifest, changed []string, fix bool, rep *EvalReport)
 		}
 	}
 	return jobs, unlisted
+}
+
+func annotate(root, ref string, jobs []job) error {
+	lines, err := AddedLines(root, ref)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	roles := map[string]map[string]core.Role{}
+	for i, j := range jobs {
+		if roles[j.lang] == nil {
+			r, err := classifyExisting(root, j.lang, j.files)
+			if err != nil {
+				errs = append(errs, err)
+			}
+			roles[j.lang] = r
+		}
+		files := slices.Clone(j.files)
+		for k := range files {
+			files[k].Lines = lines[files[k].Path]
+			files[k].Role = roles[j.lang][files[k].Path]
+		}
+		jobs[i].files = files
+	}
+	return errors.Join(errs...)
+}
+
+func classifyExisting(root, lang string, fs []core.ChangedFile) (map[string]core.Role, error) {
+	var paths []string
+	for _, f := range fs {
+		ok, err := exists(root, f.Path)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			paths = append(paths, f.Path)
+		}
+	}
+	classified, err := adapterproto.Classify(root, lang, paths)
+	if err != nil {
+		return nil, err
+	}
+	roles := map[string]core.Role{}
+	for _, c := range classified {
+		roles[c.Path] = core.Role(c.Role)
+	}
+	return roles, nil
+}
+
+func removableResolutions(root string, results []evalResult, rep *EvalReport) []core.Resolution {
+	res, err := core.LoadResolutions(root)
+	if err != nil {
+		rep.Problems = append(rep.Problems, err.Error())
+		return nil
+	}
+	var out []core.Resolution
+	for _, r := range results {
+		if r.ev.Coverage != nil {
+			out = append(out, core.RemovableResolutions(*r.ev.Coverage)...)
+		}
+	}
+	for _, r := range res {
+		ok, err := exists(root, r.Path)
+		if err != nil {
+			rep.Problems = append(rep.Problems, err.Error())
+		}
+		if !ok && err == nil {
+			out = append(out, r)
+		}
+	}
+	slices.SortFunc(out, func(a, b core.Resolution) int {
+		return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Function, b.Function))
+	})
+	return slices.Compact(out)
 }

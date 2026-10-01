@@ -14,6 +14,32 @@ type JUnit struct {
 	Failing  []Failure
 	Passed   []string
 	Skips    []string
+	Suites   []Suite
+}
+
+type Suite struct {
+	Name       string
+	Properties []Property
+	Cases      []Case
+}
+
+type Property struct {
+	Name  string
+	Value string
+}
+
+type Outcome string
+
+const (
+	Passed  Outcome = "passed"
+	Failed  Outcome = "failed"
+	Errored Outcome = "errored"
+	Skipped Outcome = "skipped"
+)
+
+type Case struct {
+	Name    string
+	Outcome Outcome
 }
 
 type Failure struct {
@@ -36,9 +62,16 @@ type xmlCase struct {
 	Skipped   *struct{}   `xml:"skipped"`
 }
 
+type xmlProperty struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
+}
+
 type xmlSuite struct {
-	Suites []xmlSuite `xml:"testsuite"`
-	Cases  []xmlCase  `xml:"testcase"`
+	Name       string        `xml:"name,attr"`
+	Properties []xmlProperty `xml:"properties>property"`
+	Suites     []xmlSuite    `xml:"testsuite"`
+	Cases      []xmlCase     `xml:"testcase"`
 }
 
 func ParseJUnit(data []byte) (JUnit, error) {
@@ -60,12 +93,16 @@ func ParseJUnit(data []byte) (JUnit, error) {
 			return JUnit{}, fmt.Errorf("junit: %w", err)
 		}
 		var j JUnit
-		j.add(root)
+		j.add(root, start.Name.Local == "testsuite")
 		return j, nil
 	}
 }
 
-func (j *JUnit) add(s xmlSuite) {
+func (j *JUnit) add(s xmlSuite, isSuite bool) {
+	suite := Suite{Name: s.Name}
+	for _, p := range s.Properties {
+		suite.Properties = append(suite.Properties, Property(p))
+	}
 	for _, c := range s.Cases {
 		j.Cases++
 		name := c.Name
@@ -74,19 +111,26 @@ func (j *JUnit) add(s xmlSuite) {
 		}
 		switch {
 		case c.Failure != nil:
+			suite.Cases = append(suite.Cases, Case{Name: name, Outcome: Failed})
 			j.Failures++
 			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Failure.Message, Text: c.Failure.Text})
 		case c.Error != nil:
+			suite.Cases = append(suite.Cases, Case{Name: name, Outcome: Errored})
 			j.Errors++
 			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Error.Message, Text: c.Error.Text, Error: true})
 		case c.Skipped != nil:
+			suite.Cases = append(suite.Cases, Case{Name: name, Outcome: Skipped})
 			j.Skipped++
 			j.Skips = append(j.Skips, name)
 		default:
+			suite.Cases = append(suite.Cases, Case{Name: name, Outcome: Passed})
 			j.Passed = append(j.Passed, name)
 		}
 	}
+	if isSuite {
+		j.Suites = append(j.Suites, suite)
+	}
 	for _, sub := range s.Suites {
-		j.add(sub)
+		j.add(sub, true)
 	}
 }

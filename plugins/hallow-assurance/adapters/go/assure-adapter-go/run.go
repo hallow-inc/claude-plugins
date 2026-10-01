@@ -30,14 +30,17 @@ type runResponse struct {
 type runner func(root, ref, out string, sel map[string][]string, versions map[string]string) ([]evidence, error)
 
 var runners = map[string]runner{
-	"VER-TESTS-PASS":       runTests,
-	"CODE-ZERO-WARNINGS":   runLint,
-	"CODE-CHECK-RETURNS":   checkReturnsPack.run,
-	"CODE-RESOURCE-BOUNDS": resourceBoundsPack.run,
-	"CODE-COMPLEXITY":      runComplexity,
-	"CODE-NO-UNSAFE":       runNoUnsafe,
-	"VER-MUTATION-CHANGED": runMutation,
-	"VER-FAIL-ON-BASE":     runFailOnBase,
+	"VER-TESTS-PASS":          runTests,
+	"CODE-ZERO-WARNINGS":      runLint,
+	"CODE-CHECK-RETURNS":      checkReturnsPack.run,
+	"CODE-RESOURCE-BOUNDS":    resourceBoundsPack.run,
+	"CODE-COMPLEXITY":         runComplexity,
+	"CODE-NO-UNSAFE":          runNoUnsafe,
+	"VER-MUTATION-CHANGED":    runMutation,
+	"VER-FAIL-ON-BASE":        runFailOnBase,
+	"VER-ROBUST-FUZZ":         runFuzz,
+	"VER-TEST-BUDGET":         runBudget,
+	"VER-COVERAGE-RESOLUTION": runCoverage,
 }
 
 func runObjective(args []string, stdout, stderr io.Writer) int {
