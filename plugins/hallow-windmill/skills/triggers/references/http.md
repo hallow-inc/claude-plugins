@@ -110,6 +110,8 @@ ${BASE_URL}/api/r/<workspace>/<route_path>
 
 NO extra `w/` prefix. The server's not-found error includes `/w/<ws>/...` from its internal lookup key — do not copy that into the URL. Confirm the URL via the trigger's curl example in the Windmill UI.
 
+Callers outside the tailnet (AWS, SaaS webhooks) cannot reach `${BASE_URL}` at all — they use `https://hooks.platform.hallow.app/<ws>/<provider>/<event>`, which requires the route `webhooks/<provider>/<event>`. See `SKILL.md` → "External callers can't reach `windmill.platform.hallow.app`".
+
 ### Disabled-state on create
 
 `POST /http_triggers/create` ignores `enabled`/`mode` fields — always creates `mode: "enabled"`. To stage as disabled: create, then `POST /http_triggers/update/<path>` with `mode: "disabled"`. No `setenabled` endpoint for HTTP triggers. Also: create requires `is_static_website` + `static_asset_config` keys present or it 422s.

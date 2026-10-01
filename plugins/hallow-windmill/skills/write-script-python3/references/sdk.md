@@ -2,6 +2,8 @@
 
 Import: import wmill
 
+> **Hallow note:** `get` and `post` below are methods of a `wmill.Windmill()` instance, not module-level functions, and their `endpoint` starts at `/w/{workspace}/…` (the client's base URL already ends in `/api`). See SKILL.md → "Hallow gotchas (python3 scripts)".
+
 def worker_has_internal_server() -> bool
 
 def get_mocked_api() -> Optional[dict]

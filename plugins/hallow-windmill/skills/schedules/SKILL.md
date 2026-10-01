@@ -217,6 +217,14 @@ The server FORCES `email` to the identity of whoever runs the push — the activ
 
 **Swap principal without re-pushing:** `wmill schedule set-permissioned-as <path> <email>` rewrites the server-side principal directly (no YAML diff, no sync). Requires admin. New principal must have read on the impl script's folder. See `cli-commands` SKILL.md → "Server-side principal swap".
 
+### Script dispatches synchronous child jobs → set `no_flow_overlap: true`
+
+A scheduled script that calls `runScript` / `run_script` (sync — it waits for the child) holds a worker slot while its child needs another slot from the same pool. Under brief congestion the parent rides to its timeout ceiling. With `no_flow_overlap: false` (the default) and a short cadence, the next ticks start anyway: a 5-minute schedule with an 1800s ceiling ran up to 6 copies at once, each squatting a `bun` slot, and starved unrelated jobs across the workspace for 30 minutes.
+
+Tell: the child has a short `duration_ms` but a long queue wait, while the parent's duration pins to exactly its timeout. Fix: `no_flow_overlap: true` on the schedule. No source or cadence change needed. Build-policy SCHED.4.
+
+**Editing someone else's schedule with `mcp__windmill__updateSchedule`:** pass its current `permissioned_as` plus `preserve_permissioned_as: true`, or the update stamps you as the run-as.
+
 ### Cron parser rejects numeric DOW ranges
 
 Windmill's cron parser rejects numeric day-of-week ranges like `0-4` (error: `"Invalid range for Days of Week: 0-4"`). Use day-name ranges instead: `0 0 15 * * SUN-THU` rather than `0 0 15 * * 0-4`. Single numeric DOW (`* * * * * 0`) and lists (`0,3,5`) are fine — only RANGES require names.

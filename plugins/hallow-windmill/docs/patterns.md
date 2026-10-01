@@ -203,6 +203,12 @@ Every script and flow the plugin authors MUST set an explicit `timeout` (seconds
 
 A too-low timeout that occasionally false-kills is far cheaper than a hang that takes out a shared worker group. Set it in `*.script.yaml` (`timeout:`) for scripts and on the module / flow for flows. Especially mandatory for anything `tag: fargate` (the concurrency-1 amplifier).
 
+**`timeout` bounds execution, not queue wait.** The clock starts when a worker picks the job up. A job killed "at exactly 30s" may first have waited minutes for a slot (observed: 2m23s in queue on the shared `bun` tag, then killed at 30.012s). So:
+
+- A queue-wait problem is not fixed by raising `timeout:` — that only lets a real hang hold a contended slot longer. Fix the job squatting the pool, or move work to its own tag.
+- Bound each network call too (`AbortSignal.timeout(ms)` in bun, an httpx/requests timeout in Python), and keep it close to the job `timeout:`. A 20s abort under a 120s job timeout leaves 100s of budget that only squats a slot.
+- To tell the two apart, compare a job's `started_at - created_at` (queue wait) with `duration_ms` (run time).
+
 ### `wmill.yaml` excludes — respect them
 
 ```yaml
@@ -251,7 +257,7 @@ Both HTTP triggers and schedules have `permissioned_as` (and schedules also `ema
 
 ### Workspaced HTTP route URL
 
-External callers POST to `${BASE_URL}/api/r/<workspace>/<route_path>` — NO extra `w/` prefix. The "not found" error includes `/w/<ws>/...` from the server's internal lookup key; copying that into the URL is a common 404 source. The trigger page in the Windmill UI shows the canonical curl example.
+External callers POST to `${BASE_URL}/api/r/<workspace>/<route_path>` — NO extra `w/` prefix. The "not found" error includes `/w/<ws>/...` from the server's internal lookup key; copying that into the URL is a common 404 source. The trigger page in the Windmill UI shows the canonical curl example. Callers outside the tailnet (AWS, SaaS webhooks) can't reach `${BASE_URL}` — they go through `https://hooks.platform.hallow.app/<ws>/<provider>/<event>`, so the route must be `webhooks/<provider>/<event>` (triggers SKILL.md → "External callers"; build-policy TRIG.6).
 
 ### HTTP triggers + folder ACL
 
