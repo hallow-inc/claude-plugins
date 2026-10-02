@@ -1,0 +1,7 @@
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components: []
+human_review:
+  A: optional

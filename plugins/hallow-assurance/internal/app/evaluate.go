@@ -115,6 +115,10 @@ type evalResult struct {
 }
 
 func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
+	return EvaluateWith(m, ref, date, nil)
+}
+
+func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (EvalReport, error) {
 	ws, err := core.LoadWaivers(m.Root)
 	if err != nil {
 		return EvalReport{}, err
@@ -171,9 +175,16 @@ func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
 	wg.Wait()
 	used, ran := rep.fold(jobs, results)
 	all := allChanged(m, changed, fix)
+	in := builtinInputs{root: m.Root, base: base, changed: withRoles(m, all, &rep), reviewed: reviews != nil && reviews.Approved()}
 	for _, o := range rest {
 		ev := core.Evidence{Problems: []string{"no adapter lists " + o.ID}}
-		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, all, ev, ws, bl.For(o.ID), date)))
+		switch o.Evidence {
+		case provenanceEvidence:
+			ev = provenanceEvidenceFor(in)
+		case protectedEvidence:
+			ev = protectedEvidenceFor(m, in)
+		}
+		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, in.changed, ev, ws, bl.For(o.ID), date)))
 	}
 	slices.SortFunc(rep.Objectives, func(a, b Entry) int {
 		return cmp.Or(cmp.Compare(a.Objective, b.Objective), cmp.Compare(a.Language, b.Language))
@@ -265,12 +276,11 @@ func planEvaluate(m *core.Manifest, changed []string, fix bool, rep *EvalReport)
 	listed := map[string]bool{}
 	for _, lang := range m.Languages {
 		for _, id := range slices.Sorted(maps.Keys(descs[lang].Objectives)) {
-			listed[id] = true
-			o, ok := byID[id]
+			o, ok := adapterObjective(m, byID, lang, id, rep)
 			if !ok {
-				rep.Problems = append(rep.Problems, fmt.Sprintf("%s lists %s, but catalog %s has no such objective", adapterproto.Executable(lang), id, m.Catalog.Version))
 				continue
 			}
+			listed[id] = true
 			if !core.Applicable(o, files[lang]) {
 				continue
 			}
@@ -357,4 +367,32 @@ func removableResolutions(root string, results []evalResult, rep *EvalReport) []
 		return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Function, b.Function))
 	})
 	return slices.Compact(out)
+}
+
+func withRoles(m *core.Manifest, files []core.ChangedFile, rep *EvalReport) []core.ChangedFile {
+	roles, failures, _ := LoadRoles(m)
+	if len(failures) > 0 {
+		rep.Problems = append(rep.Problems, "cannot determine file roles: "+JoinErrors(failures))
+	}
+	out := slices.Clone(files)
+	for i := range out {
+		role, err := roles.Of(out[i].Path)
+		if err != nil {
+			rep.Problems = append(rep.Problems, err.Error())
+		}
+		out[i].Role = role
+	}
+	return out
+}
+
+func adapterObjective(m *core.Manifest, byID map[string]core.Objective, lang, id string, rep *EvalReport) (core.Objective, bool) {
+	o, ok := byID[id]
+	switch {
+	case !ok:
+		rep.Problems = append(rep.Problems, fmt.Sprintf("%s lists %s, but catalog %s has no such objective", adapterproto.Executable(lang), id, m.Catalog.Version))
+	case builtin(o):
+		rep.Problems = append(rep.Problems, fmt.Sprintf("%s lists %s, whose evidence %s comes from assure itself; ignored", adapterproto.Executable(lang), id, o.Evidence))
+		ok = false
+	}
+	return o, ok
 }

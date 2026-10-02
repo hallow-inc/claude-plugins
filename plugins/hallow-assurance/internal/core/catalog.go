@@ -16,13 +16,14 @@ var levels = []Level{"A", "B", "C", "D"}
 func stricter(a, b Level) bool { return a < b }
 
 type Objective struct {
-	ID        string
-	Title     string
-	Evidence  string
-	Levels    map[Level]string
-	Threshold map[Level]float64
-	Budget    map[Level]Budget
-	AppliesTo string
+	ID           string
+	Title        string
+	Evidence     string
+	Levels       map[Level]string
+	Threshold    map[Level]float64
+	Budget       map[Level]Budget
+	AppliesTo    string
+	Independence map[Level]string
 }
 
 type Budget struct {
@@ -92,9 +93,22 @@ func parseCatalog(file string, data []byte) (Catalog, error) {
 		}
 		o.Budget = budgetOf(p, ptr, o, m)
 		o.AppliesTo, _ = m["applies_to"].(string)
+		o.Independence = independenceOf(m)
 		c.Objectives = append(c.Objectives, o)
 	}
 	return c, p.err(file)
+}
+
+func independenceOf(m map[string]any) map[Level]string {
+	ind, ok := m["independence"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := map[Level]string{}
+	for l, t := range ind {
+		out[Level(l)] = t.(string)
+	}
+	return out
 }
 
 func budgetOf(p *problems, ptr string, o Objective, m map[string]any) map[Level]Budget {

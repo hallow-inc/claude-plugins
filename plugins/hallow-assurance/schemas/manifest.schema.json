@@ -22,9 +22,19 @@
     "protected": {
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/repoPath" }
+    },
+    "human_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "B": { "$ref": "#/$defs/review" },
+        "C": { "$ref": "#/$defs/review" },
+        "D": { "$ref": "#/$defs/review" }
+      }
     }
   },
   "$defs": {
+    "review": { "enum": ["required", "optional"] },
     "component": {
       "type": "object",
       "additionalProperties": false,

@@ -35,21 +35,7 @@ func (r EvalReport) Summary() string {
 		}
 	}
 	for _, e := range r.Objectives {
-		if e.Status == core.Pass {
-			continue
-		}
-		title := e.Objective
-		if e.Language != "" {
-			title += " (" + e.Language + ")"
-		}
-		fmt.Fprintf(&b, "\n### %s: %s\n\n", title, e.Status)
-		for i, d := range e.Details {
-			if i == maxDetails {
-				fmt.Fprintf(&b, "- … %d more\n", len(e.Details)-maxDetails)
-				break
-			}
-			fmt.Fprintf(&b, "- %s\n", indent(d))
-		}
+		e.detailSummary(&b)
 	}
 	if len(r.ExpiredWaivers) > 0 {
 		b.WriteString("\n### Expired waivers\n\n")
@@ -88,3 +74,21 @@ func (r EvalReport) resolutionSummary(b *strings.Builder) {
 }
 
 func indent(s string) string { return strings.ReplaceAll(s, "\n", "\n  ") }
+
+func (e Entry) detailSummary(b *strings.Builder) {
+	if e.Status == core.Pass && len(e.Details) == 0 {
+		return
+	}
+	title := e.Objective
+	if e.Language != "" {
+		title += " (" + e.Language + ")"
+	}
+	fmt.Fprintf(b, "\n### %s: %s\n\n", title, e.Status)
+	for i, d := range e.Details {
+		if i == maxDetails {
+			fmt.Fprintf(b, "- … %d more\n", len(e.Details)-maxDetails)
+			break
+		}
+		fmt.Fprintf(b, "- %s\n", indent(d))
+	}
+}

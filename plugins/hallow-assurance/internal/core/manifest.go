@@ -22,13 +22,14 @@ type Component struct {
 }
 
 type Manifest struct {
-	Root         string
-	DefaultLevel Level
-	Languages    []string
-	Components   []Component
-	Protected    []Glob
-	Catalog      Catalog
-	Warnings     []schemas.Violation
+	Root           string
+	DefaultLevel   Level
+	Languages      []string
+	Components     []Component
+	Protected      []Glob
+	ReviewOptional map[Level]bool
+	Catalog        Catalog
+	Warnings       []schemas.Violation
 }
 
 var ErrNoManifest = errors.New("no " + ManifestName + " found in this directory or any parent")
@@ -105,6 +106,15 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 		}
 		m.Protected = append(m.Protected, g)
 	}
+	hr, _ := v["human_review"].(map[string]any)
+	for l, s := range hr {
+		if s == "optional" {
+			if m.ReviewOptional == nil {
+				m.ReviewOptional = map[Level]bool{}
+			}
+			m.ReviewOptional[Level(l)] = true
+		}
+	}
 	cat, err := LoadCatalog(v["catalog"].(string))
 	if err != nil {
 		p.add("/catalog", "catalog", "%v", err)
@@ -115,4 +125,8 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 	}
 	m.Warnings = tieWarnings(m.Components, doc.Pos)
 	return m, nil
+}
+
+func ParseManifest(file string, data []byte) (*Manifest, error) {
+	return parseManifest(file, data)
 }

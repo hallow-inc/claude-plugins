@@ -31,16 +31,18 @@ type TestFailure struct {
 }
 
 type Evidence struct {
-	Problems []string
-	Errs     []error
-	Failing  []TestFailure
-	Findings []Finding
-	Mutation bool
-	Mutants  []Mutant
-	Base     *BaseRun
-	Fuzz     *FuzzRun
-	Budget   *TestBudget
-	Coverage *Coverage
+	Problems   []string
+	Errs       []error
+	Failing    []TestFailure
+	Findings   []Finding
+	Mutation   bool
+	Mutants    []Mutant
+	Base       *BaseRun
+	Fuzz       *FuzzRun
+	Budget     *TestBudget
+	Coverage   *Coverage
+	Provenance *Provenance
+	Protected  *ProtectedDiff
 }
 
 type ChangedFile struct {
@@ -136,6 +138,7 @@ type decision struct {
 	waived   bool
 	details  []string
 	excused  []string
+	notes    []string
 }
 
 func (d *decision) waive(w Waiver, text string) {
@@ -248,7 +251,7 @@ func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waive
 		out.Resolutions = d.fileRules(o, changed, ev, req, active)
 	}
 	d.located(o, kept, req, active)
-	out.Details = append(d.details, d.excused...)
+	out.Details = slices.Concat(d.details, d.excused, d.notes)
 	out.Waivers = d.applied
 	out.Status = d.status()
 	return out
@@ -260,6 +263,16 @@ func (d *decision) fileRules(o Objective, changed []ChangedFile, ev Evidence, re
 	}
 	if ev.Budget != nil {
 		d.budget(o, changed, *ev.Budget, active)
+	}
+	if ev.Provenance != nil {
+		fs, notes := independenceFindings(o, changed, *ev.Provenance)
+		d.located(o, fs, req, active)
+		d.notes = append(d.notes, notes...)
+	}
+	if ev.Protected != nil {
+		fs, notes := protectedFindings(o, *ev.Protected)
+		d.located(o, fs, req, active)
+		d.notes = append(d.notes, notes...)
 	}
 	if ev.Coverage == nil {
 		return nil

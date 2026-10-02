@@ -14,7 +14,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-const Protocol = 0
+const Protocol = 1
 
 var HarnessProtected = []string{".claude/settings.json", ".claude/settings.local.json"}
 
@@ -27,6 +27,7 @@ const (
 var eventNames = map[string]string{
 	"session-start": "SessionStart",
 	"pre-tool-use":  "PreToolUse",
+	"post-tool-use": "PostToolUse",
 	"stop":          "Stop",
 }
 
@@ -36,7 +37,9 @@ type input struct {
 	SessionID      string `json:"session_id"`
 	Cwd            string `json:"cwd"`
 	HookEventName  string `json:"hook_event_name"`
+	AgentID        string `json:"agent_id"`
 	AgentType      string `json:"agent_type"`
+	ToolUseID      string `json:"tool_use_id"`
 	ToolName       string `json:"tool_name"`
 	StopHookActive bool   `json:"stop_hook_active"`
 	ToolInput      struct {
@@ -91,6 +94,8 @@ func handle(event string, stdin io.Reader) response {
 	switch event {
 	case "pre-tool-use":
 		return preToolUse(in)
+	case "post-tool-use":
+		return postToolUse(in)
 	case "session-start":
 		return sessionStart(in)
 	default:
@@ -129,6 +134,8 @@ func failure(event string, err error) response {
 		return deny(msg)
 	case "stop":
 		return response{out: &output{Decision: "block", Reason: msg}, code: 2}
+	case "post-tool-use":
+		return gapMessage(msg)
 	default:
 		return response{out: &output{HookSpecificOutput: &specific{HookEventName: "SessionStart", AdditionalContext: msg}}}
 	}
@@ -196,21 +203,27 @@ func extraGlobs() []core.Glob {
 	return gs
 }
 
-func preToolUse(in input) response {
-	if !guardedTools[in.ToolName] {
-		return response{}
-	}
+func (in input) target() string {
 	p := in.ToolInput.FilePath
 	if in.ToolName == "NotebookEdit" {
 		p = in.ToolInput.NotebookPath
 	}
+	if p != "" && !filepath.IsAbs(p) {
+		p = filepath.Join(in.Cwd, p)
+	}
+	return p
+}
+
+func preToolUse(in input) response {
+	if !guardedTools[in.ToolName] {
+		return response{}
+	}
+	p := in.target()
 	if p == "" {
 		return deny(fmt.Sprintf("%s input has no file path", in.ToolName))
 	}
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(in.Cwd, p)
-	}
-	if _, ok, _ := adopted(filepath.Dir(p)); !ok {
+	m, ok, _ := adopted(filepath.Dir(p))
+	if !ok {
 		return response{}
 	}
 	g, err := app.NewGuard(HarnessProtected)
@@ -219,6 +232,41 @@ func preToolUse(in input) response {
 	}
 	if ok, reason := g.Check(p, in.AgentType); !ok {
 		return deny(reason)
+	}
+	if m != nil {
+		if rel, inside := m.Rel(p); inside {
+			_ = app.WritePending(m, in.SessionID, in.ToolUseID, rel)
+		}
+	}
+	return response{}
+}
+
+func gapMessage(msg string) response {
+	return response{out: &output{SystemMessage: msg + "; CI will count this edit as a provenance gap"}}
+}
+
+func postToolUse(in input) response {
+	if !guardedTools[in.ToolName] {
+		return response{}
+	}
+	p := in.target()
+	if p == "" {
+		return gapMessage(fmt.Sprintf("assure record: %s input has no file path", in.ToolName))
+	}
+	m, ok, err := adopted(filepath.Dir(p))
+	if !ok {
+		return response{}
+	}
+	if err != nil {
+		return gapMessage("assure record: " + err.Error())
+	}
+	rel, inside := m.Rel(p)
+	if !inside {
+		return gapMessage("assure record: " + p + " is outside the manifest root " + m.Root)
+	}
+	if _, _, err := app.Record(m, app.RecordInput{Session: in.SessionID, Tool: in.ToolName, ToolUseID: in.ToolUseID,
+		AgentID: in.AgentID, AgentType: in.AgentType, Path: rel}); err != nil {
+		return gapMessage(fmt.Sprintf("assure record: %s: %v", rel, err))
 	}
 	return response{}
 }

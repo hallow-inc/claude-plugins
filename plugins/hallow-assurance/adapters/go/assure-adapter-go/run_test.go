@@ -460,3 +460,24 @@ func TestRunComplexityEndToEnd(t *testing.T) {
 		t.Fatalf("got %+v, want one cyclomatic result with metric 3", rs)
 	}
 }
+
+func TestRunTestsRunsInShortMode(t *testing.T) {
+	const onlyShort = "package a\n\nimport \"testing\"\n\nfunc TestSlow(t *testing.T) {\n\tif !testing.Short() {\n\t\tt.Fatal(\"not short\")\n\t}\n}\n"
+	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
+	writeFiles(t, dir, map[string]string{"a/a_test.go": onlyShort})
+	out := filepath.Join(t.TempDir(), "ev")
+	if _, stderr, code := runIn(t, dir, "run", "VER-TESTS-PASS", "--changed-from", "HEAD", "--out", out); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "junit.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := ev.ParseJUnit(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Cases == 0 || j.Failures != 0 || j.Errors != 0 {
+		t.Fatalf("want TestSlow run and passing under -short, got %+v", j)
+	}
+}

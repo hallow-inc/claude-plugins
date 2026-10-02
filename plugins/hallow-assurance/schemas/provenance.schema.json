@@ -12,7 +12,7 @@
     "agent_type": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "tool": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
     "path": { "$ref": "common.schema.json#/$defs/repoPath" },
-    "role": { "$ref": "common.schema.json#/$defs/role" },
+    "role": { "enum": ["source", "test", "generated", "fuzz_corpus", "config", "unclassified"] },
     "pre": { "$ref": "#/$defs/blob" },
     "post": { "$ref": "#/$defs/blob" }
   },

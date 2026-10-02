@@ -227,7 +227,7 @@ func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int,
 func runTests(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	suites := xmlSuites{Suites: []xmlSuite{}}
 	for _, mod := range modules(sel) {
-		args := append([]string{"test", "-race", "-shuffle=on", "-json"}, sel[mod]...)
+		args := append([]string{"test", "-race", "-shuffle=on", "-short", "-json"}, sel[mod]...)
 		stdout, stderr, code, err := runTool(filepath.Join(root, mod), "go", args...)
 		if err != nil {
 			return nil, err

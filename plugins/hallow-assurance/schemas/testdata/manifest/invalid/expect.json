@@ -11,5 +11,7 @@
   "missing-languages.yaml": [{"location": "", "keyword": "required"}],
   "empty-languages.yaml": [{"location": "/languages", "keyword": "minItems"}],
   "protected-traversal.yaml": [{"location": "/protected/0", "keyword": "not"}],
-  "inputs-false.yaml": [{"location": "/components/0/inputs", "keyword": "const"}]
+  "inputs-false.yaml": [{"location": "/components/0/inputs", "keyword": "const"}],
+  "human-review-level-a.yaml": [{"location": "/human_review", "keyword": "additionalProperties"}],
+  "human-review-off.yaml": [{"location": "/human_review/B", "keyword": "enum"}]
 }
