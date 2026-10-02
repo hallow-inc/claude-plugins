@@ -182,3 +182,23 @@ func TestFailOnBaseUnchangedTestsNotSelected(t *testing.T) {
 		t.Fatalf("got %+v; TestOld is unchanged and must not be selected", j)
 	}
 }
+
+func TestFailOnBaseModuleBelowGitRoot(t *testing.T) {
+	top := t.TempDir()
+	if real, err := filepath.EvalSymlinks(top); err == nil {
+		top = real
+	}
+	writeFiles(t, top, map[string]string{"mod/go.mod": "module example.com/m\n\ngo 1.26\n", "mod/a/a.go": offByOne, "mod/a/a_test.go": oldTest})
+	git(t, top, "init", "-q")
+	git(t, top, "add", "-A")
+	git(t, top, "commit", "-qm", "init")
+	dir := filepath.Join(top, "mod")
+	writeFiles(t, dir, map[string]string{
+		"a/a.go":      strings.Replace(offByOne, "len(xs)-2", "len(xs)-1", 1),
+		"a/a_test.go": oldTest + "\nfunc TestBoundary(t *testing.T) {\n\tif Last([]int{1, 2, 3}) != 3 {\n\t\tt.Fatal(\"off by one\")\n\t}\n}\n",
+	})
+	j, _ := baseRun(t, dir)
+	if j.Cases != 1 || j.Failures != 1 || j.Errors != 0 || !strings.HasSuffix(j.Failing[0].Name, "TestBoundary") {
+		t.Fatalf("got %+v; with go.mod below the git root the base tree must still be extracted, so the regression test fails on base instead of erroring", j)
+	}
+}
