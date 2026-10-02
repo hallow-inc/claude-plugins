@@ -125,7 +125,25 @@ func problem(lang, id string, err error) Result {
 	return Result{Lang: lang, Outcome: core.Outcome{ID: id, Status: core.Fail, Details: []string{err.Error()}}, Errs: []error{err}}
 }
 
+func fastRef(root, ref string) string {
+	if ref != "HEAD" {
+		return ref
+	}
+	if _, err := git(root, "rev-parse", "--verify", "-q", "HEAD^{commit}"); err == nil {
+		return ref
+	}
+	if _, err := git(root, "rev-parse", "--is-inside-work-tree"); err != nil {
+		return ref
+	}
+	tree, err := git(root, "hash-object", "-t", "tree", "--stdin")
+	if err != nil || len(tree) != 1 {
+		return ref
+	}
+	return tree[0]
+}
+
 func FastCheck(m *core.Manifest, ref, label string) Report {
+	ref = fastRef(m.Root, ref)
 	changed, err := ChangedFiles(m.Root, ref)
 	if err != nil {
 		return Report{Results: []Result{problem("-", "changed-files", err)}}

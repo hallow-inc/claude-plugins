@@ -153,7 +153,15 @@ func extractBase(root, ref, mod, dst string) error {
 	if mod != "." {
 		tree += mod
 	}
-	data, err := gitBytes(root, "archive", "--format=tar", tree)
+	id, err := gitBytes(root, "rev-parse", "--verify", tree)
+	if err != nil {
+		return err
+	}
+	top, err := gitBytes(root, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return err
+	}
+	data, err := gitBytes(strings.TrimSpace(string(top)), "archive", "--format=tar", strings.TrimSpace(string(id)))
 	if err != nil {
 		return err
 	}
