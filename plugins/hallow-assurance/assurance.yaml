@@ -2,6 +2,8 @@ version: 0
 catalog: v0
 languages: [go]
 default_level: B
+human_review:
+  B: optional
 components:
   - path: internal/hookio/**
     level: B
