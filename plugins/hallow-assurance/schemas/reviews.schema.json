@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/reviews.schema.json",
+  "title": "Pull request reviews for assure evaluate --reviews",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["author", "head", "reviews"],
+  "properties": {
+    "author": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+    "head": { "$ref": "#/$defs/commit" },
+    "reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["login", "state", "commit"],
+        "properties": {
+          "login": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "state": { "enum": ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"] },
+          "commit": { "$ref": "#/$defs/commit" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "commit": { "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$" }
+  }
+}

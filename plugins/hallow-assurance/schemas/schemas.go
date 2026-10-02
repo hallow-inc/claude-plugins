@@ -40,6 +40,8 @@ const (
 	MutationReport  Kind = "mutation-report"
 	TestBudget      Kind = "test-budget"
 	Resolutions     Kind = "coverage-resolutions"
+	Reviews         Kind = "reviews"
+	Pending         Kind = "pending"
 )
 
 const base = "https://assure.invalid/schemas/v0/"
@@ -76,6 +78,8 @@ var kinds = map[Kind]struct {
 	MutationReport:  {strykerID, jsonDoc},
 	TestBudget:      {base + "test-budget.schema.json", jsonDoc},
 	Resolutions:     {base + "coverage-resolutions.schema.json", yamlDoc},
+	Reviews:         {base + "reviews.schema.json", jsonDoc},
+	Pending:         {base + "pending.schema.json", jsonDoc},
 }
 
 type Violation struct {

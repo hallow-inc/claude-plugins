@@ -74,7 +74,7 @@ func (r Report) Remedies() []string {
 	return slices.Compact(out)
 }
 
-func git(root string, args ...string) ([]string, error) {
+func gitBytes(root string, args ...string) ([]byte, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = root
 	out, err := cmd.Output()
@@ -83,6 +83,14 @@ func git(root string, args ...string) ([]string, error) {
 			return nil, fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(ee.Stderr)))
 		}
 		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return out, nil
+}
+
+func git(root string, args ...string) ([]string, error) {
+	out, err := gitBytes(root, args...)
+	if err != nil {
+		return nil, err
 	}
 	var lines []string
 	for l := range strings.SplitSeq(string(out), "\n") {

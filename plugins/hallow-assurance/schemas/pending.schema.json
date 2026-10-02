@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/pending.schema.json",
+  "title": "Pending pre-edit blob (.assure/state/pending/<session>/<tool_use_id>.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "path", "pre"],
+  "properties": {
+    "v": { "const": 0 },
+    "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+    "pre": { "$ref": "provenance.schema.json#/$defs/blob" }
+  }
+}

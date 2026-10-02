@@ -123,7 +123,7 @@ func hook(event string, in []byte) (int, map[string]any, string) {
 }
 
 func eventFor(name string) string {
-	for _, e := range []string{"session-start", "pre-tool-use", "stop"} {
+	for _, e := range []string{"session-start", "pre-tool-use", "post-tool-use", "stop"} {
 		if strings.HasPrefix(name, e+"-") {
 			return e
 		}

@@ -1,5 +1,5 @@
 #!/bin/sh
-expected=0
+expected=1
 event=$1
 
 dir=$PWD

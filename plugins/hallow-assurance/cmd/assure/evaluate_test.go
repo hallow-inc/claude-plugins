@@ -103,9 +103,13 @@ func TestEvaluateUnproducedObjectiveFailsWithoutWaiver(t *testing.T) {
 		t.Fatalf("exit %d, want 1: missing evidence must block", code)
 	}
 	rep, _ := readReport(t, r)
-	e, ok := entry(rep, "IND-VERIFIER-DISTINCT", "")
-	if !ok || e.Status != "fail" || len(e.Details) != 1 || e.Details[0] != "no adapter lists IND-VERIFIER-DISTINCT" {
-		t.Fatalf("IND-VERIFIER-DISTINCT: %+v %v", e, ok)
+	e, ok := entry(rep, "VER-TRACE-REQ", "")
+	if !ok || e.Status != "advisory-fail" || len(e.Details) != 1 || e.Details[0] != "no adapter lists VER-TRACE-REQ" {
+		t.Fatalf("VER-TRACE-REQ (advisory at B): %+v %v", e, ok)
+	}
+	ind, ok := entry(rep, "IND-VERIFIER-DISTINCT", "")
+	if !ok || ind.Status != "fail" || len(ind.Details) != 1 || !strings.HasPrefix(ind.Details[0], "p/p.go: gap") {
+		t.Fatalf("IND-VERIFIER-DISTINCT must be decided from provenance, not reported as unlisted: %+v %v", ind, ok)
 	}
 }
 

@@ -113,6 +113,17 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "languages", "x", []any{}, []any{langs[0], langs[0]})
 	r.bad("", "components", "x", []any{"x"})
 	r.bad("", "protected", "x")
+	r.bad("", "human_review", "x", map[string]any{"A": "optional"}, map[string]any{"E": "optional"})
+	if rapid.Bool().Draw(t, "review") {
+		hr := map[string]any{}
+		for _, l := range []string{"B", "C", "D"} {
+			if rapid.Bool().Draw(t, "hr"+l) {
+				hr[l] = rapid.SampledFrom([]string{"required", "optional"}).Draw(t, "hrv")
+				r.bad("/human_review", l, "off", true, 1)
+			}
+		}
+		doc["human_review"] = hr
+	}
 	if rapid.Bool().Draw(t, "protected") {
 		prot := []any{}
 		for i := range rapid.IntRange(0, 2).Draw(t, "nprot") {
@@ -246,7 +257,7 @@ var provenanceGen = rapid.Custom(func(t *rapid.T) sample {
 		"session": textGen.Draw(t, "session"),
 		"tool":    rapid.SampledFrom([]string{"Edit", "Write", "NotebookEdit"}).Draw(t, "tool"),
 		"path":    pathGen.Draw(t, "path"),
-		"role":    rapid.SampledFrom([]string{"source", "test", "generated", "fuzz_corpus", "config"}).Draw(t, "role"),
+		"role":    rapid.SampledFrom([]string{"source", "test", "generated", "fuzz_corpus", "config", "unclassified"}).Draw(t, "role"),
 	}
 	switch rapid.IntRange(0, 2).Draw(t, "shape") {
 	case 0:
@@ -600,6 +611,8 @@ var generators = map[Kind]*rapid.Generator[sample]{
 	AdapterDescribe: describeGen,
 	AdapterClassify: classifyGen,
 	AdapterRun:      runGen,
+	Reviews:         reviewsGen,
+	Pending:         pendingGen,
 }
 
 func deepCopy(v any) any {

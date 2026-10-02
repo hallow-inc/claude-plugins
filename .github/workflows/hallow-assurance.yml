@@ -2,6 +2,8 @@ name: hallow-assurance
 
 on:
   pull_request:
+  pull_request_review:
+    types: [submitted, dismissed]
   push:
     branches: [master]
     paths:
@@ -39,10 +41,10 @@ jobs:
         id: diff
         env:
           EVENT: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" != pull_request ]; then
+          if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_review ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -56,12 +58,16 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
@@ -89,10 +95,25 @@ jobs:
       - name: Test
         run: go test -race -shuffle=on ./...
 
-      - name: Evaluate
-        if: github.event_name == 'pull_request'
+      - name: Fetch reviews
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
         env:
-          BASE_REF: ${{ github.base_ref }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
+            --jq '.[] | select(.user != null and .commit_id != null) | {login: .user.login, state: .state, commit: .commit_id}' \
+            | jq -s --arg author "$AUTHOR" --arg head "$HEAD_SHA" '{author: $author, head: $head, reviews: .}' \
+            > "$RUNNER_TEMP/reviews.json"
+
+      - name: Evaluate
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
           command -v golangci-lint || { echo "::warning::golangci-lint is not on PATH; CODE-ZERO-WARNINGS will fail"; }
@@ -100,7 +121,7 @@ jobs:
           go build -o "$bin/assure" ./cmd/assure
           go build -o "$bin/assure-adapter-go" ./adapters/go/assure-adapter-go
           base=$(git merge-base HEAD "origin/$BASE_REF")
-          PATH="$bin:$PATH" assure evaluate --changed-from "$base" | tee -a "$GITHUB_STEP_SUMMARY"
+          PATH="$bin:$PATH" assure evaluate --changed-from "$base" --reviews "$RUNNER_TEMP/reviews.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
   assure-gate:
     needs: [changes, go]

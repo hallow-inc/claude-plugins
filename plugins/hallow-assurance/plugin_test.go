@@ -79,13 +79,13 @@ func TestShimBlocksWhenAssureMissing(t *testing.T) {
 func TestShimBlocksOnProtocolMismatch(t *testing.T) {
 	path := fakeAssure(t, `[ "$1 $2" = "hook protocol" ] && echo 7`)
 	code, _, errb := shimEvent(t, "session-start", adoptedDir(t), path, "{}")
-	if code != 2 || !strings.Contains(errb, "protocol 0") || !strings.Contains(errb, "'7'") {
+	if code != 2 || !strings.Contains(errb, "protocol 1") || !strings.Contains(errb, "'7'") {
 		t.Fatalf("got %d %q", code, errb)
 	}
 }
 
 func TestShimExecsAssureWithStdin(t *testing.T) {
-	path := fakeAssure(t, `if [ "$1 $2" = "hook protocol" ]; then echo 0; exit 0; fi
+	path := fakeAssure(t, `if [ "$1 $2" = "hook protocol" ]; then echo 1; exit 0; fi
 echo "args=$*"; cat; exit 2`)
 	code, out, _ := shim(t, adoptedDir(t), path, `{"hook_event_name":"Stop"}`)
 	if code != 2 || out != "args=hook stop\n{\"hook_event_name\":\"Stop\"}" {
@@ -114,6 +114,7 @@ func TestHooksJSONDeclaresEveryHookWithATimeout(t *testing.T) {
 	}{
 		"SessionStart": {"", "session-start", 30},
 		"PreToolUse":   {"Edit|Write|NotebookEdit", "pre-tool-use", 10},
+		"PostToolUse":  {"Edit|Write|NotebookEdit", "post-tool-use", 10},
 		"Stop":         {"", "stop", 180},
 	}
 	if len(cfg.Hooks) != len(want) {
@@ -129,6 +130,9 @@ func TestHooksJSONDeclaresEveryHookWithATimeout(t *testing.T) {
 			len(h.Args) != 1 || h.Args[0] != w.arg || h.Timeout != w.timeout {
 			t.Errorf("%s: got matcher %q %+v; a hook without an explicit timeout waits 600 s and then fails open", event, groups[0].Matcher, h)
 		}
+	}
+	if pre, post := cfg.Hooks["PreToolUse"], cfg.Hooks["PostToolUse"]; len(pre) != 1 || len(post) != 1 || pre[0].Matcher != post[0].Matcher {
+		t.Errorf("PostToolUse matcher must equal PreToolUse matcher: a tool the guard sees but record does not leaves every such edit a provenance gap")
 	}
 }
 
@@ -168,7 +172,7 @@ func TestShimAllowsStopWhenAssureMissing(t *testing.T) {
 func TestShimAllowsStopOnProtocolMismatch(t *testing.T) {
 	path := fakeAssure(t, `[ "$1 $2" = "hook protocol" ] && echo 7`)
 	code, out, _ := shim(t, adoptedDir(t), path, "{}")
-	if msg := stopMessage(t, code, out); !strings.Contains(msg, "protocol 0") || !strings.Contains(msg, "speaks 7") {
+	if msg := stopMessage(t, code, out); !strings.Contains(msg, "protocol 1") || !strings.Contains(msg, "speaks 7") {
 		t.Fatalf("message %q does not name both protocols", msg)
 	}
 }

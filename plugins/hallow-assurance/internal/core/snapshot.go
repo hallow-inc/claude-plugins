@@ -18,7 +18,10 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
-const StateDir = ".assure/state"
+const (
+	StateDir      = ".assure/state"
+	ProvenanceDir = ".assure/provenance"
+)
 
 var sessionID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
@@ -73,7 +76,8 @@ func walkRoot(g Glob) (root string, exact bool) {
 }
 
 func skipped(rel string) bool {
-	return rel == ".git" || rel == StateDir || strings.HasPrefix(rel, StateDir+"/")
+	return rel == ".git" || rel == StateDir || strings.HasPrefix(rel, StateDir+"/") ||
+		rel == ProvenanceDir || strings.HasPrefix(rel, ProvenanceDir+"/")
 }
 
 func (m *Manifest) ProtectedFiles(extra []Glob) (map[string]string, error) {
@@ -224,7 +228,7 @@ func Drift(m *Manifest, s Snapshot, extra []Glob) ([]string, error) {
 }
 
 func PruneState(root string, maxAge time.Duration, now time.Time) {
-	for _, pattern := range []string{"snapshot-*.json", "stop-*.json"} {
+	for _, pattern := range []string{"snapshot-*.json", "stop-*.json", "pending/*/*.json"} {
 		matches, _ := filepath.Glob(filepath.Join(root, StateDir, pattern))
 		for _, f := range matches {
 			if info, err := os.Stat(f); err == nil && now.Sub(info.ModTime()) > maxAge {

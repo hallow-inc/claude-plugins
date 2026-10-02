@@ -294,8 +294,11 @@ removable. "Verdict" is reserved for gate decisions (invariant 2).
 {"v":0,"session":"7f3a2c9e","agent_type":"hallow-assurance:verifier","agent_id":"a4d2c8f1e0b3a297","tool":"Edit","path":"internal/chat/stream_test.go","role":"test","pre":"9f2c3b1d0e7a6f5c4b3a29180716253443526170","post":"a41e5d6c7b8a99887766554433221100ffeeddcc"}
 ```
 
-`pre` is the file's blob hash (`git hash-object --path`) captured by `guard` at PreToolUse; `post`
-is captured by `record` at PostToolUse. `null` means absent / deleted. Renames are delete + create.
+`pre` is the file's blob hash (`git hash-object --path`) captured by the PreToolUse hook after guard
+allows the call, held in `.assure/state/pending/<session>/<tool_use_id>.json`; `post` is captured by
+`record` at PostToolUse, which appends the record and deletes the pending entry. `null` means
+absent / deleted. Renames are delete + create. The Stop drift snapshot excludes
+`.assure/provenance/`, because `record` appends to it mid-session; CI's append-only check covers it.
 
 Threat model: a shortcut-taking agent (edits tests while implementing, edits through Bash), not a
 forging one. Any agent running as the developer's OS user can reach every local secret, so local
@@ -305,18 +308,25 @@ CI check, per changed file in a level A–B component: the records must form an 
 `merge-base blob → pre→post → … → final blob`. Order comes from the hash links, not timestamps. Any
 break is a **gap**: unattributed, never assumed human. A gap fails IND-VERIFIER-DISTINCT for that
 file unless the PR has an approving review from someone other than the PR author. Gaps where the
-file also changed on the base branch are reported as merge-shaped; v0 counts them to decide whether
-a 3-way check is worth building. CI also checks that a PR only appends to existing session files.
+file also changed on the base branch are merge-shaped; counting them to decide whether a 3-way
+check is worth building is not built yet. CI also checks that a PR only appends to existing session files.
 
 Any non-author approval counts; there is no approver list. GitHub rejects an author's approval of
 their own PR, so an agent running on the author's credentials cannot produce one. The PR template
-lists what a reviewer is attesting to.
+lists what a reviewer is attesting to. CI passes reviews to `assure evaluate --reviews <file>` as
+`{author, head, reviews:[{login, state, commit}]}` (fetched with `gh api`), so the evaluator stays
+offline. An approval counts only when it is the reviewer's latest review and was made on `head`.
+
+A repo with no second reviewer may set `human_review: {B|C|D: optional}` in the manifest (never A,
+which needs a named human). At those levels, gaps and protected-file changes pass and are listed as
+unreviewed; role violations, `agent_id` conflicts, and rewritten provenance still fail. The value is
+read from the manifest at the base ref, so a PR cannot relax its own gate.
 
 Independence tiers (computed by the evaluator):
 
 | Tier | Meaning | Evidence |
 |---|---|---|
-| tier1 | Distinct context: test-role files' chains written only by the verifier agent type; source-role files never by it; distinct `agent_id` (the main thread is its own identity) | provenance chains |
+| tier1 | Distinct context: test-role files' chains written only by verifier-side agent types (`verifier`, `pruner`: the pruner edits tests and is not the code's author); source-role files never by them; distinct `agent_id` (the main thread is its own identity) | provenance chains |
 | tier2 | tier1 + inspector findings from a dissimilar model/vendor | inspector SARIF `tool.driver` |
 | tier3 | tier2 + approving review from someone other than the PR author | GitHub review API |
 
@@ -408,7 +418,7 @@ keep local behavior as close to fail-closed as the harness allows:
 | SessionStart | – | `guard --snapshot` | Records protected-file hashes for the Stop drift check |
 | PreToolUse | `Edit\|Write\|NotebookEdit` | `guard` | Blocks protected files; enforces subagent role rules keyed on the hook input's `agent_type` (e.g. verifier can't edit source) |
 | PostToolUse | `Edit\|Write` | `lint` | Fast per-file rule-pack findings fed back to the agent |
-| PostToolUse | `Edit\|Write` | `record` | Appends provenance |
+| PostToolUse | `Edit\|Write\|NotebookEdit` | `record` | Appends provenance (never blocks; a failure is a CI gap) |
 | Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail or protected files drifted; retry cap (own counter + `stop_hook_active`) then escalate |
 | SubagentStop | `^hallow-assurance:(verifier\|inspector)$` | `check --role <agent>` | Verifier must leave passing tests; inspector must emit SARIF |
 
@@ -482,12 +492,16 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
   leaves an unrelated PR Pending
 - ✅ Required status check on the pilot repo (blocking levels A–B)
 
-**M4 — Subagents, provenance, skills**
+**M4a — Subagents, provenance, independence**
 - Four subagents; role rules in `guard` keyed on `agent_type`; frontmatter `tools` /
   `disallowedTools` as defense-in-depth
-- `assure record` + IND-VERIFIER-DISTINCT evaluation
-- `assure-testing` skill + `go.md` reference; `/assure:*` commands
+- `assure record` + IND-VERIFIER-DISTINCT (tier1) and CFG-PROTECTED evaluation; `--reviews` input;
+  manifest `human_review`
 - ✅ Evaluator rejects a PR where implementer == verifier on level B code
+
+**M4b — Skills, commands**
+- `assure-testing` skill + `go.md` reference (adapter `describe` names it); `/assure:*` commands
+- SubagentStop `check --role` for verifier and inspector
 
 **M5 — Qualification & CI agents**
 - `qualification/go/`: seeded-bug fixtures with expected outcomes (mutants that must be killed,

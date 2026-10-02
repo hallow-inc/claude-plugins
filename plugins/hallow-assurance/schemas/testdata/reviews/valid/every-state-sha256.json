@@ -1,0 +1,6 @@
+{"author":"octo","head":"0123456789abcdef0123456789abcdef012345670123456789abcdef01234567","reviews":[
+ {"login":"a","state":"APPROVED","commit":"89abcdef0123456789abcdef0123456789abcdef"},
+ {"login":"b","state":"CHANGES_REQUESTED","commit":"0123456789abcdef0123456789abcdef01234567"},
+ {"login":"c","state":"COMMENTED","commit":"0123456789abcdef0123456789abcdef01234567"},
+ {"login":"d","state":"DISMISSED","commit":"0123456789abcdef0123456789abcdef01234567"},
+ {"login":"e","state":"PENDING","commit":"0123456789abcdef0123456789abcdef012345670123456789abcdef01234567"}]}

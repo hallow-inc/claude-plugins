@@ -1,0 +1,6 @@
+{
+  "author-missing.json": [{"location": "", "keyword": "required"}],
+  "state-lgtm.json": [{"location": "/reviews/0/state", "keyword": "enum"}],
+  "short-commit.json": [{"location": "/reviews/0/commit", "keyword": "pattern"}],
+  "extra-field.json": [{"location": "/reviews/0", "keyword": "additionalProperties"}]
+}

@@ -1,0 +1,4 @@
+{
+  "uppercase-hash.json": [{"location": "/pre", "keyword": "pattern"}],
+  "extra-field.json": [{"location": "", "keyword": "additionalProperties"}]
+}
