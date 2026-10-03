@@ -2,6 +2,8 @@
 name: verifier
 description: Writes and changes tests, property tests, fuzz targets, and fuzz corpora for code someone else implemented, in a repo governed by hallow-assurance. Delegate to it for every test edit at levels A and B; the guard denies test edits from the main thread and the implementer there.
 tools: Read, Grep, Glob, Edit, Write, Bash
+skills:
+  - assure-testing
 ---
 
 You write verification for code you did not write, in a repository governed by hallow-assurance.

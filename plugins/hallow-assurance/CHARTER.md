@@ -156,9 +156,7 @@ plugins/hallow-assurance/
     hooks/hooks.json
     bin/assure-hook              # shim: no manifest → exit 0; assure missing → exit 2; else exec
     agents/{implementer,verifier,inspector,pruner}.md
-    skills/assure-testing/SKILL.md
-    skills/assure-testing/reference/   # per-language refs, shipped by adapters
-    commands/{check,bugfix,inspect}.md
+    skills/{assure-testing,check,bugfix,inspect}/SKILL.md   # no commands/: Claude Code lists it as legacy
   qualification/
     go/                          # seeded-bug fixture repos + expected results
   testdata/
@@ -326,7 +324,7 @@ Independence tiers (computed by the evaluator):
 
 | Tier | Meaning | Evidence |
 |---|---|---|
-| tier1 | Distinct context: test-role files' chains written only by verifier-side agent types (`verifier`, `pruner`: the pruner edits tests and is not the code's author); source-role files never by them; distinct `agent_id` (the main thread is its own identity) | provenance chains |
+| tier1 | Distinct context: test-role files' chains written only by verifier-side agent types (`verifier`, `pruner`: the pruner edits tests and is not the code's author); source- and config-role files never by them; unclassified files (fixtures) by either; distinct `agent_id` (the main thread is its own identity) | provenance chains |
 | tier2 | tier1 + inspector findings from a dissimilar model/vendor | inspector SARIF `tool.driver` |
 | tier3 | tier2 + approving review from someone other than the PR author | GitHub review API |
 
@@ -337,13 +335,14 @@ than in CI.
 **Adapter protocol v0** — subprocess, JSON on stdin/stdout:
 
 ```
-assure-adapter-go describe            → {protocol:0, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{<id>:{tool, fast?}}}
+assure-adapter-go describe            → {protocol:0, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{<id>:{tool, fast?}}, reference?:"go"}
 assure-adapter-go classify  <paths>   → {protocol:0, files:[{path, language, role}]}
 assure-adapter-go lint      <paths>   → SARIF
 assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:0, evidence:[{type, path}], tool_versions:{...}}
+assure-adapter-go reference          → Markdown (the testing reference named by describe.reference)
 ```
 
-Every response except `lint` is an object carrying `protocol: 0`, so each message is versioned on its own.
+Every response except `lint` and `reference` is an object carrying `protocol: 0`, so each message is versioned on its own.
 `claims` lists the files the adapter owns. A claimed file's role is the first matching pattern list
 in the order `generated`, `fuzz_corpus`, `test`, `config`, and otherwise `source`.
 `fast: true` marks an objective cheap enough for the Stop-hook fast check. Cost belongs to the tool
@@ -397,7 +396,9 @@ keep local behavior as close to fail-closed as the harness allows:
 - The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted) and exits 2 when
   `assure` is missing or `assure hook protocol` prints a different hook-protocol number than the
   shim expects. The shim checks a protocol number rather than a release version because there is no
-  release channel yet.
+  release channel yet. The hook protocol is 2: M4b added the `subagent-stop` event, which an older
+  `assure` would reject with exit 2 and so block every subagent stop. For `stop` and `subagent-stop`
+  the shim allows with a `systemMessage` instead, because the agent cannot fix the install.
 - `internal/hookio` recovers from every internal error and emits a deny/block decision.
 - Every hook declares an explicit `timeout`; `guard` is a pure in-memory decision. It reads file
   roles from each adapter's `describe` globs, cached in `.assure/state/adapters.json` and keyed by
@@ -420,7 +421,7 @@ keep local behavior as close to fail-closed as the harness allows:
 | PostToolUse | `Edit\|Write` | `lint` | Fast per-file rule-pack findings fed back to the agent |
 | PostToolUse | `Edit\|Write\|NotebookEdit` | `record` | Appends provenance (never blocks; a failure is a CI gap) |
 | Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail or protected files drifted; retry cap (own counter + `stop_hook_active`) then escalate |
-| SubagentStop | `^hallow-assurance:(verifier\|inspector)$` | `check --role <agent>` | Verifier must leave passing tests; inspector must emit SARIF |
+| SubagentStop | `^hallow-assurance:(verifier\|inspector)$` | `check --role <agent>` | Verifier must leave passing tests (`VER-TESTS-PASS` only); inspector must emit one fenced `sarif` block in its final message, which the hook reads from `last_assistant_message`, validates, and writes to `.assure/state/inspections/` |
 
 Plugin subagent names are plugin-scoped (`hallow-assurance:verifier`), so the SubagentStop matcher is
 an anchored regex; an unanchored `verifier|inspector` never matches.
@@ -433,10 +434,12 @@ subagent tool calls. Claude Code ignores `hooks` and `permissionMode` in plugin 
 so frontmatter cannot enforce roles; `tools` / `disallowedTools` stay as defense-in-depth.
 
 Skills: one generic `assure-testing` skill (philosophy, fail-first loop, coverage resolutions,
-how to read `assure` output, designing for deterministic simulation, Lean model + differential
-testing) + per-language reference files shipped by adapters.
+how to read `assure` output, designing for deterministic simulation, formal model + differential
+testing). Per-language references ship inside each adapter (`assure-adapter-<lang> reference`), so the
+plugin carries no language text; `assure reference <lang>` prints one.
 
-Commands: `/assure:check`, `/assure:bugfix <issue|seed>`, `/assure:inspect`.
+Commands: `/hallow-assurance:check`, `/hallow-assurance:bugfix <issue|seed>`, `/hallow-assurance:inspect`,
+shipped as user-invoked skills. Claude Code always prefixes plugin skills with the plugin name.
 
 ## Milestones
 
@@ -500,14 +503,14 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
 - ✅ Evaluator rejects a PR where implementer == verifier on level B code
 
 **M4b — Skills, commands**
-- `assure-testing` skill + `go.md` reference (adapter `describe` names it); `/assure:*` commands
+- `assure-testing` skill + Go reference embedded in the adapter (`describe` names it); `/hallow-assurance:*` commands
 - SubagentStop `check --role` for verifier and inspector
 
 **M5 — Qualification & CI agents**
 - `qualification/go/`: seeded-bug fixtures with expected outcomes (mutants that must be killed,
   known coverage, known lint findings)
 - Adapter must pass qualification in CI before release
-- Headless Claude Code inspector on level A–B PRs; nightly failure → `/assure:bugfix` PR
+- Headless Claude Code inspector on level A–B PRs; nightly failure → `/hallow-assurance:bugfix` PR
 - ✅ A deliberately broken adapter build fails qualification
 
 **M6 — TypeScript adapter (agnosticism proof)**

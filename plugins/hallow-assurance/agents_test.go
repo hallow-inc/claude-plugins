@@ -68,6 +68,7 @@ func TestAgentFilesMatchTheGuard(t *testing.T) {
 				t.Errorf("%s sets %s: Claude Code ignores the first three for plugin agents, and a worktree writes provenance outside the PR", p, k)
 			}
 		}
+		checkRoleContract(t, p, name, a)
 		if name == "inspector" {
 			for _, tool := range []string{"Edit", "Write", "NotebookEdit", "Bash"} {
 				if slices.Contains(a.tools, tool) {
@@ -91,6 +92,18 @@ func TestAgentFilesMatchTheGuard(t *testing.T) {
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
 		t.Fatalf("agent types %v, want exactly the guard's %v", got, want)
+	}
+}
+
+func checkRoleContract(t *testing.T, p, name string, a agentFile) {
+	t.Helper()
+	skills, _ := a.front["skills"].([]any)
+	preloads := slices.ContainsFunc(skills, func(s any) bool { return s == "assure-testing" || s == "hallow-assurance:assure-testing" })
+	if (name == "verifier" || name == "pruner") && !preloads {
+		t.Errorf("%s: skills %v does not preload assure-testing, so the first test edit runs without the testing guidance", p, a.front["skills"])
+	}
+	if name == "inspector" && (!strings.Contains(a.body, "```sarif") || !strings.Contains(a.body, core.Inspector)) {
+		t.Errorf("%s: prompt does not state the ```sarif output contract with tool name %s that the SubagentStop hook enforces", p, core.Inspector)
 	}
 }
 

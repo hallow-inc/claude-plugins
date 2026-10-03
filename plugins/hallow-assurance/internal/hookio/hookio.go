@@ -14,7 +14,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-const Protocol = 1
+const Protocol = 2
 
 var HarnessProtected = []string{".claude/settings.json", ".claude/settings.local.json"}
 
@@ -29,19 +29,21 @@ var eventNames = map[string]string{
 	"pre-tool-use":  "PreToolUse",
 	"post-tool-use": "PostToolUse",
 	"stop":          "Stop",
+	"subagent-stop": "SubagentStop",
 }
 
 var guardedTools = map[string]bool{"Edit": true, "Write": true, "NotebookEdit": true}
 
 type input struct {
-	SessionID      string `json:"session_id"`
-	Cwd            string `json:"cwd"`
-	HookEventName  string `json:"hook_event_name"`
-	AgentID        string `json:"agent_id"`
-	AgentType      string `json:"agent_type"`
-	ToolUseID      string `json:"tool_use_id"`
-	ToolName       string `json:"tool_name"`
-	StopHookActive bool   `json:"stop_hook_active"`
+	SessionID      string  `json:"session_id"`
+	Cwd            string  `json:"cwd"`
+	HookEventName  string  `json:"hook_event_name"`
+	AgentID        string  `json:"agent_id"`
+	AgentType      string  `json:"agent_type"`
+	ToolUseID      string  `json:"tool_use_id"`
+	ToolName       string  `json:"tool_name"`
+	StopHookActive *bool   `json:"stop_hook_active"`
+	LastMessage    *string `json:"last_assistant_message"`
 	ToolInput      struct {
 		FilePath     string `json:"file_path"`
 		NotebookPath string `json:"notebook_path"`
@@ -87,11 +89,19 @@ func Run(event string, stdin io.Reader, stdout, stderr io.Writer) (code int) {
 var handler = handle
 
 func handle(event string, stdin io.Reader) response {
-	in, err := decode(event, stdin)
+	in, err := parse(stdin)
+	if err == nil && event == "subagent-stop" && !roleAgents[in.AgentType] {
+		return response{}
+	}
+	if err == nil {
+		err = validate(event, in)
+	}
 	if err != nil {
 		return failure(event, err)
 	}
 	switch event {
+	case "subagent-stop":
+		return subagentStop(in)
 	case "pre-tool-use":
 		return preToolUse(in)
 	case "post-tool-use":
@@ -103,7 +113,7 @@ func handle(event string, stdin io.Reader) response {
 	}
 }
 
-func decode(event string, stdin io.Reader) (input, error) {
+func parse(stdin io.Reader) (input, error) {
 	var in input
 	data, err := io.ReadAll(io.LimitReader(stdin, maxInput+1))
 	if err != nil {
@@ -115,16 +125,23 @@ func decode(event string, stdin io.Reader) (input, error) {
 	if err := json.Unmarshal(data, &in); err != nil {
 		return in, fmt.Errorf("decoding hook input: %w", err)
 	}
+	return in, nil
+}
+
+func validate(event string, in input) error {
 	if want := eventNames[event]; in.HookEventName != want {
-		return in, fmt.Errorf("hook input is for %q, not %s", in.HookEventName, want)
+		return fmt.Errorf("hook input is for %q, not %s", in.HookEventName, want)
 	}
 	if in.Cwd == "" || !filepath.IsAbs(in.Cwd) {
-		return in, errors.New("hook input has no absolute cwd")
+		return errors.New("hook input has no absolute cwd")
 	}
 	if event != "pre-tool-use" && !core.ValidSession(in.SessionID) {
-		return in, fmt.Errorf("hook input session_id %q is not a valid session id", in.SessionID)
+		return fmt.Errorf("hook input session_id %q is not a valid session id", in.SessionID)
 	}
-	return in, nil
+	if event == "subagent-stop" && !core.ValidSession(in.AgentID) {
+		return fmt.Errorf("hook input agent_id %q is not a valid agent id", in.AgentID)
+	}
+	return nil
 }
 
 func failure(event string, err error) response {
@@ -132,7 +149,7 @@ func failure(event string, err error) response {
 	switch event {
 	case "pre-tool-use":
 		return deny(msg)
-	case "stop":
+	case "stop", "subagent-stop":
 		return response{out: &output{Decision: "block", Reason: msg}, code: 2}
 	case "post-tool-use":
 		return gapMessage(msg)
@@ -312,6 +329,7 @@ func drift(m *core.Manifest, session string) ([]string, error) {
 }
 
 type stopInput struct {
+	name     string
 	rep      app.Report
 	drifted  []string
 	driftErr error
@@ -368,7 +386,7 @@ func decideStop(in stopInput, state core.StopState) (core.StopState, response) {
 		return next, response{}
 	case core.StopBlock:
 		return next, response{out: &output{Decision: "block", Reason: fmt.Sprintf(
-			"assure fast check failed (attempt %d of %d). Fix these before stopping:\n\n%s", next.Blocks, core.StopCap, in.summary())}, code: 2}
+			"assure %s failed (attempt %d of %d). Fix these before stopping:\n\n%s", in.name, next.Blocks, core.StopCap, in.summary())}, code: 2}
 	case core.StopOutsideReach:
 		return next, response{out: &output{SystemMessage: "assure: checks cannot run in this session and the agent cannot fix that; the agent was allowed to stop. Review before merging:\n\n" + in.summary()}}
 	default:
@@ -383,9 +401,9 @@ func stop(in input) response {
 		return response{}
 	}
 	if err != nil {
-		return failure("stop", err)
+		return manifestUnavailable("Stop", err)
 	}
-	si := stopInput{rep: app.FastCheck(m, "HEAD", in.SessionID), active: in.StopHookActive}
+	si := stopInput{name: "fast check", rep: app.FastCheck(m, "HEAD", in.SessionID), active: in.StopHookActive != nil && *in.StopHookActive}
 	si.drifted, si.driftErr = drift(m, in.SessionID)
 	next, resp := decideStop(si, core.ReadStopState(m.Root, in.SessionID))
 	if err := core.WriteStopState(m.Root, in.SessionID, next); err != nil && resp.out != nil {

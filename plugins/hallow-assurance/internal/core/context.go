@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -105,6 +106,19 @@ func RenderContext(m *Manifest, only []string) string {
 				writeObjectives(&b, m.Catalog.Objectives, c.Level, block.name)
 			}
 		}
+	}
+	return b.String()
+}
+
+func RenderReferences(refs []string) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	refs = slices.Sorted(slices.Values(refs))
+	var b strings.Builder
+	b.WriteString("\nTesting references (language-specific detail for the assure-testing skill):\n")
+	for _, r := range refs {
+		fmt.Fprintf(&b, "  %-12s assure reference %s\n", r, r)
 	}
 	return b.String()
 }

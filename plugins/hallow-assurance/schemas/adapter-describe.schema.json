@@ -28,6 +28,7 @@
         "config": { "$ref": "#/$defs/globs" }
       }
     },
+    "reference": { "$ref": "common.schema.json#/$defs/languageId" },
     "objectives": {
       "type": "object",
       "additionalProperties": false,

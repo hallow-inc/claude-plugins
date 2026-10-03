@@ -86,8 +86,20 @@ func stopStatePath(root, session string) string {
 	return filepath.Join(root, StateDir, "stop-"+session+".json")
 }
 
+func subagentStopStatePath(root, session, agent string) string {
+	return filepath.Join(root, StateDir, "subagent-stop-"+session+"-"+agent+".json")
+}
+
 func ReadStopState(root, session string) StopState {
-	data, err := os.ReadFile(stopStatePath(root, session))
+	return readStopState(stopStatePath(root, session))
+}
+
+func ReadSubagentStopState(root, session, agent string) StopState {
+	return readStopState(subagentStopStatePath(root, session, agent))
+}
+
+func readStopState(file string) StopState {
+	data, err := os.ReadFile(file)
 	if err != nil {
 		return StopState{}
 	}
@@ -102,9 +114,25 @@ func ReadStopState(root, session string) StopState {
 }
 
 func WriteStopState(root, session string, s StopState) error {
+	return writeStopState(stopStatePath(root, session), s)
+}
+
+func WriteSubagentStopState(root, session, agent string, s StopState) error {
+	return writeStopState(subagentStopStatePath(root, session, agent), s)
+}
+
+func writeStopState(file string, s StopState) error {
 	data, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
-	return writeState(stopStatePath(root, session), data)
+	return writeState(file, data)
+}
+
+func InspectionPath(root, session, agent string) string {
+	return filepath.Join(root, StateDir, "inspections", session+"-"+agent+".sarif")
+}
+
+func WriteInspection(root, session, agent string, data []byte) error {
+	return writeState(InspectionPath(root, session, agent), data)
 }

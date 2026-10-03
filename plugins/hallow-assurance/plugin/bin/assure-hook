@@ -1,5 +1,5 @@
 #!/bin/sh
-expected=1
+expected=2
 event=$1
 
 dir=$PWD
@@ -9,8 +9,8 @@ while [ ! -f "$dir/assurance.yaml" ]; do
 done
 
 unavailable() {
-  if [ "$event" = stop ]; then
-    printf '{"systemMessage":"assure-hook: the Stop check did not run. %s"}\n' "$2"
+  if [ "$event" = stop ] || [ "$event" = subagent-stop ]; then
+    printf '{"systemMessage":"assure-hook: the %s check did not run. %s"}\n' "$event" "$2"
     exit 0
   fi
   echo "assure-hook: $1" >&2
