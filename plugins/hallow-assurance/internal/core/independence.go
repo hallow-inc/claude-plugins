@@ -143,7 +143,7 @@ func independenceFindings(o Objective, changed []ChangedFile, pv Provenance) (ou
 		gap, checked := Chain(byPath[f.Path], ends.Base, ends.Head)
 		wantVerifier := f.Role == Test || f.Role == FuzzCorpus
 		for _, r := range checked {
-			if VerifierSide(r.AgentType) != wantVerifier {
+			if f.Role != Unclassified && VerifierSide(r.AgentType) != wantVerifier {
 				at(fmt.Sprintf("%s: %s wrote this %s file (session %s)", f.Path, actor(r.AgentType), f.Role, r.Session))
 			}
 		}

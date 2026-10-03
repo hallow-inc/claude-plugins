@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -46,4 +47,21 @@ func ManifestFor(dir string) (*core.Manifest, error) {
 		return nil, fmt.Errorf("invalid manifest: %w", err)
 	}
 	return m, nil
+}
+
+func References(m *core.Manifest) (map[string]string, []error) {
+	ds, errs := adapterproto.Descriptions(m.Root, m.Languages)
+	out := map[string]string{}
+	for _, lang := range m.Languages {
+		if d, ok := ds[lang]; ok && d.Reference != "" {
+			out[d.Reference] = lang
+		}
+	}
+	var failures []error
+	for _, lang := range append(slices.Clone(m.Languages), "") {
+		if err := errs[lang]; err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return out, failures
 }

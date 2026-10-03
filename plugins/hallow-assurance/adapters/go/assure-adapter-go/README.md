@@ -24,6 +24,12 @@ Install Gremlins the same way:
 GOBIN="$HOME/go/bin" go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
 ```
 
+## Reference
+
+`assure-adapter-go reference` prints `reference.md`, embedded at build time: the Go half of the
+plugin's `assure-testing` skill. `describe` names it with `"reference": "go"`, and
+`assure reference go` prints it. Edit `reference.md` and rebuild the adapter to change it.
+
 ## Mutation
 
 Gremlins mutates only lines changed since `--changed-from`, found with `git diff --merge-base`, so

@@ -136,8 +136,10 @@ func TestStopEscalatesAfterThreeBlocks(t *testing.T) {
 	root := goFixture(t)
 	writeFile(t, root, "p/p_test.go", "package p\n\nimport \"testing\"\n\nfunc TestOne(t *testing.T) { t.Fatal(\"no\") }\n")
 	for i := range 3 {
-		if code, out := stopWith(t, root, i > 0); code != 2 || out["decision"] != "block" {
-			t.Fatalf("stop %d: got %d %v", i+1, code, out)
+		code, out := stopWith(t, root, i > 0)
+		reason, _ := out["reason"].(string)
+		if attempt := fmt.Sprintf("attempt %d of 3", i+1); code != 2 || out["decision"] != "block" || !strings.Contains(reason, attempt) {
+			t.Fatalf("stop %d: got %d %v; want a block saying %q, because stop_hook_active true continues the consecutive count", i+1, code, out, attempt)
 		}
 	}
 	code, out := stopWith(t, root, true)

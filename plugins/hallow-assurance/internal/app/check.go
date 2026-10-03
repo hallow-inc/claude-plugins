@@ -151,6 +151,10 @@ func fastRef(root, ref string) string {
 }
 
 func FastCheck(m *core.Manifest, ref, label string) Report {
+	return check(m, ref, label, func(_ string, o adapterproto.Objective) bool { return o.Fast })
+}
+
+func check(m *core.Manifest, ref, label string, keep func(string, adapterproto.Objective) bool) Report {
 	ref = fastRef(m.Root, ref)
 	changed, err := ChangedFiles(m.Root, ref)
 	if err != nil {
@@ -175,7 +179,7 @@ func FastCheck(m *core.Manifest, ref, label string) Report {
 		rep.Results = append(rep.Results, problem("-", "baseline", err))
 	}
 	date := time.Now().UTC().Format(time.DateOnly)
-	jobs, bad := plan(m, descs, changed, filepath.Join(m.Root, EvidenceDir, label))
+	jobs, bad := plan(m, descs, changed, filepath.Join(m.Root, EvidenceDir, label), keep)
 	rep.Results = append(rep.Results, bad...)
 	results := make([]Result, len(jobs))
 	var wg sync.WaitGroup
@@ -190,7 +194,7 @@ func FastCheck(m *core.Manifest, ref, label string) Report {
 	return rep
 }
 
-func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []string, outRoot string) ([]job, []Result) {
+func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []string, outRoot string, keep func(string, adapterproto.Objective) bool) ([]job, []Result) {
 	patterns := map[string]core.RolePatterns{}
 	for lang, d := range descs {
 		patterns[lang] = core.RolePatterns{Claims: d.Claims, Patterns: d.Patterns}
@@ -218,7 +222,7 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 		}
 		ids := make([]string, 0, len(descs[lang].Objectives))
 		for id, o := range descs[lang].Objectives {
-			if o.Fast {
+			if keep(id, o) {
 				ids = append(ids, id)
 			}
 		}

@@ -29,6 +29,14 @@
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/assure-hook", "args": ["stop"], "timeout": 180 }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "^hallow-assurance:(verifier|inspector)$",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/assure-hook", "args": ["subagent-stop"], "timeout": 180 }
+        ]
+      }
     ]
   }
 }

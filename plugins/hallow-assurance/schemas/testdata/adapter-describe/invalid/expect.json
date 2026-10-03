@@ -3,5 +3,6 @@
   "source-pattern-key.json": [{"location": "/patterns", "keyword": "additionalProperties"}],
   "missing-claims.json": [{"location": "", "keyword": "required"}],
   "empty-claims.json": [{"location": "/claims", "keyword": "minItems"}],
-  "non-boolean-fast.json": [{"location": "/objectives/VER-TESTS-PASS/fast", "keyword": "type"}]
+  "non-boolean-fast.json": [{"location": "/objectives/VER-TESTS-PASS/fast", "keyword": "type"}],
+  "uppercase-reference.json": [{"location": "/reference", "keyword": "pattern"}]
 }
