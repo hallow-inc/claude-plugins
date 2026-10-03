@@ -1,2 +1,1 @@
-- {objective: IND-VERIFIER-DISTINCT, scope: '**', rationale: provenance evidence arrives in milestone M4, approver: '@hello-world-bfree', expires: 2026-12-31}
-- {objective: CFG-PROTECTED, scope: '**', rationale: provenance evidence arrives in milestone M4, approver: '@hello-world-bfree', expires: 2026-12-31}
+[]
