@@ -49,14 +49,15 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 }
 
 func checkModeError(fast bool, role, sarif string) string {
-	switch {
-	case fast && role != "":
+	if fast && role != "" {
 		return "assure: --fast and --role are separate modes; pass one. For full evaluation run assure evaluate"
-	case !fast && role == "":
+	}
+	if !fast && role == "" {
 		return "assure: check requires --fast or --role; for full evaluation run assure evaluate"
-	case role != "" && role != "inspector" && role != "verifier",
-		role == "inspector" && sarif == "",
-		sarif != "" && role != "inspector":
+	}
+	if role != "" && role != "inspector" && role != "verifier" ||
+		role == "inspector" && sarif == "" ||
+		sarif != "" && role != "inspector" {
 		return checkUsage
 	}
 	return ""

@@ -30,22 +30,22 @@ func ExtractSARIF(text string) ([]byte, error) {
 	start, openLine := -1, 0
 	for i, l := range lines {
 		bare := strings.TrimSuffix(strings.TrimSuffix(l, "\n"), "\r")
-		switch {
-		case start < 0 && bare == sarifOpen:
+		if start < 0 && bare == sarifOpen {
 			start, openLine = offset+len(l), i+1
-		case start >= 0 && bare == sarifClose:
+		} else if start >= 0 && bare == sarifClose {
 			body := strings.TrimSuffix(strings.TrimSuffix(text[start:offset], "\n"), "\r")
 			blocks = append(blocks, []byte(body))
 			start = -1
 		}
 		offset += len(l)
 	}
-	switch {
-	case start >= 0:
+	if start >= 0 {
 		return nil, fmt.Errorf("the %s block opened on line %d is never closed by a line that is exactly %s", sarifOpen, openLine, sarifClose)
-	case len(blocks) == 0:
+	}
+	if len(blocks) == 0 {
 		return nil, fmt.Errorf("no %s block was found", sarifOpen)
-	case len(blocks) > 1:
+	}
+	if len(blocks) > 1 {
 		return nil, fmt.Errorf("%d %s blocks were found; exactly one is required", len(blocks), sarifOpen)
 	}
 	return blocks[0], nil
