@@ -98,18 +98,24 @@ func TestExtractSARIFRejectsAnyBlockCountButOne(t *testing.T) {
 			lines = append(lines, "```")
 			lines = append(lines, drawProse(t, fmt.Sprintf("between%d", i), isSarifFence)...)
 		}
+		openIdx := len(lines)
 		if unclosed {
 			lines = append(lines, "```sarif")
 			lines = append(lines, drawProse(t, "tail", isClose)...)
 		}
 		text := strings.Join(lines, sep)
+		openPos := len(strings.Join(lines[:openIdx], sep))
+		if openIdx > 0 {
+			openPos += len(sep)
+		}
 		got, err := ExtractSARIF(text)
 		if err == nil || got != nil {
 			t.Fatalf("ExtractSARIF(%q) = %q, %v; %d complete blocks (unclosed=%v) must be rejected", text, got, err, blocks, unclosed)
 		}
-		want := "```sarif"
+		var want string
 		switch {
 		case unclosed:
+			want = fmt.Sprintf("```sarif block opened on line %d ", strings.Count(text[:openPos], "\n")+1)
 		case blocks == 0:
 			want = "no ```sarif block was found"
 		default:
