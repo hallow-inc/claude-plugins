@@ -32,7 +32,7 @@ func TestDescribeFailureModesNameTheAdapter(t *testing.T) {
 		"wrong language":     {`echo '` + strings.Replace(goodDescribe, `["go"]`, `["rust"]`, 1) + `'`, `does not include "go"`},
 		"foreign reference":  {`echo '` + strings.Replace(goodDescribe, `"objectives":{}`, `"objectives":{},"reference":"typescript"`, 1) + `'`, "/reference"},
 		"timeout":            {"exec sleep 10", "killed after timeout of 2s"},
-		"oversized response": {"head -c 17000000 /dev/zero", "response exceeds"},
+		"oversized response": {"exec cat /dev/zero", "response exceeds"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
