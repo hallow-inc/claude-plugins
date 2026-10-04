@@ -17,11 +17,13 @@ import (
 )
 
 const (
-	DescribeTimeout = 2 * time.Second
-	ClassifyTimeout = 30 * time.Second
-	maxStdout       = 16 << 20
-	maxStderr       = 64 << 10
-	maxArgBytes     = 128 << 10
+	DescribeTimeout  = 2 * time.Second
+	ClassifyTimeout  = 30 * time.Second
+	ReferenceTimeout = 2 * time.Second
+	MaxReference     = 256 << 10
+	maxStdout        = 16 << 20
+	maxStderr        = 64 << 10
+	maxArgBytes      = 128 << 10
 )
 
 type Objective struct {
@@ -34,6 +36,7 @@ type Describe struct {
 	Claims     []string             `json:"claims"`
 	Patterns   map[string][]string  `json:"patterns"`
 	Objectives map[string]Objective `json:"objectives"`
+	Reference  string               `json:"reference,omitempty"`
 }
 
 type Evidence struct {
@@ -98,12 +101,16 @@ func (c *capped) Write(p []byte) (int, error) {
 }
 
 func invoke(exe, dir, name, sub string, timeout time.Duration, args ...string) ([]byte, error) {
+	return invokeCapped(exe, dir, name, sub, timeout, maxStdout, args...)
+}
+
+func invokeCapped(exe, dir, name, sub string, timeout time.Duration, limit int, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, append([]string{sub}, args...)...)
 	cmd.Dir = dir
 	cmd.WaitDelay = time.Second
-	stdout, stderr := &capped{max: maxStdout}, &capped{max: maxStderr}
+	stdout, stderr := &capped{max: limit}, &capped{max: maxStderr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err := cmd.Run()
 	fail := func(format string, a ...any) error {
@@ -117,7 +124,7 @@ func invoke(exe, dir, name, sub string, timeout time.Duration, args ...string) (
 	case err != nil:
 		return nil, fail("%w; stderr: %s", err, strings.TrimSpace(stderr.buf.String()))
 	case stdout.overflow:
-		return nil, fail("response exceeds %d bytes", maxStdout)
+		return nil, fail("response exceeds %d bytes", limit)
 	}
 	return stdout.buf.Bytes(), nil
 }
@@ -152,6 +159,9 @@ func RunDescribe(exe, dir, lang string) (Describe, json.RawMessage, error) {
 	}
 	if !slices.Contains(d.Languages, lang) {
 		return Describe{}, nil, &Error{Adapter: name, Sub: "describe", Err: fmt.Errorf("languages %v does not include %q", d.Languages, lang)}
+	}
+	if d.Reference != "" && !slices.Contains(d.Languages, d.Reference) {
+		return Describe{}, nil, &Error{Adapter: name, Sub: "describe", Err: fmt.Errorf("response violates the protocol: /reference: %q is not one of languages %v", d.Reference, d.Languages)}
 	}
 	return d, json.RawMessage(bytes.TrimSpace(out)), nil
 }
@@ -200,4 +210,20 @@ func RunObjective(dir, lang, objective, ref, out string, timeout time.Duration) 
 		return Run{}, err
 	}
 	return r, nil
+}
+
+func Reference(dir, lang string) ([]byte, error) {
+	exe, err := Resolve(lang)
+	if err != nil {
+		return nil, err
+	}
+	name := Executable(lang)
+	out, err := invokeCapped(exe, dir, name, "reference", ReferenceTimeout, MaxReference)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return nil, &Error{Adapter: name, Sub: "reference", Err: errors.New("empty output")}
+	}
+	return out, nil
 }

@@ -22,6 +22,7 @@ Commands:
   guard      Decide whether an agent may edit each path
   hook       Handle a Claude Code hook event (JSON on stdin)
   record     Append a provenance record for a pending file edit
+  reference  Print an adapter's testing reference for a language
   help       Show this help
   version    Print the assure version
 `
@@ -57,6 +58,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runClassify(args[1:], stdout, stderr)
 	case "record":
 		return runRecord(args[1:], stdout, stderr)
+	case "reference":
+		return runReference(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "assure: unknown command %q\n\n%s", args[0], usage)
 		return 2

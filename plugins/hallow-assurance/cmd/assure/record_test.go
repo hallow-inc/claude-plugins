@@ -181,7 +181,7 @@ func TestRecordCommand(t *testing.T) {
 }
 
 func TestHookCommand(t *testing.T) {
-	if code, out, _ := assure("hook", "protocol"); code != 0 || out != "1\n" {
+	if code, out, _ := assure("hook", "protocol"); code != 0 || out != "2\n" {
 		t.Fatalf("protocol: got %d %q; the plugin shim refuses any other number", code, out)
 	}
 	if code, _, stderr := assure("hook", "post-compact"); code != 2 || !strings.Contains(stderr, "post-tool-use") {

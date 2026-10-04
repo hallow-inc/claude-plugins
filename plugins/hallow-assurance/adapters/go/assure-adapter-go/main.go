@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,15 +14,20 @@ import (
 	"strings"
 )
 
+//go:embed reference.md
+var reference []byte
+
 type describe struct {
 	Protocol   int                 `json:"protocol"`
 	Languages  []string            `json:"languages"`
 	Claims     []string            `json:"claims"`
 	Patterns   map[string][]string `json:"patterns"`
 	Objectives map[string]any      `json:"objectives"`
+	Reference  string              `json:"reference"`
 }
 
 var description = describe{
+	Reference: "go",
 	Languages: []string{"go"},
 	Claims:    []string{"**/*.go"},
 	Patterns: map[string][]string{
@@ -60,7 +66,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | classify <path>... | run <objective> --changed-from <ref> --out <dir>")
+		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | reference | classify <path>... | run <objective> --changed-from <ref> --out <dir>")
 		return 2
 	}
 	var out any
@@ -82,6 +88,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		out = map[string]any{"protocol": 0, "files": files}
 	case "run":
 		return runObjective(args[1:], stdout, stderr)
+	case "reference":
+		if _, err := stdout.Write(reference); err != nil {
+			_, _ = fmt.Fprintf(stderr, "assure-adapter-go: %v\n", err)
+			return 1
+		}
+		return 0
 	default:
 		_, _ = fmt.Fprintf(stderr, "assure-adapter-go: unknown subcommand %q\n", args[0])
 		return 2

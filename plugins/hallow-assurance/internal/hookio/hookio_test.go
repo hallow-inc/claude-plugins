@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,8 +124,8 @@ func hook(event string, in []byte) (int, map[string]any, string) {
 }
 
 func eventFor(name string) string {
-	for _, e := range []string{"session-start", "pre-tool-use", "post-tool-use", "stop"} {
-		if strings.HasPrefix(name, e+"-") {
+	for _, e := range []string{"session-start", "pre-tool-use", "post-tool-use", "subagent-stop", "stop"} {
+		if name == e || strings.HasPrefix(name, e+"-") {
 			return e
 		}
 	}
@@ -140,9 +141,7 @@ func TestRecordedPayloadsDecode(t *testing.T) {
 		name := strings.TrimSuffix(filepath.Base(f), ".json")
 		event := eventFor(name)
 		if event == "" {
-			if !strings.HasPrefix(name, "subagent-stop") {
-				t.Errorf("%s: no event for this payload", name)
-			}
+			t.Errorf("%s: no event for this payload", name)
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
@@ -154,7 +153,19 @@ func TestRecordedPayloadsDecode(t *testing.T) {
 			if s := fmt.Sprint(out); strings.Contains(s, "failed closed") || strings.Contains(s, "unparsable") {
 				t.Fatalf("payload did not decode: %v", out)
 			}
+			checkRecordedInspector(t, name, root, code, out)
 		})
+	}
+}
+
+func checkRecordedInspector(t *testing.T, name, root string, code int, out map[string]any) {
+	t.Helper()
+	_, inspected := os.Stat(filepath.Join(root, ".assure", "state", "inspections", session+"-aee260f3e590d62f9.sarif"))
+	if name == "subagent-stop-inspector-first" && (code != 2 || out["decision"] != "block") {
+		t.Fatalf("recorded prose-only inspector report was not blocked: %d %v", code, out)
+	}
+	if name == "subagent-stop-inspector-after-block" && (code != 0 || out["decision"] != nil || inspected != nil) {
+		t.Fatalf("recorded valid inspector report was not accepted and written: %d %v %v", code, out, inspected)
 	}
 }
 
@@ -223,6 +234,12 @@ func TestNotAdoptedIsSilent(t *testing.T) {
 			t.Errorf("%s: got %d %v", name, code, out)
 		}
 	}
+	for _, agent := range []string{core.Verifier, core.Inspector} {
+		in := payload(t, "subagent-stop", root, func(m map[string]any) { m["agent_type"] = agent })
+		if code, out, _ := hook("subagent-stop", in); code != 0 || out != nil {
+			t.Errorf("%s stop outside an adopted repo: got %d %v", agent, code, out)
+		}
+	}
 }
 
 func TestSessionStartInjectsContextAndSnapshots(t *testing.T) {
@@ -269,6 +286,20 @@ func TestMalformedStdinDenies(t *testing.T) {
 	if d, reason := decision(out); code != 2 || d != "deny" || !strings.Contains(reason, "failed closed") {
 		t.Fatalf("got %d %v", code, out)
 	}
+	code, out, _ = hook("subagent-stop", []byte(`{"agent_type":`))
+	if reason, _ := out["reason"].(string); code != 2 || out["decision"] != "block" || !strings.Contains(reason, "failed closed") {
+		t.Fatalf("subagent-stop: got %d %v", code, out)
+	}
+	root := fixture(t)
+	for _, bad := range []map[string]any{{"agent_id": "../escape"}, {"agent_id": ""}, {"session_id": "a/b"}, {"cwd": "relative"}, {"hook_event_name": "Stop"}} {
+		in := payload(t, "subagent-stop", root, func(m map[string]any) {
+			m["agent_type"] = core.Inspector
+			maps.Copy(m, bad)
+		})
+		if code, out, _ := hook("subagent-stop", in); code != 2 || out["decision"] != "block" || !strings.Contains(out["reason"].(string), "failed closed") {
+			t.Errorf("inspector stop with %v: got %d %v; an id that could escape the state directory must block as malformed input, before any state is read or written", bad, code, out)
+		}
+	}
 }
 
 func TestPanicFailsClosed(t *testing.T) {
@@ -281,6 +312,10 @@ func TestPanicFailsClosed(t *testing.T) {
 	code, out, _ := hook("stop", nil)
 	if code != 2 || out["decision"] != "block" || !strings.Contains(out["reason"].(string), "boom") {
 		t.Fatalf("stop panic: %d %v", code, out)
+	}
+	code, out, _ = hook("subagent-stop", nil)
+	if reason, _ := out["reason"].(string); code != 2 || out["decision"] != "block" || !strings.Contains(reason, "boom") {
+		t.Fatalf("subagent-stop panic: %d %v", code, out)
 	}
 }
 

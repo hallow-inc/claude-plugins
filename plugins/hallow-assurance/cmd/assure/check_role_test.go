@@ -1,0 +1,167 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"pgregory.net/rapid"
+)
+
+func drawCheckArgs(t *rapid.T) (args []string, fast bool, role string, sarif bool) {
+	fast = rapid.Bool().Draw(t, "fast")
+	role = rapid.OneOf(rapid.SampledFrom([]string{"-", "verifier", "inspector", "implementer", "Verifier"}), rapid.StringMatching(`[a-z]{1,8}`)).Draw(t, "role")
+	sarif = rapid.Bool().Draw(t, "sarif")
+	var groups [][]string
+	if fast {
+		groups = append(groups, []string{"--fast"})
+	}
+	if role != "-" {
+		groups = append(groups, []string{"--role", role})
+	}
+	if sarif {
+		groups = append(groups, []string{"--sarif", "missing.sarif"})
+	}
+	if rapid.Bool().Draw(t, "ref") {
+		groups = append(groups, []string{"--changed-from", "HEAD"})
+	}
+	return slices.Concat(append([][]string{{"check"}}, rapid.Permutation(groups).Draw(t, "order")...)...), fast, role, sarif
+}
+
+func usageWanted(fast bool, role string, sarif bool) (string, bool) {
+	hasRole := role != "-"
+	switch {
+	case fast && hasRole:
+		return "", true
+	case !fast && !hasRole:
+		return "assure evaluate", true
+	case hasRole && role != "verifier" && role != "inspector",
+		role == "inspector" && !sarif,
+		sarif && role != "inspector":
+		return "usage: assure check", true
+	}
+	return "", false
+}
+
+func TestCheckModeFlagsExitTwoNamingEvaluateOrUsage(t *testing.T) {
+	newRepo(t, "")
+	rapid.Check(t, func(t *rapid.T) {
+		args, fast, role, sarif := drawCheckArgs(t)
+		code, _, stderr := assure(args...)
+		want, usage := usageWanted(fast, role, sarif)
+		if !usage {
+			if code == 2 {
+				t.Fatalf("%v exited 2, but it is a valid mode: %s", args, stderr)
+			}
+			return
+		}
+		if code != 2 || !strings.Contains(stderr, want) {
+			t.Fatalf("%v: exit %d, stderr %q; want exit 2 naming %q", args, code, stderr, want)
+		}
+	})
+}
+
+func inspectionLog(t *rapid.T) (map[string]any, map[string]int) {
+	counts := map[string]int{}
+	var results []any
+	for range rapid.IntRange(0, 6).Draw(t, "results") {
+		level := rapid.SampledFrom([]string{"error", "warning", "note"}).Draw(t, "level")
+		counts[level]++
+		results = append(results, map[string]any{
+			"ruleId":  rapid.StringMatching(`[A-Za-z-]{1,10}`).Draw(t, "ruleId"),
+			"level":   level,
+			"message": map[string]any{"text": rapid.StringN(1, 20, -1).Draw(t, "text")},
+			"locations": []any{map[string]any{"physicalLocation": map[string]any{
+				"artifactLocation": map[string]any{"uri": rapid.StringMatching(`[a-z]{1,5}(/[a-z]{1,5}){0,2}\.go`).Draw(t, "uri")},
+				"region":           map[string]any{"startLine": rapid.IntRange(1, 9999).Draw(t, "line")},
+			}}},
+		})
+	}
+	if results == nil {
+		results = []any{}
+	}
+	run := map[string]any{"tool": map[string]any{"driver": map[string]any{"name": "hallow-assurance:inspector"}}, "results": results}
+	return map[string]any{"version": "2.1.0", "runs": []any{run}}, counts
+}
+
+func breakInspection(t *rapid.T, log map[string]any) string {
+	run := log["runs"].([]any)[0].(map[string]any)
+	breakage := rapid.SampledFrom([]string{"none", "none", "tool", "uri", "startLine", "level", "ruleId", "runs", "json"}).Draw(t, "breakage")
+	if breakage == "none" {
+		return breakage
+	}
+	run["results"] = append(run["results"].([]any), map[string]any{
+		"ruleId":    "R",
+		"level":     "error",
+		"message":   map[string]any{"text": "m"},
+		"locations": []any{map[string]any{"physicalLocation": map[string]any{"artifactLocation": map[string]any{"uri": "a.go"}, "region": map[string]any{"startLine": 1}}}},
+	})
+	res := run["results"].([]any)[0].(map[string]any)
+	loc := res["locations"].([]any)[0].(map[string]any)["physicalLocation"].(map[string]any)
+	switch breakage {
+	case "tool":
+		run["tool"] = map[string]any{"driver": map[string]any{"name": "golangci-lint"}}
+	case "uri":
+		loc["artifactLocation"] = map[string]any{"uri": "/etc/passwd"}
+	case "startLine":
+		loc["region"] = map[string]any{}
+	case "level":
+		res["level"] = "info"
+	case "ruleId":
+		res["ruleId"] = ""
+	case "runs":
+		log["runs"] = []any{run, run}
+	}
+	return breakage
+}
+
+func TestCheckRoleInspectorExitIgnoresFindings(t *testing.T) {
+	r := newRepo(t, "")
+	path := filepath.Join(r.root, "findings.sarif")
+	rapid.Check(t, func(t *rapid.T) {
+		log, counts := inspectionLog(t)
+		breakage := breakInspection(t, log)
+		data, err := json.Marshal(log)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		if breakage == "json" {
+			data = data[:len(data)/2]
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatalf("%v", err)
+		}
+		code, stdout, stderr := assure("check", "--role", "inspector", "--sarif", path)
+		if breakage != "none" {
+			if code != 1 || stdout != "" || !strings.Contains(stderr, path) {
+				t.Fatalf("%s breakage: exit %d, stdout %q, stderr %q; an invalid log exits 1 and reports on stderr", breakage, code, stdout, stderr)
+			}
+			return
+		}
+		want := fmt.Sprintf("inspection valid: %d error, %d warning, %d note\n", counts["error"], counts["warning"], counts["note"])
+		if code != 0 || stdout != want {
+			t.Fatalf("exit %d, stdout %q, stderr %q; want exit 0 and %q: findings, even error-level ones, never fail the check", code, stdout, stderr, want)
+		}
+	})
+}
+
+func TestCheckRoleVerifierBlocksOnTestsNotLint(t *testing.T) {
+	r := goRepo(t)
+	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return a + b }\n\nfunc dead() {}\n")
+	if code, stdout, _ := assure("check", "--fast"); code != 1 || !strings.Contains(stdout, "fail\tCODE-ZERO-WARNINGS\tgo") {
+		t.Fatalf("fixture: --fast exit %d, want a CODE-ZERO-WARNINGS failure on the unused function\n%s", code, stdout)
+	}
+	code, stdout, stderr := assure("check", "--role", "verifier")
+	if code != 0 || strings.TrimSpace(stdout) != "pass\tVER-TESTS-PASS\tgo" {
+		t.Fatalf("got %d\n%s\n%s; a source lint finding is not the verifier's to fix, and only VER-TESTS-PASS runs", code, stdout, stderr)
+	}
+	r.write("p/q_test.go", "package p\n\nimport \"testing\"\n\nfunc TestBroken(t *testing.T) { t.Fatal(\"broken\") }\n")
+	code, stdout, stderr = assure("check", "--role", "verifier")
+	if code != 1 || !strings.Contains(stdout, "fail\tVER-TESTS-PASS\tgo") || !strings.Contains(stdout, "TestBroken") {
+		t.Fatalf("got %d\n%s\n%s; a failing test must block the verifier and be named", code, stdout, stderr)
+	}
+}

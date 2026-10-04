@@ -182,7 +182,7 @@ func TestOnlyHookioKnowsHookJSON(t *testing.T) {
 var languageNames = regexp.MustCompile(`golangci|gremlins|\bgo (test|vet|build)\b|_test\.go|\.go"|"go"|gofmt|typescript|stryker`)
 
 func TestNoLanguageKnowledgeOutsideAdapters(t *testing.T) {
-	for _, dir := range []string{"internal/core", "internal/hookio", "internal/app", "plugin"} {
+	for _, dir := range []string{"internal/core", "internal/hookio", "internal/app", "plugin", "plugin/skills"} {
 		keep := func(p string) bool { return dir == "plugin" || !strings.HasSuffix(p, "_test.go") }
 		if _, err := os.Stat(dir); err != nil {
 			t.Errorf("%s: %v", dir, err)

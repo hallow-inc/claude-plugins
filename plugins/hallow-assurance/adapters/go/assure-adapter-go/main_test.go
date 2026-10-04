@@ -44,6 +44,9 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 	if c := v["claims"].([]any); len(c) != 1 || c[0] != "**/*.go" {
 		t.Fatalf("claims = %v", c)
 	}
+	if v["reference"] != "go" {
+		t.Fatalf("reference = %v; assure reference go cannot find the Go adapter's reference", v["reference"])
+	}
 	var fast, slow []string
 	for id, o := range v["objectives"].(map[string]any) {
 		if _, ok := runners[id]; !ok {

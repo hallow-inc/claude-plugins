@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -146,17 +147,26 @@ func TestInvalidSessionIDs(t *testing.T) {
 
 func TestPruneStateRemovesOnlyOldSessionFiles(t *testing.T) {
 	root := t.TempDir()
-	for _, f := range []string{"snapshot-old.json", "stop-old.json", "snapshot-new.json", "adapters.json"} {
+	oldFiles := []string{"snapshot-old.json", "stop-old.json", "subagent-stop-old-a1.json", "inspections/old-a1.sarif", "adapters.json"}
+	newFiles := []string{"snapshot-new.json", "subagent-stop-new-a1.json", "inspections/new-a1.sarif"}
+	for _, f := range append(slices.Clone(oldFiles), newFiles...) {
 		writeFile(t, root, filepath.Join(StateDir, f), "{}")
 	}
 	old := time.Now().Add(-15 * 24 * time.Hour)
-	for _, f := range []string{"snapshot-old.json", "stop-old.json", "adapters.json"} {
+	for _, f := range oldFiles {
 		if err := os.Chtimes(filepath.Join(root, StateDir, f), old, old); err != nil {
 			t.Fatal(err)
 		}
 	}
 	PruneState(root, 14*24*time.Hour, time.Now())
-	for f, want := range map[string]bool{"snapshot-old.json": false, "stop-old.json": false, "snapshot-new.json": true, "adapters.json": true} {
+	want := map[string]bool{"adapters.json": true}
+	for _, f := range oldFiles[:4] {
+		want[f] = false
+	}
+	for _, f := range newFiles {
+		want[f] = true
+	}
+	for f, want := range want {
 		if _, err := os.Stat(filepath.Join(root, StateDir, f)); (err == nil) != want {
 			t.Errorf("%s exists=%v, want %v", f, err == nil, want)
 		}

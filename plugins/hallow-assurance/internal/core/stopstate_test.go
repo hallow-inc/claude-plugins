@@ -172,3 +172,58 @@ func TestBlockBudgetEndsExactlyAtStopCap(t *testing.T) {
 		t.Fatalf("a spent budget got %v, want an escalation", a)
 	}
 }
+
+func stateFiles(t *rapid.T, root string) []string {
+	var out []string
+	err := filepath.WalkDir(filepath.Join(root, StateDir), func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			rel, _ := filepath.Rel(filepath.Join(root, StateDir), p)
+			out = append(out, filepath.ToSlash(rel))
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	return out
+}
+
+func TestSubagentStateLivesInItsOwnFilePerSessionAndAgent(t *testing.T) {
+	base := t.TempDir()
+	rapid.Check(t, func(t *rapid.T) {
+		root, err := os.MkdirTemp(base, "r")
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		session := rapid.StringMatching(`[A-Za-z0-9_]{1,12}`).Draw(t, "session")
+		agent := rapid.StringMatching(`[a-z0-9]{1,17}`).Draw(t, "agent")
+		want := StopState{Version: stopStateVersion, Blocks: rapid.IntRange(1, StopCap).Draw(t, "blocks"), Fingerprints: []FingerprintBlocks{{Fingerprint: fpPool(1)[0], Blocks: 1}}}
+		if err := WriteSubagentStopState(root, session, agent, want); err != nil {
+			t.Fatalf("%v", err)
+		}
+		stateName := "subagent-stop-" + session + "-" + agent + ".json"
+		if got := stateFiles(t, root); len(got) != 1 || got[0] != stateName {
+			t.Fatalf("state files %v, want only %s: the parent's stop-%s.json must not hold a subagent's retry count", got, stateName, session)
+		}
+		if got := ReadSubagentStopState(root, session, agent); got.Blocks != want.Blocks || len(got.Fingerprints) != 1 || got.Fingerprints[0] != want.Fingerprints[0] {
+			t.Fatalf("round trip got %+v, want %+v", got, want)
+		}
+		if got := ReadStopState(root, session); got.Blocks != 0 || got.Fingerprints != nil {
+			t.Fatalf("the parent session read the subagent's state: %+v", got)
+		}
+		if got := ReadSubagentStopState(root, session, agent+"x"); got.Blocks != 0 {
+			t.Fatalf("another agent in the same session read %+v; each subagent has its own count", got)
+		}
+		sarif := []byte(rapid.StringN(1, 64, -1).Draw(t, "sarif"))
+		if err := WriteInspection(root, session, agent, sarif); err != nil {
+			t.Fatalf("%v", err)
+		}
+		inspection := filepath.Join(root, StateDir, "inspections", session+"-"+agent+".sarif")
+		if p := InspectionPath(root, session, agent); p != inspection {
+			t.Fatalf("InspectionPath = %s, want %s", p, inspection)
+		}
+		if got, err := os.ReadFile(inspection); err != nil || string(got) != string(sarif) {
+			t.Fatalf("inspection file holds %q (%v), want the exact bytes %q", got, err, sarif)
+		}
+	})
+}

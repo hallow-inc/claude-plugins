@@ -9,6 +9,7 @@ the hooks exit immediately and do nothing.
 | PreToolUse (`Edit`, `Write`, `NotebookEdit`) | Denies edits to protected files and edits the role rules forbid; before an allowed edit, records the file's blob |
 | PostToolUse (`Edit`, `Write`, `NotebookEdit`) | Appends a provenance record (file, blobs before and after, agent) to `.assure/provenance/<session>.jsonl`. Never blocks; if recording fails it warns you |
 | Stop | Blocks stopping while changed code fails a fast objective or a protected file changed. Each distinct set of failures blocks at most 3 times per session; after that the agent may stop, and every later stop with the same failures warns you instead of blocking. Failures the agent cannot fix (no protected-file snapshot, an adapter not on `PATH`) warn you on the first stop and never block |
+| SubagentStop (`hallow-assurance:verifier`, `hallow-assurance:inspector`) | Verifier: blocks it from finishing while a changed package has a failing test (only `VER-TESTS-PASS`; source lint is the parent's Stop check). Inspector: reads the one fenced `sarif` block in its final message, validates it against the inspection profile, and writes it to `.assure/state/inspections/<session>-<agent_id>.sarif`; a missing, duplicated, or invalid block keeps it running. Findings never block. Same retry cap as Stop, counted per subagent. Other subagents are ignored |
 
 Local hooks are early warning. CI reruns every check and is the authority.
 
@@ -21,15 +22,26 @@ Local hooks are early warning. CI reruns every check and is the authority.
 | `hallow-assurance:pruner` | test and fuzz-corpus files, removing or merging tests on mutation evidence |
 | `hallow-assurance:inspector` | nothing (read-only review) |
 
+The verifier and pruner preload the `assure-testing` skill.
+
 At levels A and B, only the verifier or pruner may write tests; the main thread is denied. The
 guard enforces this; the agents' tool lists are a second line.
+
+## Skills
+
+| Skill | Invoked | What it does |
+|---|---|---|
+| `assure-testing` | by the model, when it writes tests or reads `assure` output | How tests are written here: properties over examples, fail-first bug fixes, coverage resolutions, reading `assure` output, deterministic simulation, formal models. Points to `assure reference <lang>` for the language detail, which ships inside each adapter |
+| `/hallow-assurance:check` | by you | Runs `assure check --fast`, then offers `assure evaluate` against the merge-base |
+| `/hallow-assurance:bugfix <issue\|seed>` | by you | Verifier writes a failing test, implementer fixes it, fast check passes; you commit with `Assure-Kind: fix` |
+| `/hallow-assurance:inspect` | by you | Inspector reviews the diff against the objectives `assure context` lists; reports the SARIF path |
 
 ## Provenance and review
 
 Commit `.assure/provenance/` with your change. CI rebuilds each changed level A–B file's history
-from those records: a test file must be written only by the verifier or pruner, a source file never
-by them. An edit made outside the file tools (through Bash, an editor, or a formatter) leaves a
-**gap**. A gap, or any change to a protected file, fails unless someone other than the PR author
+from those records: a test file must be written only by the verifier or pruner, a source or config
+file never by them, and a file no adapter claims (a fixture, a recorded payload) by either. An edit
+made outside the file tools (through Bash, an editor, or a formatter) leaves a **gap**. A gap, or any change to a protected file, fails unless someone other than the PR author
 approves the PR's head commit. A repo with no second reviewer can set
 `human_review: {B: optional}` in `assurance.yaml` (not allowed for level A): gaps and protected
 changes then pass and are listed as unreviewed. Tests written by the wrong agent fail either way.
@@ -56,8 +68,8 @@ Then install the plugin from the `hallow-claude-plugins` marketplace:
 ```
 
 If `assure` is missing or was built from a different version than the plugin, SessionStart and
-PreToolUse exit 2 with a message saying which, so edits stay blocked. Stop lets the agent stop and
-shows you the same message, because the agent cannot fix the install.
+PreToolUse exit 2 with a message saying which, so edits stay blocked. Stop and SubagentStop let the agent stop and
+show you the same message, because the agent cannot fix the install.
 
 ## Declaring a bug fix
 

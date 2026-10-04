@@ -395,3 +395,25 @@ func TestContextListsFixObjectivesWithTheTrailer(t *testing.T) {
 		t.Fatalf("context line for VER-FAIL-ON-BASE = %q; an agent that never sees the trailer cannot know a fix needs a failing-on-base test\n%s", line, out)
 	}
 }
+
+func TestReferencesListOneSortedCommandPerLanguage(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		refs := rapid.SliceOfDistinct(rapid.StringMatching(`[a-z][a-z0-9_-]{0,15}`), rapid.ID).Draw(t, "refs")
+		out := RenderReferences(slices.Clone(refs))
+		if len(refs) == 0 {
+			if out != "" {
+				t.Fatalf("no references rendered %q; context must not advertise a section with nothing in it", out)
+			}
+			return
+		}
+		var cmds []string
+		for _, l := range strings.Split(out, "\n") {
+			if _, cmd, ok := strings.Cut(l, "assure reference "); ok {
+				cmds = append(cmds, cmd)
+			}
+		}
+		if want := slices.Sorted(slices.Values(refs)); !slices.Equal(cmds, want) {
+			t.Fatalf("commands for %v = %v, want one `assure reference <lang>` per reference in sorted order, so output is byte-identical\n%s", refs, cmds, out)
+		}
+	})
+}

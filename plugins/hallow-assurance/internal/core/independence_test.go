@@ -241,7 +241,7 @@ func (w indWorld) expect(o Objective) indExpect {
 		}
 		testLike := f.Role == Test || f.Role == FuzzCorpus
 		for _, r := range checked {
-			if (r.AgentType == Verifier || r.AgentType == Pruner) != testLike {
+			if f.Role != Unclassified && (r.AgentType == Verifier || r.AgentType == Pruner) != testLike {
 				e.failing[f.Path] = true
 				e.violations[f.Path]++
 			}
@@ -384,6 +384,7 @@ var (
 	indSrc = ChangedFile{Path: "pkg/a.go", Level: "B", Role: Source}
 	indTst = ChangedFile{Path: "pkg/a_test.go", Level: "B", Role: Test}
 	indA   = ChangedFile{Path: "pkg/a_test.go", Level: "A", Role: Test}
+	indFix = ChangedFile{Path: "testdata/hooks/x.json", Level: "B", Role: Unclassified}
 )
 
 func indEnds(base, head string, files ...ChangedFile) map[string]ChainEnds {
@@ -438,6 +439,10 @@ func TestIndependenceScenarios(t *testing.T) {
 		{"owner hand-edit with approval passes and notes the review", []ChangedFile{indSrc},
 			Provenance{Ends: indEnds("b0", "b3", indSrc), Records: one(indSrc, "", "b0", "b1"), Reviewed: true}, Pass,
 			[]string{indSrc.Path, "covered by review"}},
+		{"verifier wrote an unclassified fixture", []ChangedFile{indFix},
+			Provenance{Ends: indEnds("b0", "b1", indFix), Records: one(indFix, Verifier, "b0", "b1")}, Pass, nil},
+		{"an unclassified fixture's gap still fails", []ChangedFile{indFix},
+			Provenance{Ends: indEnds("b0", "b3", indFix), Records: one(indFix, Verifier, "b0", "b1")}, Fail, []string{indFix.Path, "gap"}},
 		{"review does not excuse a role violation", []ChangedFile{indTst},
 			Provenance{Ends: indEnds("b0", "b1", indTst), Records: one(indTst, Implementer, "b0", "b1"), Reviewed: true}, Fail, []string{Implementer}},
 	}

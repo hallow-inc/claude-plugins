@@ -30,6 +30,7 @@ func TestDescribeFailureModesNameTheAdapter(t *testing.T) {
 		"two documents":      {"echo '" + goodDescribe + goodDescribe + "'", "trailing data"},
 		"schema violation":   {`echo '{"protocol": 0}'`, "violates the protocol"},
 		"wrong language":     {`echo '` + strings.Replace(goodDescribe, `["go"]`, `["rust"]`, 1) + `'`, `does not include "go"`},
+		"foreign reference":  {`echo '` + strings.Replace(goodDescribe, `"objectives":{}`, `"objectives":{},"reference":"typescript"`, 1) + `'`, "/reference"},
 		"timeout":            {"exec sleep 10", "killed after timeout of 2s"},
 		"oversized response": {"head -c 17000000 /dev/zero", "response exceeds"},
 	}
@@ -62,8 +63,13 @@ func TestDescribeParsesValidResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Claims[0] != "**/*.go" || d.Patterns["test"][0] != "**/*_test.go" || string(raw) != goodDescribe {
+	if d.Claims[0] != "**/*.go" || d.Patterns["test"][0] != "**/*_test.go" || string(raw) != goodDescribe || d.Reference != "" {
 		t.Fatalf("parsed %+v raw %s", d, raw)
+	}
+	withRef := strings.Replace(goodDescribe, `"objectives":{}`, `"objectives":{},"reference":"go"`, 1)
+	exe = fakeAdapter(t, "go", "echo '"+withRef+"'")
+	if d, _, err = RunDescribe(exe, t.TempDir(), "go"); err != nil || d.Reference != "go" {
+		t.Fatalf("reference within languages: got %+v, %v", d, err)
 	}
 }
 

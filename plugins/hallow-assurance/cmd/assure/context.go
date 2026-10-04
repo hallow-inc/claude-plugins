@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/app"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
@@ -61,7 +63,8 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 	if cacheErr != nil {
 		_, _ = fmt.Fprintf(stderr, "assure: warning: %v\n", cacheErr)
 	}
-	if _, err := io.WriteString(stdout, core.RenderContext(m, only)); err != nil {
+	refs, _ := app.References(m)
+	if _, err := io.WriteString(stdout, core.RenderContext(m, only)+core.RenderReferences(slices.Collect(maps.Keys(refs)))); err != nil {
 		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
 		return 1
 	}

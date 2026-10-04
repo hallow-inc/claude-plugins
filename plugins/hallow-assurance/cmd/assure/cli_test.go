@@ -196,6 +196,9 @@ func TestContextScenarios(t *testing.T) {
 	if strings.Contains(out, "FM-") || strings.Contains(out, "VER-DST-") {
 		t.Errorf("formal/dst objectives listed without a declaring component")
 	}
+	if !strings.Contains(out, "assure reference go") {
+		t.Errorf("Go adapter installed but context does not point at assure reference go:\n%s", out)
+	}
 	if _, again, _ := assure("context"); again != out {
 		t.Error("context output differs between runs")
 	}
