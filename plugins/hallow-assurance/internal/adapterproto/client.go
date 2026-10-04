@@ -85,16 +85,22 @@ func Resolve(lang string) (string, error) {
 	return path, nil
 }
 
+var errOverflow = errors.New("output exceeds cap")
+
 type capped struct {
 	buf      bytes.Buffer
 	max      int
+	stop     bool
 	overflow bool
 }
 
 func (c *capped) Write(p []byte) (int, error) {
 	if room := c.max - c.buf.Len(); len(p) > room {
-		c.buf.Write(p[:max(room, 0)])
+		n, _ := c.buf.Write(p[:max(room, 0)])
 		c.overflow = true
+		if c.stop {
+			return n, errOverflow
+		}
 		return len(p), nil
 	}
 	return c.buf.Write(p)
@@ -110,7 +116,7 @@ func invokeCapped(exe, dir, name, sub string, timeout time.Duration, limit int, 
 	cmd := exec.CommandContext(ctx, exe, append([]string{sub}, args...)...)
 	cmd.Dir = dir
 	cmd.WaitDelay = time.Second
-	stdout, stderr := &capped{max: limit}, &capped{max: maxStderr}
+	stdout, stderr := &capped{max: limit, stop: true}, &capped{max: maxStderr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err := cmd.Run()
 	fail := func(format string, a ...any) error {
@@ -121,10 +127,10 @@ func invokeCapped(exe, dir, name, sub string, timeout time.Duration, limit int, 
 		return nil, fail("killed after timeout of %s", timeout)
 	case startFailed(err):
 		return nil, &Error{Adapter: name, Sub: sub, Err: unstartable{err}}
-	case err != nil:
-		return nil, fail("%w; stderr: %s", err, strings.TrimSpace(stderr.buf.String()))
 	case stdout.overflow:
 		return nil, fail("response exceeds %d bytes", limit)
+	case err != nil:
+		return nil, fail("%w; stderr: %s", err, strings.TrimSpace(stderr.buf.String()))
 	}
 	return stdout.buf.Bytes(), nil
 }
