@@ -1,6 +1,6 @@
 # hallow-assurance — Charter & Build Outline
 
-> Owner: Brandon · Status: **Draft v0** · Last updated: 2026-09-26
+> Owner: Brandon · Status: **Draft v0** · Last updated: 2026-10-05
 >
 > This document is the source of truth for what we're building and why. Design decisions that
 > contradict it need a charter change first. Items marked `TODO(decide)` are open decisions.
@@ -51,7 +51,9 @@ model**, not their paperwork.
 6. **Agents cannot move the goalposts.** Agents may not edit the catalog, thresholds, manifest
    levels, waivers, baselines, provenance, formal-model challenge files, or gate config. Enforced
    by `assure guard` locally and by CI server-side: a PR that changes a protected file needs an
-   approving review from someone other than the PR author.
+   approving review from someone other than the PR author. At levels the base manifest marks
+   `human_review: optional`, CI detects and reports protected-file changes but does not prevent
+   them; prevention there is local and best-effort (guard, Stop drift check).
 7. **Every objective is computable from evidence.** If a check can't be computed, it doesn't belong
    in the catalog.
 8. **Reproducible.** Every result is tied to a commit SHA and toolchain versions.
@@ -66,7 +68,8 @@ In scope:
 - `assure` CLI: `classify`, `context`, `guard`, `lint`, `check`, `evaluate`, `hook`, `record`,
   `explain`
 - Manifest, catalog, waiver, provenance, evidence-index, and adapter-protocol schemas
-- Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test)
+- Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test), Lean adapter (v1,
+  staged M7a–c)
 - Claude Code plugin: hooks, four subagents, skills, commands
 - CI integration: required status check, PR report, nightly runs
 - Tool qualification fixtures (seeded-bug repos) for each adapter
@@ -98,15 +101,6 @@ v1:
 - Each adapter passes its qualification fixtures in CI
 - Within six weeks of blocking mode: at least a few real bugs attributed to framework layers
   (`found-by:*` labels), mutation efficacy on changed code trending up, test count flat or down
-
-## Roles
-
-| Role | Who | Responsibility |
-|---|---|---|
-| Owner | Brandon | Charter, architecture, final say on invariants |
-| Catalog approvers | `TODO(decide)` | Approve catalog versions, thresholds, level assignments |
-| Waiver approvers | `TODO(decide)` | Approve waivers per level (level A needs a named human) |
-| Pilot repo owners | `TODO(decide)` | Adopt v0, report friction |
 
 ## Risks
 
@@ -183,8 +177,10 @@ components:
     level: A
     formal:                                        # optional: Lean model of this component
       model: formal/Ledger                         # lake package
-      challenge: formal/Ledger/Challenge.lean      # trusted theorem statements; protected
-      link: drt                                    # drt | conformance | none
+      challenge: formal/Ledger/Challenge.lean      # optional; trusted theorem statements; protected
+      spec: formal/Ledger/Spec/**                  # optional; trusted definitions; protected
+      link: conformance                            # conformance | drt | none
+      code: [internal/ledger/**]                   # optional; changes here bring FM-LINK into scope
     dst:                                           # optional: deterministic simulation harness
       harness: ./sim/ledger
 default_level: C
@@ -232,8 +228,7 @@ A waiver is active through its `expires` date (UTC calendar date). An active wai
 located findings of its objective in files matching `scope`, and suppresses an unlocated failure or
 missing evidence only when `scope` matches every changed file at a level where the objective
 applies. Any expired waiver fails `assure evaluate`, whatever its scope; the Stop fast check ignores
-expired waivers because an agent cannot fix a protected file. Approver authority is not checked
-yet; `approver` is recorded as written.
+expired waivers because an agent cannot fix a protected file.
 
 **Baseline** — `.assure/baseline.json` (human-only, written by `assure baseline`):
 
@@ -325,8 +320,10 @@ Independence tiers (computed by the evaluator):
 | Tier | Meaning | Evidence |
 |---|---|---|
 | tier1 | Distinct context: test-role files' chains written only by verifier-side agent types (`verifier`, `pruner`: the pruner edits tests and is not the code's author); source- and config-role files never by them; unclassified files (fixtures) by either; distinct `agent_id` (the main thread is its own identity) | provenance chains |
-| tier2 | tier1 + inspector findings from a dissimilar model/vendor | inspector SARIF `tool.driver` |
-| tier3 | tier2 + approving review from someone other than the PR author | GitHub review API |
+| tier3 | tier1 + approving review from someone other than the PR author | GitHub review API |
+
+There is no tier2: a model reviewer is not code verification. Until `tier3-review` ships, the
+evaluator still fails `tier2`/`tier3` closed, so level A cannot block.
 
 `guard` denies main-thread (no `agent_type`) edits to test-role files in level A–B components, with
 a message to spawn `hallow-assurance:verifier`, so the tier1 failure surfaces at edit time rather
@@ -368,20 +365,26 @@ Schemas: `schemas/adapter-{describe,classify,run}.schema.json`; `lint` is valida
 | VER-COVERAGE-RESOLUTION | Uncovered code has an approved resolution (missing test / missing req / dead / deactivated) | req | adv | – | – |
 | IND-VERIFIER-DISTINCT | Verification authored by a different agent/human than implementation | tier3 | tier1 | – | – |
 | CFG-PROTECTED | No agent-authored changes to protected files | req | req | req | req |
-| FM-COMPLETE | Lean model builds with `--wfail`; zero `sorry`; axiom-audit reports no violations | adv | adv | adv | – |
-| FM-AXIOMS | Axioms used ⊆ {propext, Classical.choice, Quot.sound}; native-evaluation axioms need a waiver | adv | adv | adv | – |
-| FM-RECHECK | Independent kernel re-check passes (`lake comparator` at A–B, `lean4checker` at C) | adv | adv | adv | – |
-| FM-TRACE | Each requirement claimed as formally verified maps to a theorem whose statement matches the reviewed challenge file | adv | adv | adv | – |
-| FM-LINK | Differential/conformance tests against the implementation: zero mismatches, ≥ N inputs, same commit | adv | adv | adv | – |
+| FM-COMPLETE | Lean model builds with `--wfail`; zero `sorry`; axiom-audit reports no violations | req | req | adv | – |
+| FM-AXIOMS | Axioms used ⊆ {propext, Classical.choice, Quot.sound}; native-evaluation axioms need a waiver | req | req | adv | – |
+| FM-RECHECK | Independent kernel re-check passes (`leanchecker` at every level; `lake comparator` later, once Lean ≥ 4.35 runs on Linux) | req | req | adv | – |
+| FM-TRACE | Each requirement in `.assure/requirements.yaml` cites challenge theorems that build, use standard axioms only, and prove by reference over the protected `Spec` library | req | req | adv | – |
+| FM-LINK | Linked tests named in `.assure/requirements.yaml` pass and each reports ≥ N inputs (N = 100), same commit | req | req | adv | – |
 | VER-DST-REPLAY | A failing seed replays to an identical trace digest | adv | adv | adv | – |
 | VER-DST-FAULTS | Every declared fault class fired at least once across the seed set | adv | adv | adv | – |
 | VER-DST-LIVENESS | At least one liveness run (faults heal or freeze; core must converge) | adv | adv | adv | – |
 | VER-DST-BUDGET | Aggregate simulated time ≥ T at a minimum acceleration ratio | adv | adv | adv | – |
 
 FM-* objectives apply only to components that declare `formal:`; VER-DST-* only to components that
-declare `dst:`. Both families are advisory in v1. Lean evidence without FM-LINK counts only toward
-design- and spec-level objectives, never code-level ones: a proof about a model is not a proof
-about the code. FM-LINK is statistical linkage, not a refinement proof.
+declare `dst:`; FM-LINK also applies to changed files matching a component's `formal.code` globs.
+VER-DST-* are advisory in v1. FM-* gate as the table states once their milestone ships (M7a for
+COMPLETE, AXIOMS and RECHECK; M7b for TRACE; M7c for LINK) and are advisory until then. A `formal:`
+component without `challenge` or `spec` fails FM-TRACE closed. Lean evidence without FM-LINK counts
+only toward design- and spec-level objectives, never code-level ones: a proof about a model is not
+a proof about the code. FM-LINK is law conformance: linked Go tests check that the code obeys each
+mirrored theorem's law over generated or enumerated inputs. It is not a refinement proof, and a
+theorem with no linked test says nothing about the code. Differential testing that executes the
+Lean model against the code (`link: drt`) is deferred.
 
 ## Claude Code plugin design
 
@@ -445,7 +448,8 @@ shipped as user-invoked skills. Claude Code always prefixes plugin skills with t
 
 Each milestone ends with its acceptance criteria met, tests passing, and, from M3a on, this repo
 passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, and
-`go test -race -shuffle=on`.
+`go test -race -shuffle=on`. Milestones ship in dependency order, not numeric order; numbers are
+never reassigned, and new work takes a letter suffix.
 
 **M0 — Scaffolding & schemas**
 - Repo layout, `go.mod`, CI, `CLAUDE.md`, `assurance.yaml`
@@ -506,11 +510,29 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
 - `assure-testing` skill + Go reference embedded in the adapter (`describe` names it); `/hallow-assurance:*` commands
 - SubagentStop `check --role` for verifier and inspector
 
-**M5 — Qualification & CI agents**
+**M4c — Solo adoption**
+- `release-channel`: `go install` of `assure` and `assure-adapter-go` from one
+  `plugins/hallow-assurance/v0.N.x` tag; reusable evaluate workflow with a required `version` input;
+  README licensing consent for personal repos
+- `solo-adoption-exception`: with no manifest at base and only `assurance.yaml` / `.assure/**`
+  changed, CFG-PROTECTED and the gap branch of IND-VERIFIER-DISTINCT pass with an `adoption` note
+- `assure-init`: prints a suggested manifest (packages, `inputs: true` candidates, baseline counts per
+  objective); never writes protected files and never proposes `formal:`
+- ✅ `hello-world-bfree/g` adopts at level B with no second reviewer
+
+**M4d — Evidence loops**
+- `fuzz-crasher-loop`: a nightly fuzz crasher becomes a committed seed and a
+  `/hallow-assurance:bugfix` PR
+- `mutation-sweep`: scheduled, advisory whole-repo mutation run that feeds the verifier and pruner;
+  never a gate
+- `orchestration-skills`: when VER-TEST-BUDGET fails on a tests-only branch, `assure-testing` and the
+  verifier hand the owner a ready-to-paste campaign waiver (7-day expiry)
+- Acceptance criteria are set in each change's grill
+
+**M5 — Qualification**
 - `qualification/go/`: seeded-bug fixtures with expected outcomes (mutants that must be killed,
   known coverage, known lint findings)
-- Adapter must pass qualification in CI before release
-- Headless Claude Code inspector on level A–B PRs; nightly failure → `/hallow-assurance:bugfix` PR
+- Adapter must pass qualification in CI before release, from v1. Pre-M5 `v0.x` tags are unqualified.
 - ✅ A deliberately broken adapter build fails qualification
 
 **M6 — TypeScript adapter (agnosticism proof)**
@@ -518,25 +540,46 @@ passing its own `assure evaluate`. M0–M2 gate on `go vet`, `golangci-lint`, an
 - ✅ **Zero diffs** to `plugin/` and `internal/core/` in the M6 PR. Any needed change is a design bug:
   fix the abstraction first in a separate PR, then land the adapter.
 
-**M7 (post-v1) — Lean adapter**
-- `assure-adapter-lean`: `lake build --wfail`, axiom-audit `--json`, `lake comparator` /
-  `lean4checker`, differential-test stats → evidence for FM-*
+**M7a — Lean adapter, stage 1**
+- `assure-adapter-lean`: `lake build --wfail` and axiom-audit → `lean.build` (FM-COMPLETE);
+  axiom-audit `--json` → `lean.axioms` (FM-AXIOMS); `leanchecker` → `lean.recheck` (FM-RECHECK)
+- `formal.challenge` optional in the manifest schema; `lean.*` readers in `internal/evidence` and
+  `internal/app`; catalog rows required at A–B
 - Qualification fixtures: a seeded `sorry`, a seeded `native_decide`, and a custom axiom must each fail
-- ✅ Evidence about a Go component comes from a non-Go adapter with zero diffs to `internal/core/`
+- ✅ Evidence about a Go component comes from a non-Go adapter with zero diffs to `plugin/` and
+  `internal/core/`
+
+**M7b — FM-TRACE**
+- Protected `.assure/requirements.yaml` (schema + fixtures) maps requirement IDs to challenge
+  theorems; `formal.spec` names the protected `Spec` library
+- Lean adapter compiles the challenge → `lean.trace` (per theorem: built, refs, axioms,
+  `untrusted_refs`)
+- ✅ A challenge theorem whose statement uses a constant outside `Spec` and the toolchain fails
+  FM-TRACE
+
+**M7c — FM-LINK**
+- `requirements.yaml` entries gain `link:` test ids; `formal.code` globs scope FM-LINK
+  (`applies_to: formal_code`)
+- Go adapter runs the linked tests and reads the `assure-link inputs=<n>` marker → `link.run`
+  (renamed from `drt.run`)
+- ✅ A linked test without the input marker fails FM-LINK
 
 **M8 (post-v1) — DST runner**
 - Seed runner (budget, timeout, concurrency) and seed-record store with failing-first retention
 - Replay check: run a seed twice, compare trace digests → VER-DST-REPLAY
 - ✅ A deliberately nondeterministic harness fails VER-DST-REPLAY
 
-**Post-v1:** attestations, DuckLake evidence history, Tier 2 dissimilar-model inspector, Python and
+**Post-v1:** attestations, DuckLake evidence history, Python and
 Rust adapters, cross-repo reporting, Ziggy authoring front-end for manifest/catalog (JSON Schema
 stays authoritative) once a stable Go implementation and JSON mapping exist.
 
 ## Open decisions
 
 - `TODO(decide)` Catalog and waiver approvers per level
-- `TODO(decide)` Where `assure` and adapters are distributed from (GitHub releases + `go install`?)
+- Distribution: resolved to `go install …/cmd/assure@<tag>` and
+  `…/adapters/go/assure-adapter-go@<tag>` from `plugins/hallow-assurance/v0.N.x` tags (one tag
+  versions both). A hook-protocol bump forces a minor bump. No prebuilt binaries until a non-Go
+  adopter needs them.
 - `TODO(decide)` Level assignments for the pilot repo's packages
 - Retry cap for the Stop hook: resolved to 3 for v0 (M2), then allow the stop and escalate to the
   human with a `systemMessage`. It sits under Claude Code's own 8-block cap, so the escalation
@@ -544,9 +587,8 @@ stays authoritative) once a stable Go implementation and JSON mapping exist.
   per failure fingerprint for the whole session, so an unchanged failure stops blocking after 3
   even across prompts; failures outside the agent's reach (missing snapshot, adapter that cannot
   start, `assure` itself missing) allow the stop with a `systemMessage` on the first attempt.
-- `TODO(decide)` Tier 2 inspector model/vendor for CI
-- Level A cannot block until the Tier 2 inspector vendor is decided, because tier3 includes tier2.
-  Level B (tier1) is unaffected.
+- Level A cannot block until `tier3-review` ships (tier3 = tier1 + non-author approving review;
+  the evaluator fails `tier2`/`tier3` closed today). Level B (tier1) is unaffected.
 - `TODO(decide)` Whether FM-LINK + FM-COMPLETE may substitute for VER-MUTATION-CHANGED at level A
   (`alternative_for`). Leaning no for v1.
 

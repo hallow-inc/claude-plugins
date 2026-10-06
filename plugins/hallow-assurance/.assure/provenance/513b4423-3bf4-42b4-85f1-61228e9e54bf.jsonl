@@ -7,3 +7,4 @@
 {"v":0,"session":"513b4423-3bf4-42b4-85f1-61228e9e54bf","tool":"Edit","path":"internal/adapterproto/client.go","role":"source","pre":"6135d83a36a3fc5e5bddd112d43b0fde0f5d89a8","post":"ce0962af9cf84fa69085de0e3a002a23bc863ea0"}
 {"v":0,"session":"513b4423-3bf4-42b4-85f1-61228e9e54bf","tool":"Edit","path":"internal/adapterproto/client.go","role":"source","pre":"ce0962af9cf84fa69085de0e3a002a23bc863ea0","post":"0f99e1c325bc93ba6ec3e81ee0c53db9ad4b4f90"}
 {"v":0,"session":"513b4423-3bf4-42b4-85f1-61228e9e54bf","tool":"Edit","path":"internal/adapterproto/client.go","role":"source","pre":"0f99e1c325bc93ba6ec3e81ee0c53db9ad4b4f90","post":"527c8c03371c091b7e0429d9a29165bfe4e2c635"}
+{"v":0,"session":"513b4423-3bf4-42b4-85f1-61228e9e54bf","tool":"Write","path":".claude/handoff/RESUME.md","role":"unclassified","pre":"5b152e8ff3a5603e8b869348efc3b17ccde20ba8","post":"7bb437f009ca9624c9b4a21c1889c6bac47b390e"}
