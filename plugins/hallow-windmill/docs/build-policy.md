@@ -115,6 +115,18 @@ Any skill or agent that pushes a script, flow, trigger, schedule, resource, or a
 
 **APP.2 — Raw apps deploy with `wmill app push`, never `mcp__windmill__updateApp`; the folder ends in `.raw_app`.** `updateApp` / `POST /apps/update` is low-code only — on a raw app it flips `raw_app` to false and drops the bundle, blanking the app. The folder suffix follows `nonDottedPaths` in `wmill.yaml`; on Hallow `dev` that is `.raw_app` (the CLI rejects `__raw_app`).
 
+APP.3–APP.7 are the checkable subset of `skills/raw-app/PERFORMANCE.md` (the design rationale and patterns live there).
+
+**APP.3 — A backend runnable that needs a `tag`, `timeout`, or `cache_ttl` is a path script (`type: script`).** Inline runnables have no `timeout` field, and `wmill app push` rebuilds `inlineScript` from `content`/`language`/`lock` only — a `tag` or `cache_ttl` under `inlineScript` is silently dropped. Flag any `backend/<id>.yaml` of `type: inline` carrying those keys, and any inline runnable whose code needs `fargate` capability (S3 sandbox, DuckLake `connect`, Batch).
+
+**APP.4 — Every external call in an inline runnable is bounded in code.** `fetch` carries `signal: AbortSignal.timeout(…)`; AWS SDK clients set `requestTimeout` + `maxAttempts`. The inline runnable inherits the 1800 s global timeout, so the in-code bound is the only bound; an unbounded hang holds a shared slot for 30 min. (Path scripts additionally need SCRIPT.1.)
+
+**APP.5 — No backend runnable waits synchronously on another job.** Flag `run_wait_result`, `jobs/run_wait_result`, blocking `runScript` / `run_script` / `runFlow` in any app runnable or the path scripts it references. The waiting job holds its slot through the child's queue wait; expose the child as its own runnable and call both from the frontend.
+
+**APP.6 — `tag: fargate` only on runnables that need its capability.** A referenced path script tagged `fargate` must use the sandbox S3 bucket, the DuckLake catalog, or Batch. API-only, datatable, or pure-compute runnables leave the tag unset (default pool) so they stay off the contended 2–10 slot `fargate` pool.
+
+**APP.7 — No `cache_ttl` on a runnable whose result depends on the viewer.** The result cache keys on script hash + args, not identity. A cached runnable that resolves the viewer internally (`whoami`, viewer-scoped filtering) without taking identity as an arg serves one viewer's result to the next.
+
 ---
 
 ## Maintenance

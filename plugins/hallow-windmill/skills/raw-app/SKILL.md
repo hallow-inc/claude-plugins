@@ -101,6 +101,8 @@ my_app.raw_app/
 
 Backend runnables are server-side scripts that your frontend can call. They live in the `backend/` folder.
 
+**Load performance — read [`PERFORMANCE.md`](PERFORMANCE.md) before writing any runnable or the app's load sequence.** Each frontend call is a queued job on a small shared worker pool; that file decides how many runnables the load path makes, which pool each runs on, inline vs path script, caching, and render-from-last-good in the frontend.
+
 ### Creating a Backend Runnable
 
 Add a code file to the `backend/` folder:
@@ -317,7 +319,7 @@ For everything else, tell the user which command fits their intent and let them 
 
 1. **Check DATATABLES.md** for existing tables before creating new ones
 2. **Use parameterized queries** - never concatenate user input into SQL
-3. **Keep runnables focused** - one function per file
+3. **Keep runnables focused** - one function per file, and one load call per view (collapse related reads; see `PERFORMANCE.md`)
 4. **Use descriptive IDs** - `get_user.ts` not `a.ts`
 5. **Always whitelist tables** - add to `data.tables` before querying
 6. **Generate locks** - tell the user to run `wmill generate-metadata` after adding/modifying backend runnables
