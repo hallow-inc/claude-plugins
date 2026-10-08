@@ -22,9 +22,15 @@ type evidence struct {
 }
 
 type runResponse struct {
-	Protocol     int               `json:"protocol"`
-	Evidence     []evidence        `json:"evidence"`
-	ToolVersions map[string]string `json:"tool_versions"`
+	Protocol     int                 `json:"protocol"`
+	Evidence     []evidence          `json:"evidence"`
+	ToolVersions map[string]string   `json:"tool_versions"`
+	PinnedBy     map[string]string   `json:"pinned_by"`
+	Environment  *environmentMessage `json:"environment,omitempty"`
+}
+
+type environmentMessage struct {
+	Message string `json:"message"`
 }
 
 type runner func(root, ref, out string, sel map[string][]string, versions map[string]string) ([]evidence, error)
@@ -82,10 +88,19 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if real, err := filepath.EvalSymlinks(root); err == nil {
 		root = real
 	}
-	versions := map[string]string{}
+	if !onPath("go") {
+		return environment("go is not on PATH; install the Go toolchain go.mod selects"), nil
+	}
 	v, err := toolOutput(root, "go", "env", "GOVERSION")
 	if err != nil {
 		return runResponse{}, err
+	}
+	versions, pinnedBy, env, err := toolsFor(root, obj)
+	if err != nil {
+		return runResponse{}, err
+	}
+	if env != "" {
+		return environment(env), nil
 	}
 	versions["go"] = v
 	paths, err := changedPaths(root, ref)
@@ -99,7 +114,11 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if err != nil {
 		return runResponse{}, err
 	}
-	return runResponse{Protocol: 0, Evidence: ev, ToolVersions: versions}, nil
+	return runResponse{Protocol: 1, Evidence: ev, ToolVersions: versions, PinnedBy: pinnedBy}, nil
+}
+
+func environment(msg string) runResponse {
+	return runResponse{Protocol: 1, Evidence: []evidence{}, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}, Environment: &environmentMessage{Message: msg}}
 }
 
 func toolOutput(dir, name string, args ...string) (string, error) {
@@ -249,15 +268,6 @@ func runTests(root, _, out string, sel map[string][]string, _ map[string]string)
 	return []evidence{{Type: "test.junit", Path: "junit.xml"}}, nil
 }
 
-func golangciVersion(root string, versions map[string]string) error {
-	v, err := toolOutput(root, "golangci-lint", "version", "--short")
-	if err != nil {
-		return err
-	}
-	versions["golangci-lint"] = v
-	return nil
-}
-
 func golangci(root, mod, tmp, config string, pkgs []string) ([]sarifResult, error) {
 	f, err := os.CreateTemp(tmp, "*.sarif")
 	if err != nil {
@@ -289,10 +299,7 @@ func writeSARIF(out string, runs ...sarifRun) ([]evidence, error) {
 	return []evidence{{Type: "lint.sarif", Path: "lint.sarif"}}, nil
 }
 
-func runLint(root, _, out string, sel map[string][]string, versions map[string]string) ([]evidence, error) {
-	if err := golangciVersion(root, versions); err != nil {
-		return nil, err
-	}
+func runLint(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	vet, lint := newRun("go vet"), newRun("golangci-lint")
 	tmp, err := os.MkdirTemp("", "assure-lint-*")
 	if err != nil {
@@ -334,10 +341,7 @@ linters:
       includes: [G110, G112, G114]
 `}
 
-func (p pack) run(root, _, out string, sel map[string][]string, versions map[string]string) ([]evidence, error) {
-	if err := golangciVersion(root, versions); err != nil {
-		return nil, err
-	}
+func (p pack) run(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	config := filepath.Join(out, "golangci.yml")
 	if err := os.WriteFile(config, []byte(p.config), 0o644); err != nil {
 		return nil, err

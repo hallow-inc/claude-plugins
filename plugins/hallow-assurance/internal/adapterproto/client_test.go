@@ -10,7 +10,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-const goodDescribe = `{"protocol":0,"languages":["go"],"claims":["**/*.go"],"patterns":{"test":["**/*_test.go"]},"objectives":{}}`
+const goodDescribe = `{"protocol":1,"languages":["go"],"claims":["**/*.go"],"patterns":{"test":["**/*_test.go"]},"objectives":{}}`
 
 func fakeAdapter(t *testing.T, lang, script string) string {
 	t.Helper()
@@ -28,7 +28,7 @@ func TestDescribeFailureModesNameTheAdapter(t *testing.T) {
 		"non-zero exit":      {"echo adapter-broke >&2; exit 1", "stderr: adapter-broke"},
 		"invalid JSON":       {"echo '{not json'", "invalid JSON"},
 		"two documents":      {"echo '" + goodDescribe + goodDescribe + "'", "trailing data"},
-		"schema violation":   {`echo '{"protocol": 0}'`, "violates the protocol"},
+		"schema violation":   {`echo '{"protocol": 1}'`, "violates the protocol"},
 		"wrong language":     {`echo '` + strings.Replace(goodDescribe, `["go"]`, `["rust"]`, 1) + `'`, `does not include "go"`},
 		"foreign reference":  {`echo '` + strings.Replace(goodDescribe, `"objectives":{}`, `"objectives":{},"reference":"typescript"`, 1) + `'`, "/reference"},
 		"timeout":            {"exec sleep 10", "killed after timeout of 2s"},

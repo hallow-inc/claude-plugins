@@ -1,0 +1,1 @@
+{"protocol":1,"tools":[{"name":"gremlins","version":"0.6.0","pinned_by":"default","install":"go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0"}]}

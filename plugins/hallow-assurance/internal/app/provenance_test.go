@@ -28,7 +28,7 @@ func xxOnPath(t *testing.T) {
 	bin := t.TempDir()
 	script := `#!/bin/sh
 case "$1" in
-describe) printf '%s' '{"protocol":0,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{}}' ;;
+describe) printf '%s' '{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{}}' ;;
 *) echo "assure-adapter-xx: unexpected $*" >&2; exit 1 ;;
 esac
 `

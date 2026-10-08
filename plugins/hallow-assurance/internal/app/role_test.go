@@ -160,7 +160,7 @@ run)
   while [ $# -gt 0 ]; do [ "$1" = "--out" ] && out="$2"; shift; done
   mkdir -p "$out"
   printf '%%s' '%s' > "$out/junit.xml"
-  printf '%%s' '{"protocol":0,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"xx":"1"}}' ;;
+  printf '%%s' '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"xx":"1"},"pinned_by":{}}' ;;
 *) exit 1 ;;
 esac
 `
@@ -202,7 +202,7 @@ func drawVerifierCase(t *rapid.T, bin, root string, ids []string) verifierCase {
 	for _, id := range rapid.SliceOfDistinct(rapid.OneOf(rapid.SampledFrom(ids), rapid.Just("ZZ-UNKNOWN")), rapid.ID).Draw(t, "objectives") {
 		c.objectives[id] = map[string]any{"tool": "x", "fast": rapid.Bool().Draw(t, "fast "+id)}
 	}
-	describe, err := json.Marshal(map[string]any{"protocol": 0, "languages": []string{"xx"}, "claims": []string{"**/*.xx"}, "patterns": map[string]any{"test": []string{"**/*_test.xx"}}, "objectives": c.objectives})
+	describe, err := json.Marshal(map[string]any{"protocol": 1, "languages": []string{"xx"}, "claims": []string{"**/*.xx"}, "patterns": map[string]any{"test": []string{"**/*_test.xx"}}, "objectives": c.objectives})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

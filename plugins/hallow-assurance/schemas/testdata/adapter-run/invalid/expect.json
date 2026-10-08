@@ -1,3 +1,9 @@
 {
-  "missing-tool-versions.json": [{"location": "", "keyword": "required"}]
+  "missing-tool-versions.json": [{"location": "", "keyword": "required"}],
+  "missing-pinned-by.json": [{"location": "", "keyword": "required"}],
+  "empty-tool-versions.json": [{"location": "/tool_versions", "keyword": "minProperties"}],
+  "environment-with-evidence.json": [{"location": "/evidence", "keyword": "maxItems"}],
+  "empty-environment-message.json": [{"location": "/environment/message", "keyword": "minLength"}],
+  "old-protocol.json": [{"location": "/protocol", "keyword": "const"}],
+  "empty-pinned-by-value.json": [{"location": "/pinned_by/gremlins", "keyword": "minLength"}]
 }

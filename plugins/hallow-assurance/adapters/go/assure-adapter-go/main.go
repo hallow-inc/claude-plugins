@@ -27,6 +27,7 @@ type describe struct {
 }
 
 var description = describe{
+	Protocol:  1,
 	Reference: "go",
 	Languages: []string{"go"},
 	Claims:    []string{"**/*.go"},
@@ -66,7 +67,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | reference | classify <path>... | run <objective> --changed-from <ref> --out <dir>")
+		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | reference | classify <path>... | run <objective> --changed-from <ref> --out <dir> | tools --root <dir>")
 		return 2
 	}
 	var out any
@@ -88,6 +89,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		out = map[string]any{"protocol": 0, "files": files}
 	case "run":
 		return runObjective(args[1:], stdout, stderr)
+	case "tools":
+		return toolsOp(args[1:], stdout, stderr)
 	case "reference":
 		if _, err := stdout.Write(reference); err != nil {
 			_, _ = fmt.Fprintf(stderr, "assure-adapter-go: %v\n", err)

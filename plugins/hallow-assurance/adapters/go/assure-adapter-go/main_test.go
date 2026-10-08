@@ -41,6 +41,9 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 	if err != nil || len(vs) > 0 {
 		t.Fatalf("describe invalid: %v %v", err, vs)
 	}
+	if v["protocol"] != float64(1) {
+		t.Fatalf("protocol = %v; describe must announce protocol 1 so an older assure refuses it with the same-release error", v["protocol"])
+	}
 	if c := v["claims"].([]any); len(c) != 1 || c[0] != "**/*.go" {
 		t.Fatalf("claims = %v", c)
 	}

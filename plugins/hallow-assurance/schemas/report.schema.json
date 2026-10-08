@@ -4,7 +4,7 @@
   "title": "assure evaluate report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "commit", "changed_from", "date", "catalog", "changed_files", "tool_versions", "problems", "expired_waivers", "removable_baseline", "objectives"],
+  "required": ["version", "commit", "changed_from", "date", "catalog", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "removable_baseline", "objectives"],
   "properties": {
     "version": { "const": 0 },
     "commit": { "$ref": "#/$defs/sha" },
@@ -21,6 +21,13 @@
     "catalog": { "type": "string", "pattern": "^v[0-9]+$" },
     "changed_files": { "type": "integer", "minimum": 0 },
     "tool_versions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "pinned_by": {
       "type": "object",
       "additionalProperties": {
         "type": "object",

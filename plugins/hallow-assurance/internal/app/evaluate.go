@@ -48,6 +48,7 @@ type EvalReport struct {
 	Catalog              string                       `json:"catalog"`
 	ChangedFiles         int                          `json:"changed_files"`
 	ToolVersions         map[string]map[string]string `json:"tool_versions"`
+	PinnedBy             map[string]map[string]string `json:"pinned_by"`
 	Problems             []string                     `json:"problems"`
 	ExpiredWaivers       []core.Waiver                `json:"expired_waivers"`
 	RemovableBaseline    []RemovableEntry             `json:"removable_baseline"`
@@ -80,6 +81,9 @@ func (r EvalReport) Marshal() ([]byte, error) {
 	if r.ToolVersions == nil {
 		r.ToolVersions = map[string]map[string]string{}
 	}
+	if r.PinnedBy == nil {
+		r.PinnedBy = map[string]map[string]string{}
+	}
 	data, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return nil, err
@@ -110,7 +114,7 @@ func revParse(root, ref string) (string, error) {
 type evalResult struct {
 	entry Entry
 	ev    core.Evidence
-	tools map[string]string
+	run   adapterproto.Run
 	used  map[core.Fingerprint]int
 }
 
@@ -141,6 +145,7 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 		Date:           date,
 		Catalog:        m.Catalog.Version,
 		ToolVersions:   map[string]map[string]string{},
+		PinnedBy:       map[string]map[string]string{},
 		ExpiredWaivers: core.Expired(ws, date),
 	}
 	slices.SortFunc(rep.ExpiredWaivers, func(a, b core.Waiver) int {
@@ -167,9 +172,9 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 	var wg sync.WaitGroup
 	for i, j := range jobs {
 		wg.Go(func() {
-			ev, tools := collect(m, j, ref, EvaluateTimeout)
+			ev, run := collect(m, j, ref, EvaluateTimeout)
 			out := core.DecideObjective(j.obj, j.files, ev, ws, bl.For(j.obj.ID), date)
-			results[i] = evalResult{entry: entryOf(j.lang, out), ev: ev, tools: tools, used: out.BaselineUsed}
+			results[i] = evalResult{entry: entryOf(j.lang, out), ev: ev, run: run, used: out.BaselineUsed}
 		})
 	}
 	wg.Wait()
@@ -201,12 +206,8 @@ func (rep *EvalReport) fold(jobs []job, results []evalResult) (used map[core.Fin
 	ran = map[string]map[string]bool{}
 	for i, res := range results {
 		rep.Objectives = append(rep.Objectives, res.entry)
-		if len(res.tools) > 0 {
-			if rep.ToolVersions[jobs[i].lang] == nil {
-				rep.ToolVersions[jobs[i].lang] = map[string]string{}
-			}
-			maps.Copy(rep.ToolVersions[jobs[i].lang], res.tools)
-		}
+		mergeInto(rep.ToolVersions, jobs[i].lang, res.run.ToolVersions)
+		mergeInto(rep.PinnedBy, jobs[i].lang, res.run.PinnedBy)
 		for fp, n := range res.used {
 			used[fp] += n
 		}
@@ -221,6 +222,16 @@ func (rep *EvalReport) fold(jobs []job, results []evalResult) (used map[core.Fin
 		}
 	}
 	return used, ran
+}
+
+func mergeInto(dst map[string]map[string]string, lang string, src map[string]string) {
+	if len(src) == 0 {
+		return
+	}
+	if dst[lang] == nil {
+		dst[lang] = map[string]string{}
+	}
+	maps.Copy(dst[lang], src)
 }
 
 func entryOf(lang string, o core.Outcome) Entry {

@@ -11,7 +11,7 @@ import (
 )
 
 var constraintKeywords = []string{
-	"type", "enum", "const", "pattern", "required", "additionalProperties", "minItems", "minLength",
+	"type", "enum", "const", "pattern", "required", "additionalProperties", "minItems", "maxItems", "minLength",
 	"minimum", "maximum", "minProperties", "format", "not", "uniqueItems",
 }
 
@@ -48,7 +48,7 @@ func constraintSites(file string, node any, path []string) []site {
 			}
 		}
 	}
-	for _, kw := range []string{"items", "additionalProperties", "not"} {
+	for _, kw := range []string{"items", "additionalProperties", "not", "if", "then", "else"} {
 		out = append(out, constraintSites(file, obj[kw], append(slices.Clone(path), kw))...)
 	}
 	return out

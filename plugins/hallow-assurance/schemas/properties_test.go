@@ -3,6 +3,8 @@ package schemas
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -313,7 +315,7 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 		claims = append(claims, pathGen.Draw(t, "claim"))
 		r.bad("/claims", idx(i), badPath...)
 	}
-	doc := map[string]any{"protocol": 0, "languages": la, "claims": claims, "patterns": patterns, "objectives": objectives}
+	doc := map[string]any{"protocol": 1, "languages": la, "claims": claims, "patterns": patterns, "objectives": objectives}
 	if rapid.Bool().Draw(t, "hasref") {
 		doc["reference"] = rapid.SampledFrom(langs).Draw(t, "ref")
 	}
@@ -322,7 +324,7 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 	r.closed("")
 	r.required("", "protocol", "languages", "claims", "patterns", "objectives")
 	r.bad("", "claims", "x", []any{})
-	r.bad("", "protocol", 1, "0")
+	r.bad("", "protocol", badProtocolV1...)
 	r.bad("", "languages", "x", []any{}, []any{langs[0], langs[0]})
 	r.bad("", "patterns", "x", map[string]any{"source": []any{}}, map[string]any{"test": "x"}, map[string]any{"test": []any{"/abs"}})
 	r.bad("", "objectives", "x", map[string]any{"ver-x": map[string]any{"tool": "t"}}, map[string]any{"VER-X": "x"},
@@ -355,33 +357,103 @@ var classifyGen = rapid.Custom(func(t *rapid.T) sample {
 	r.root("x", []any{})
 	r.closed("")
 	r.required("", "protocol", "files")
-	r.bad("", "protocol", 1, "0")
+	r.bad("", "protocol", 1, -1, "0")
 	r.bad("", "files", "x", []any{"x"})
 	return sample{doc, r.cs}
 })
 
 var runGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
-	ev := []any{}
-	for i := range rapid.IntRange(0, 3).Draw(t, "ne") {
-		p := "/evidence/" + idx(i)
-		ev = append(ev, map[string]any{"type": evGen.Draw(t, "type"), "path": pathGen.Draw(t, "path")})
-		r.closed(p)
-		r.required(p, "type", "path")
-		r.bad(p, "type", badEv...)
-		r.bad(p, "path", badPath...)
-	}
 	tv := map[string]any{}
 	for range rapid.IntRange(1, 3).Draw(t, "ntv") {
 		tv[langGen.Draw(t, "tool")] = textGen.Draw(t, "ver")
 	}
-	doc := map[string]any{"protocol": 0, "evidence": ev, "tool_versions": tv}
+	doc := map[string]any{"protocol": 1, "evidence": []any{}, "tool_versions": tv, "pinned_by": pinsOf(t, tv)}
+	if env := environmentOf(t, r); env != nil {
+		doc["environment"] = env
+		r.bad("", "evidence", []any{map[string]any{"type": "test.junit", "path": "junit.xml"}})
+		if rapid.Bool().Draw(t, "notools") {
+			doc["tool_versions"], doc["pinned_by"] = map[string]any{}, map[string]any{}
+		}
+	} else {
+		ev := []any{}
+		for i := range rapid.IntRange(0, 3).Draw(t, "ne") {
+			p := "/evidence/" + idx(i)
+			ev = append(ev, map[string]any{"type": evGen.Draw(t, "type"), "path": pathGen.Draw(t, "path")})
+			r.closed(p)
+			r.required(p, "type", "path")
+			r.bad(p, "type", badEv...)
+			r.bad(p, "path", badPath...)
+		}
+		doc["evidence"] = ev
+		r.bad("", "tool_versions", map[string]any{})
+	}
 	r.root("x", []any{})
 	r.closed("")
-	r.required("", "protocol", "evidence", "tool_versions")
-	r.bad("", "protocol", 1, "0")
+	r.required("", "protocol", "evidence", "tool_versions", "pinned_by")
+	r.bad("", "protocol", badProtocolV1...)
 	r.bad("", "evidence", "x", []any{"x"})
-	r.bad("", "tool_versions", "x", map[string]any{}, map[string]any{"go": ""}, map[string]any{"go": 7})
+	r.bad("", "tool_versions", "x", map[string]any{"go": ""}, map[string]any{"go": 7})
+	r.bad("", "pinned_by", "x", map[string]any{"go": ""}, map[string]any{"go": 7})
+	return sample{doc, r.cs}
+})
+
+var badProtocolV1 = []any{0, 2, "1"}
+
+func pinsOf(t *rapid.T, tv map[string]any) map[string]any {
+	pins := map[string]any{}
+	for _, tool := range slices.Sorted(maps.Keys(tv)) {
+		if rapid.Bool().Draw(t, "pinned "+tool) {
+			pins[tool] = rapid.SampledFrom([]string{"mise.toml", ".tool-versions", "go.mod", "default"}).Draw(t, "pin")
+		}
+	}
+	return pins
+}
+
+func environmentOf(t *rapid.T, r *rec) map[string]any {
+	r.bad("", "environment", "x", map[string]any{}, map[string]any{"message": ""}, map[string]any{"message": 7}, map[string]any{"message": "m", "zz": 1})
+	if !rapid.Bool().Draw(t, "environment") {
+		return nil
+	}
+	r.closed("/environment")
+	r.required("/environment", "message")
+	return map[string]any{"message": textGen.Draw(t, "environment message")}
+}
+
+var toolsGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	tools := []any{}
+	entry := func() map[string]any {
+		return map[string]any{
+			"name":      langGen.Draw(t, "name"),
+			"version":   rapid.StringMatching(`[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}`).Draw(t, "version"),
+			"pinned_by": rapid.SampledFrom([]string{"mise.toml", ".tool-versions", "default"}).Draw(t, "pinned_by"),
+			"install":   rapid.StringMatching(`[a-z][a-z0-9 @./:-]{0,40}`).Draw(t, "install"),
+		}
+	}
+	doc := map[string]any{"protocol": 1}
+	if env := environmentOf(t, r); env != nil {
+		doc["environment"] = env
+		r.bad("", "tools", []any{entry()})
+	} else {
+		for i := range rapid.IntRange(0, 3).Draw(t, "ntools") {
+			p := "/tools/" + idx(i)
+			tools = append(tools, entry())
+			r.closed(p)
+			r.required(p, "name", "version", "pinned_by", "install")
+			r.bad(p, "name", badText...)
+			r.bad(p, "version", badText...)
+			r.bad(p, "pinned_by", badText...)
+			r.bad(p, "install", "", "go install x\nrm -rf /", "a\rb", 7)
+			r.bad("/tools", idx(i), "x")
+		}
+	}
+	doc["tools"] = tools
+	r.root("x", []any{})
+	r.closed("")
+	r.required("", "protocol", "tools")
+	r.bad("", "protocol", badProtocolV1...)
+	r.bad("", "tools", "x", map[string]any{})
 	return sample{doc, r.cs}
 })
 
@@ -518,9 +590,12 @@ var baselineGen = rapid.Custom(func(t *rapid.T) sample {
 var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
 	tv := map[string]any{}
+	pins := map[string]any{}
 	for _, lang := range rapid.SliceOfNDistinct(langGen, 0, 2, func(s string) string { return s }).Draw(t, "langs") {
 		tv[lang] = map[string]any{textGen.Draw(t, "tool"): textGen.Draw(t, "ver")}
+		pins[lang] = pinsOf(t, tv[lang].(map[string]any))
 		r.bad("/tool_versions", lang, "x", map[string]any{"go": ""}, map[string]any{"go": 7})
+		r.bad("/pinned_by", lang, "x", map[string]any{"go": ""}, map[string]any{"go": 7})
 	}
 	probs := []any{}
 	for i := range rapid.IntRange(0, 2).Draw(t, "np") {
@@ -576,6 +651,7 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 		"catalog":            "v" + strconv.Itoa(rapid.IntRange(0, 9).Draw(t, "cat")),
 		"changed_files":      rapid.IntRange(0, 50).Draw(t, "changed"),
 		"tool_versions":      tv,
+		"pinned_by":          pins,
 		"problems":           probs,
 		"expired_waivers":    expired,
 		"removable_baseline": removable,
@@ -583,7 +659,7 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	}
 	r.root("x", []any{})
 	r.closed("")
-	r.required("", "version", "commit", "changed_from", "date", "catalog", "changed_files", "tool_versions", "problems", "expired_waivers", "removable_baseline", "objectives")
+	r.required("", "version", "commit", "changed_from", "date", "catalog", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "removable_baseline", "objectives")
 	r.bad("", "version", 1, "0")
 	r.bad("", "commit", badSHA...)
 	r.closed("/changed_from")
@@ -595,6 +671,7 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "catalog", "0", "vx", 0)
 	r.bad("", "changed_files", -1, 1.5, "1")
 	r.bad("", "tool_versions", "x")
+	r.bad("", "pinned_by", "x")
 	r.bad("", "problems", "x")
 	r.bad("", "expired_waivers", "x", []any{"x"})
 	r.bad("", "removable_baseline", "x", []any{"x"})
@@ -674,6 +751,7 @@ var generators = map[Kind]*rapid.Generator[sample]{
 	AdapterDescribe: describeGen,
 	AdapterClassify: classifyGen,
 	AdapterRun:      runGen,
+	AdapterTools:    toolsGen,
 	Reviews:         reviewsGen,
 	Pending:         pendingGen,
 }

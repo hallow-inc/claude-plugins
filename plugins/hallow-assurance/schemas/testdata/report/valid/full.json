@@ -6,6 +6,7 @@
   "catalog": "v0",
   "changed_files": 3,
   "tool_versions": {"go": {"go": "go1.27.1", "golangci-lint": "2.13.2"}},
+  "pinned_by": {"go": {"golangci-lint": "mise.toml"}},
   "problems": [],
   "expired_waivers": [
     {"objective": "VER-FAIL-ON-BASE", "scope": "**", "rationale": "M3b builds the fail-on-base runner", "approver": "@owner", "expires": "2026-09-01"}

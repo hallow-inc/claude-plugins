@@ -1,1 +1,1 @@
-{"version":0,"adapters":{"go":{"path":"/usr/local/bin/assure-adapter-go","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","describe":{"protocol":0,"languages":["go"],"patterns":{},"objectives":{}}}}}
+{"version":0,"adapters":{"go":{"path":"/usr/local/bin/assure-adapter-go","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","describe":{"protocol":1,"languages":["go"],"patterns":{},"objectives":{}}}}}

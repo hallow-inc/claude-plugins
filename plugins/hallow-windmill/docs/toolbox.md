@@ -38,19 +38,31 @@ URL: `https://windmill.platform.hallow.app` (tailnet-only).
 
 ### `f/shared/slack_post`
 
-`{ text, webhook?, channel?, bot_token?, blocks?, thread_ts? } → { mode, ok, ts?, channel? }`
+`{ text, webhook?, channel?, blocks?, thread_ts?, unfurl_links?, unfurl_media? } → { mode, ok, ts?, channel? }`
 
-One Slack-posting helper. Two modes:
+One Slack-posting helper. **You never need a Slack bot token or a `chat:write` resource to post as the Hallow bot** — the call forwards to an HTTP route that runs as `u/sandbox` and reads the token server-side. Don't ask for a token; call this.
 
-- **Webhook mode** — pass `webhook` as either a full incoming-webhook URL or a resource path (`f/shared/slack_ops_webhook`). Posts `{text, blocks}`.
-- **Bot mode** — pass `channel` (and optionally a `bot_token` resource). Uses `chat.postMessage` with the bot token at `f/slack_bot/bot_token` by default.
+- **Bot mode** — pass `channel`. Posts as the bot via `chat.postMessage`. Returns `ts` and the channel **ID**.
+- **Webhook mode** — pass `webhook` as either a full incoming-webhook URL or a resource path. Posts `{text, blocks}`.
 
-Either `webhook` or `channel` is required.
+Either `webhook` or `channel` is required. The bot must be invited to the channel first, or the call fails with `not_in_channel`.
 
 ```ts
 await wmill.runScript("f/shared/slack_post", null, {
   channel: "#hallow-data-ops",
   text: ":checkered_flag: Daily pipeline done",
+});
+```
+
+**Reply in a thread.** Pass `thread_ts`. To keep updating one thread later (e.g. when an external ticket changes status), post the parent yourself and save the `channel` + `ts` it returns — you can't recover the `ts` of a message the bot didn't post.
+
+```ts
+const parent = await wmill.runScript("f/shared/slack_post", null, {
+  channel: "#issues", text: "New report: …",
+});
+// persist parent.channel + parent.ts against your record, then later:
+await wmill.runScript("f/shared/slack_post", null, {
+  channel: parent.channel, thread_ts: parent.ts, text: "Status → In progress",
 });
 ```
 

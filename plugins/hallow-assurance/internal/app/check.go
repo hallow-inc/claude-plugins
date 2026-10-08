@@ -66,8 +66,14 @@ func (r Report) OutsideReach() bool {
 func (r Report) Remedies() []string {
 	var out []string
 	for _, res := range r.Results {
-		if res.Status == core.Fail && slices.ContainsFunc(res.Errs, func(e error) bool { return errors.Is(e, core.ErrAdapterUnstartable) }) {
+		if res.Status != core.Fail {
+			continue
+		}
+		if slices.ContainsFunc(res.Errs, func(e error) bool { return errors.Is(e, core.ErrAdapterUnstartable) }) {
 			out = append(out, "install "+adapterproto.Executable(res.Lang)+" on PATH, then restart Claude Code")
+		}
+		if slices.ContainsFunc(res.Errs, func(e error) bool { return errors.Is(e, core.ErrToolEnvironment) }) {
+			out = append(out, "install the pinned tools with `assure tools --install-script | sh`, then restart Claude Code")
 		}
 	}
 	slices.Sort(out)
@@ -239,10 +245,14 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 	return jobs, bad
 }
 
-func collect(m *core.Manifest, j job, ref string, timeout time.Duration) (core.Evidence, map[string]string) {
+func collect(m *core.Manifest, j job, ref string, timeout time.Duration) (core.Evidence, adapterproto.Run) {
 	run, err := adapterproto.RunObjective(m.Root, j.lang, j.obj.ID, ref, j.out, timeout)
 	if err != nil {
-		return core.Evidence{Problems: []string{err.Error()}, Errs: []error{err}}, nil
+		return core.Evidence{Problems: []string{err.Error()}, Errs: []error{err}}, adapterproto.Run{}
+	}
+	if run.Environment != nil {
+		err := fmt.Errorf("%s run %s: %w", adapterproto.Executable(j.lang), j.obj.ID, core.ErrToolEnvironment)
+		return core.Evidence{Problems: []string{run.Environment.Message}, Errs: []error{err}}, run
 	}
 	var ev core.Evidence
 	found := false
@@ -261,7 +271,7 @@ func collect(m *core.Manifest, j job, ref string, timeout time.Duration) (core.E
 	if !found {
 		ev.Problems = append(ev.Problems, fmt.Sprintf("%s run %s produced no %s evidence", adapterproto.Executable(j.lang), j.obj.ID, j.obj.Evidence))
 	}
-	return ev, run.ToolVersions
+	return ev, run
 }
 
 func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) {

@@ -31,6 +31,7 @@ const (
 	AdapterDescribe Kind = "adapter-describe"
 	AdapterClassify Kind = "adapter-classify"
 	AdapterRun      Kind = "adapter-run"
+	AdapterTools    Kind = "adapter-tools"
 	AdapterLint     Kind = "adapter-lint"
 	AdapterCache    Kind = "adapter-cache"
 	Snapshot        Kind = "snapshot"
@@ -70,6 +71,7 @@ var kinds = map[Kind]struct {
 	AdapterDescribe: {base + "adapter-describe.schema.json", jsonDoc},
 	AdapterClassify: {base + "adapter-classify.schema.json", jsonDoc},
 	AdapterRun:      {base + "adapter-run.schema.json", jsonDoc},
+	AdapterTools:    {base + "adapter-tools.schema.json", jsonDoc},
 	AdapterLint:     {sarifID, jsonDoc},
 	AdapterCache:    {base + "adapter-cache.schema.json", jsonDoc},
 	Snapshot:        {base + "snapshot.schema.json", jsonDoc},

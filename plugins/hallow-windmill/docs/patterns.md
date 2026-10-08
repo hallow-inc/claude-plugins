@@ -108,11 +108,10 @@ Established cross-cutting building blocks. Check here before writing anything ne
 
 | Path | Use it when |
 |---|---|
-| `f/shared/slack_post` | Posting to Slack from any script/flow. Webhook URL **or** bot `channel`. Returns `ts` in bot mode. |
+| `f/shared/slack_post` | Posting to Slack from any script/flow. Webhook URL **or** bot `channel`. Returns `ts` in bot mode; pass `thread_ts` to reply in a thread. No token needed — runs the bot-token impl as `u/sandbox` server-side. |
 | `f/shared/error_to_slack` | Workspace-level error handler. Auto-routes via folder ancestry → `error_webhook` resource. **Note:** the `f/shared/slack_ops_webhook` fallback named in `error_to_slack.ts` does NOT exist on this workspace — only `f/platform_secrets/slack_bot__token` is provisioned. Use **bot channel mode** (channel `#platform-alerts`) rather than relying on the webhook fallback. |
 | `f/shared/assert_principal` | Gate a flow/script to allowed groups/users. Use as the first module of any privileged flow. |
 | `f/slack_tools/_redact` | Library (no `main()`). `import { redact } from "/f/slack_tools/_redact.ts"` before returning error strings to an LLM. Defense in depth. |
-| `f/slack_bot/bot_token` | Slack bot token resource. Default token source for `slack_post` bot mode. |
 
 Adding a new reusable atom (in a folder you can write):
 - Domain-scoped: `f/<domain>/<name>` (e.g. `f/slack_tools/`, `f/storage/`).

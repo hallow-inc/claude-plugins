@@ -332,20 +332,35 @@ than in CI.
 **Adapter protocol v0** — subprocess, JSON on stdin/stdout:
 
 ```
-assure-adapter-go describe            → {protocol:0, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{<id>:{tool, fast?}}, reference?:"go"}
+assure-adapter-go describe            → {protocol:1, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{<id>:{tool, fast?}}, reference?:"go"}
 assure-adapter-go classify  <paths>   → {protocol:0, files:[{path, language, role}]}
 assure-adapter-go lint      <paths>   → SARIF
-assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:0, evidence:[{type, path}], tool_versions:{...}}
+assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:1, evidence:[{type, path}], tool_versions:{...}, pinned_by:{...}, environment?:{message}}
+assure-adapter-go tools --root <dir>  → {protocol:1, tools:[{name, version, pinned_by, install}], environment?:{message}}
 assure-adapter-go reference          → Markdown (the testing reference named by describe.reference)
 ```
 
-Every response except `lint` and `reference` is an object carrying `protocol: 0`, so each message is versioned on its own.
+Every response except `lint` and `reference` is an object carrying an integer `protocol`, and each
+message is versioned on its own: `classify` carries `0`; `describe`, `run`, and `tools` carry `1`.
+`assure` and its adapters are installed from the same release; a mismatch is an error naming both
+numbers.
+`pinned_by` maps each resolved tool to where its version was pinned (a repo-relative pin file, or
+`default`); its keys are a subset of `tool_versions`', and the core treats each value as opaque.
+`environment` means the adapter could not get the tools the objective needs; the response then
+carries no evidence, and the objective fails outside the agent's reach. `tools` lists the resolved
+version of every tool the adapter's objectives use, with one shell line installing it; `assure
+tools --install-script` concatenates those lines so a developer and CI install the same versions.
+An adapter resolves its tools from the repository's own tracked pin files first, then from its
+compiled defaults, accepts only exact versions inside the range its parsers were built against, and
+fails closed when the binary on `PATH` reports a different version. Whether a lockfile counts as a
+pin file is decided per adapter, against the rule that an agent-editable file cannot be the only
+pin.
 `claims` lists the files the adapter owns. A claimed file's role is the first matching pattern list
 in the order `generated`, `fuzz_corpus`, `test`, `config`, and otherwise `source`.
 `fast: true` marks an objective cheap enough for the Stop-hook fast check. Cost belongs to the tool
 the adapter picks, so it lives here, not in the catalog. `run` exits 0 whenever it produced a valid
 response, including when the tools found failures.
-Schemas: `schemas/adapter-{describe,classify,run}.schema.json`; `lint` is validated against SARIF 2.1.0.
+Schemas: `schemas/adapter-{describe,classify,run,tools}.schema.json`; `lint` is validated against SARIF 2.1.0.
 
 ## Starter catalog (v0)
 
