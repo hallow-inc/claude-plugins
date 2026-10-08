@@ -513,9 +513,10 @@ never reassigned, and new work takes a letter suffix.
 **M4c — Solo adoption**
 - `release-channel`: `go install` of `assure` and `assure-adapter-go` from one
   `plugins/hallow-assurance/v0.N.x` tag; reusable evaluate workflow with a required `version` input;
-  README licensing consent for personal repos
-- `solo-adoption-exception`: with no manifest at base and only `assurance.yaml` / `.assure/**`
-  changed, CFG-PROTECTED and the gap branch of IND-VERIFIER-DISTINCT pass with an `adoption` note
+  README licensing consent for personal repos; README adoption order: the manifest PR
+  (`assurance.yaml`, `.assure/**`) merges before the PR that adds the evaluate workflow, so the
+  first evaluated base already carries `human_review`. The evaluator has no exception for a base
+  without a manifest
 - `assure-init`: prints a suggested manifest (packages, `inputs: true` candidates, baseline counts per
   objective); never writes protected files and never proposes `formal:`
 - ✅ `hello-world-bfree/g` adopts at level B with no second reviewer
