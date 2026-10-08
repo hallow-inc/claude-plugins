@@ -1,0 +1,12 @@
+version: 0
+catalog: v0
+languages: [go]
+default_level: C
+components:
+  - path: internal/ledger/**
+    level: A
+    formal:
+      model: formal/Ledger
+      challenge: formal/Ledger/Challenge.lean
+      link: conformance
+      code: internal/ledger/**
