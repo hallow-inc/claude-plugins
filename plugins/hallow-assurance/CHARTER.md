@@ -97,7 +97,8 @@ v1:
 
 - `assure evaluate` is a required check on the pilot repo, blocking on levels A–B
 - The TypeScript adapter ships with **zero** diffs to `plugin/` and `internal/core/`
-- Independence Tier 1 verified from provenance on every PR touching level A–B code
+- Independence Tier 1 verified from provenance on every PR touching level A–B code in a repo with
+  `provenance: true`
 - Each adapter passes its qualification fixtures in CI
 - Within six weeks of blocking mode: at least a few real bugs attributed to framework layers
   (`found-by:*` labels), mutation efficacy on changed code trending up, test count flat or down
@@ -293,9 +294,17 @@ allows the call, held in `.assure/state/pending/<session>/<tool_use_id>.json`; `
 absent / deleted. Renames are delete + create. The Stop drift snapshot excludes
 `.assure/provenance/`, because `record` appends to it mid-session; CI's append-only check covers it.
 
+Provenance is opt-in: the manifest key `provenance: true` turns it on, and absent means off. Off,
+the hooks write no pending entry and no record, and `assure record` exits 0. CI reads the key from
+the manifest at the base ref, like `human_review`, so a PR cannot switch off its own check; with no
+manifest there, or the key off, IND-VERIFIER-DISTINCT is not applicable and is absent from the
+report. Existing `.assure/provenance/` files are ignored when off and stay excluded from
+CFG-PROTECTED either way. `guard`'s role rules apply whatever the key says.
+
 Threat model: a shortcut-taking agent (edits tests while implementing, edits through Bash), not a
 forging one. Any agent running as the developer's OS user can reach every local secret, so local
-provenance is detective, never preventive; CI is the authority.
+provenance is detective, never preventive; CI is the authority. `guard` sees only file tools, so with
+provenance off an edit through Bash goes undetected.
 
 CI check, per changed file in a level A–B component: the records must form an unbroken blob chain
 `merge-base blob → pre→post → … → final blob`. Order comes from the hash links, not timestamps. Any
@@ -439,7 +448,7 @@ keep local behavior as close to fail-closed as the harness allows:
 | SessionStart | – | `guard --snapshot` | Records protected-file hashes for the Stop drift check |
 | PreToolUse | `Edit\|Write\|NotebookEdit` | `guard` | Blocks protected files; enforces subagent role rules keyed on the hook input's `agent_type` (e.g. verifier can't edit source) |
 | PostToolUse | `Edit\|Write` | `lint` | Fast per-file rule-pack findings fed back to the agent |
-| PostToolUse | `Edit\|Write\|NotebookEdit` | `record` | Appends provenance (never blocks; a failure is a CI gap) |
+| PostToolUse | `Edit\|Write\|NotebookEdit` | `record` | With `provenance: true`, appends provenance (never blocks; a failure is a CI gap); otherwise silent |
 | Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail or protected files drifted; retry cap (own counter + `stop_hook_active`) then escalate |
 | SubagentStop | `^hallow-assurance:(verifier\|inspector)$` | `check --role <agent>` | Verifier must leave passing tests (`VER-TESTS-PASS` only); inspector must emit one fenced `sarif` block in its final message, which the hook reads from `last_assistant_message`, validates, and writes to `.assure/state/inspections/` |
 
@@ -522,6 +531,8 @@ never reassigned, and new work takes a letter suffix.
 - `assure record` + IND-VERIFIER-DISTINCT (tier1) and CFG-PROTECTED evaluation; `--reviews` input;
   manifest `human_review`
 - ✅ Evaluator rejects a PR where implementer == verifier on level B code
+- Provenance became opt-in in M4c (`provenance-opt-in`); the record and independence check above run
+  only with `provenance: true`
 
 **M4b — Skills, commands**
 - `assure-testing` skill + Go reference embedded in the adapter (`describe` names it); `/hallow-assurance:*` commands
@@ -533,6 +544,8 @@ never reassigned, and new work takes a letter suffix.
   README licensing consent for personal repos
 - `review-optional-default`: `human_review` defaults to `optional` at every level including A; a base
   ref with no manifest uses the default, so the adopting PR needs no special order
+- `provenance-opt-in`: manifest key `provenance` (default `false`); off, the hooks record nothing and
+  IND-VERIFIER-DISTINCT is not applicable, read from the base manifest
 - `assure-init`: prints a suggested manifest (packages, `inputs: true` candidates, baseline counts per
   objective); never writes protected files and never proposes `formal:`
 - ✅ `hello-world-bfree/g` adopts at level B with no second reviewer and no `human_review` key

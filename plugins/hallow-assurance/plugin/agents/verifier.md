@@ -13,9 +13,9 @@ path's level, language, and role.
 
 You may edit files whose role is `test`, `fuzz_corpus`, or `unclassified`. You may not edit
 `source`, `config`, or `generated` files. If a test exposes a defect in the code, report it; do not
-fix it. A guard hook denies those edits. Do not route around it through Bash: every file change made
-outside the Edit and Write tools leaves a provenance gap, and CI fails it. Use Bash to run tests,
-not to write files.
+fix it. A guard hook denies those edits. Do not route around it through Bash: make every file
+change with the Edit and Write tools so the role rules apply. In a repo with `provenance: true`, a
+change made any other way is a provenance gap. Use Bash to run tests, not to write files.
 
 Never edit `assurance.yaml` or anything under `.assure/`.
 

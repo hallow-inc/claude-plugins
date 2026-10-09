@@ -14,7 +14,10 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-const xxManifest = "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\n"
+const (
+	xxManifestOff = "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\n"
+	xxManifest    = xxManifestOff + "provenance: true\n"
+)
 
 var xxWaivers = func() string {
 	var b strings.Builder
@@ -166,6 +169,7 @@ func (f provFixture) copySession(from, to string) {
 const (
 	optionalManifest = xxManifest + "human_review: {B: optional}\n"
 	requiredManifest = xxManifest + "human_review: {B: required}\n"
+	absent           = "absent"
 )
 
 func adoptManifest(f provFixture) {
@@ -200,9 +204,8 @@ func (s evalScenario) run(t *testing.T) {
 		args = []string{"--reviews", s.reviews(f)}
 	}
 	code, stdout, stderr, rep := f.evaluate(args...)
-	ind, _ := entry(rep, "IND-VERIFIER-DISTINCT", "")
-	cfg, _ := entry(rep, "CFG-PROTECTED", "")
-	if code != s.code || (s.ind != "" && string(ind.Status) != s.ind) || (s.cfg != "" && string(cfg.Status) != s.cfg) {
+	ind, cfg, ok := s.statuses(rep)
+	if code != s.code || !ok {
 		t.Fatalf("exit %d (want %d), IND %+v (want %s), CFG %+v (want %s), problems %v\n%s%s", code, s.code, ind, s.ind, cfg, s.cfg, rep.Problems, stdout, stderr)
 	}
 	for _, parts := range s.indHas {
@@ -225,7 +228,22 @@ func (s evalScenario) run(t *testing.T) {
 	}
 }
 
+func (s evalScenario) statuses(rep app.EvalReport) (ind, cfg app.Entry, ok bool) {
+	ind, indIn := entry(rep, "IND-VERIFIER-DISTINCT", "")
+	cfg, _ = entry(rep, "CFG-PROTECTED", "")
+	indOK := s.ind == "" || string(ind.Status) == s.ind || (s.ind == absent && !indIn)
+	return ind, cfg, indOK && (s.cfg == "" || string(cfg.Status) == s.cfg)
+}
+
 func handEdit(f provFixture) { f.write("p/x.xx", "hand edit\n") }
+
+func unrecordedPR(f provFixture) {
+	independentPR(f)
+	implementerTest(f)
+	if _, err := os.Stat(filepath.Join(f.root, core.ProvenanceDir)); !os.IsNotExist(err) {
+		f.t.Fatalf("provenance off wrote %s: %v", core.ProvenanceDir, err)
+	}
+}
 
 func implementerTest(f provFixture) {
 	f.edit("s1", "t2", "p/x_test.xx", "check two\n", core.Implementer)
@@ -331,21 +349,26 @@ func TestEvaluateIndependenceScenarios(t *testing.T) {
 			pr:     adoptManifest,
 			indHas: [][]string{{"p/x.xx", "gap"}},
 			cfgHas: [][]string{{"assurance.yaml"}}},
-		{name: "first adoption is judged under optional", code: 0, ind: "pass", cfg: "pass",
+		{name: "first adoption is judged under optional without provenance", code: 0, ind: absent, cfg: "pass",
 			base: func(f provFixture) {
 				if err := os.Remove(filepath.Join(f.root, "assurance.yaml")); err != nil {
 					f.t.Fatal(err)
 				}
 			},
 			pr:      adoptManifest,
-			indHas:  [][]string{{"p/x.xx", "unreviewed", "human_review: optional"}},
 			cfgHas:  [][]string{{"assurance.yaml", "unreviewed", "human_review: optional"}},
-			summary: [][]string{{"p/x.xx", "unreviewed"}, {"assurance.yaml", "unreviewed"}}},
-		{name: "an unparseable base manifest is judged under optional", code: 0, ind: "pass", cfg: "pass",
-			base:   func(f provFixture) { f.write("assurance.yaml", "human_review: {B: required\n") },
+			summary: [][]string{{"assurance.yaml", "unreviewed"}}},
+		{name: "an unparseable base manifest is judged under optional without provenance", code: 0, ind: absent, cfg: "pass",
+			base:   func(f provFixture) { f.write("assurance.yaml", "provenance: true\nhuman_review: {B: required\n") },
 			pr:     adoptManifest,
-			indHas: [][]string{{"p/x.xx", "unreviewed", "human_review: optional"}},
 			cfgHas: [][]string{{"assurance.yaml", "unreviewed", "human_review: optional"}}},
+		{name: "provenance off at base records nothing and is not judged", manifest: xxManifestOff, code: 0, ind: absent, cfg: "pass",
+			pr: unrecordedPR},
+		{name: "turning provenance on is not judged until the next change", manifest: xxManifestOff, code: 0, ind: absent,
+			pr: func(f provFixture) { f.write("assurance.yaml", xxManifest); handEdit(f) }},
+		{name: "turning provenance off is still judged", code: 0, ind: "pass",
+			pr:     func(f provFixture) { f.write("assurance.yaml", xxManifestOff); handEdit(f) },
+			indHas: [][]string{{"p/x.xx", "unreviewed", "human_review: optional"}}},
 		{name: "optional review lists unreviewed paths", code: 0, ind: "pass", cfg: "pass",
 			pr:      func(f provFixture) { handEdit(f); f.write(".assure/waivers.yaml", xxWaivers+"# unreviewed\n") },
 			indHas:  [][]string{{"p/x.xx", "unreviewed", "human_review: optional"}},

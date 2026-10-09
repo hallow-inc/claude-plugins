@@ -99,6 +99,9 @@ func WritePending(m *core.Manifest, session, toolUseID, rel string) error {
 	if !validIDs(session, toolUseID) {
 		return fmt.Errorf("invalid session or tool use id")
 	}
+	if !m.Provenance {
+		return nil
+	}
 	blobs, err := worktreeBlobs(m.Root, []string{rel})
 	if err != nil {
 		return err
@@ -142,6 +145,9 @@ func Record(m *core.Manifest, in RecordInput) (rel string, appended bool, err er
 	if !validIDs(in.Session, in.ToolUseID) {
 		return "", false, fmt.Errorf("invalid session or tool use id")
 	}
+	if !m.Provenance {
+		return "", false, nil
+	}
 	pp := PendingPath(m.Root, in.Session, in.ToolUseID)
 	pe, err := readPending(pp)
 	if err != nil {
@@ -180,19 +186,22 @@ func Record(m *core.Manifest, in RecordInput) (rel string, appended bool, err er
 	if len(vs) > 0 {
 		return rel, false, fmt.Errorf("record for %s violates provenance.schema.json: %s", rel, vs[0])
 	}
-	file := filepath.Join(m.Root, core.ProvenanceDir, in.Session+".jsonl")
-	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
-		return rel, false, err
-	}
-	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return rel, false, err
-	}
-	_, werr := f.Write(line)
-	if err := errors.Join(werr, f.Close()); err != nil {
+	if err := appendLine(filepath.Join(m.Root, core.ProvenanceDir, in.Session+".jsonl"), line); err != nil {
 		return rel, false, err
 	}
 	return rel, true, os.Remove(pp)
+}
+
+func appendLine(file string, line []byte) error {
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	_, werr := f.Write(line)
+	return errors.Join(werr, f.Close())
 }
 
 func parseProvenance(name string, data []byte) ([]core.ProvRecord, error) {
@@ -292,7 +301,7 @@ func baseBlobs(root, base string, rels []string) (map[string]string, error) {
 	return out, nil
 }
 
-func baseReviewRequired(root, base string) map[core.Level]bool {
+func baseManifest(root, base string) *core.Manifest {
 	data, err := gitBytes(root, "show", base+":./"+core.ManifestName)
 	if err != nil {
 		return nil
@@ -301,14 +310,24 @@ func baseReviewRequired(root, base string) map[core.Level]bool {
 	if err != nil {
 		return nil
 	}
-	return m.ReviewRequired
+	return m
 }
 
 type builtinInputs struct {
-	root     string
-	base     string
-	changed  []core.ChangedFile
-	reviewed bool
+	root       string
+	base       string
+	changed    []core.ChangedFile
+	reviewed   bool
+	required   map[core.Level]bool
+	provenance bool
+}
+
+func newBuiltinInputs(root, base string, changed []core.ChangedFile, reviewed bool) builtinInputs {
+	in := builtinInputs{root: root, base: base, changed: changed, reviewed: reviewed}
+	if bm := baseManifest(root, base); bm != nil {
+		in.required, in.provenance = bm.ReviewRequired, bm.Provenance
+	}
+	return in
 }
 
 func provenanceEvidenceFor(in builtinInputs) core.Evidence {
@@ -336,7 +355,7 @@ func provenanceEvidenceFor(in builtinInputs) core.Evidence {
 		return ev
 	}
 	pv := core.Provenance{Ends: map[string]core.ChainEnds{}, Records: recs, Reviewed: in.reviewed,
-		Required: baseReviewRequired(in.root, in.base)}
+		Required: in.required}
 	for _, p := range rels {
 		pv.Ends[p] = core.ChainEnds{Base: bb[p], Head: hb[p]}
 	}
@@ -345,7 +364,7 @@ func provenanceEvidenceFor(in builtinInputs) core.Evidence {
 }
 
 func protectedEvidenceFor(m *core.Manifest, in builtinInputs) core.Evidence {
-	pd := core.ProtectedDiff{Reviewed: in.reviewed, Required: baseReviewRequired(in.root, in.base)}
+	pd := core.ProtectedDiff{Reviewed: in.reviewed, Required: in.required}
 	for _, f := range in.changed {
 		p := f.Path
 		if strings.HasPrefix(p, core.StateDir+"/") ||

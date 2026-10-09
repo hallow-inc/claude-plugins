@@ -180,8 +180,23 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 	wg.Wait()
 	used, ran := rep.fold(jobs, results)
 	all := allChanged(m, changed, fix)
-	in := builtinInputs{root: m.Root, base: base, changed: withRoles(m, all, &rep), reviewed: reviews != nil && reviews.Approved()}
+	in := newBuiltinInputs(m.Root, base, withRoles(m, all, &rep), reviews != nil && reviews.Approved())
+	rep.decideUnlisted(m, rest, in, ws, bl, date)
+	slices.SortFunc(rep.Objectives, func(a, b Entry) int {
+		return cmp.Or(cmp.Compare(a.Objective, b.Objective), cmp.Compare(a.Language, b.Language))
+	})
+	for _, r := range bl.Removable(used, func(e core.BaselineEntry) bool { return ran[e.Objective][e.Path] }) {
+		rep.RemovableBaseline = append(rep.RemovableBaseline, RemovableEntry{Entry: r.Entry, Unused: r.Unused})
+	}
+	rep.RemovableResolutions = removableResolutions(m.Root, results, &rep)
+	return rep, nil
+}
+
+func (rep *EvalReport) decideUnlisted(m *core.Manifest, rest []core.Objective, in builtinInputs, ws []core.Waiver, bl core.Baseline, date string) {
 	for _, o := range rest {
+		if o.Evidence == provenanceEvidence && !in.provenance {
+			continue
+		}
 		ev := core.Evidence{Problems: []string{"no adapter lists " + o.ID}}
 		switch o.Evidence {
 		case provenanceEvidence:
@@ -191,14 +206,6 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 		}
 		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, in.changed, ev, ws, bl.For(o.ID), date)))
 	}
-	slices.SortFunc(rep.Objectives, func(a, b Entry) int {
-		return cmp.Or(cmp.Compare(a.Objective, b.Objective), cmp.Compare(a.Language, b.Language))
-	})
-	for _, r := range bl.Removable(used, func(e core.BaselineEntry) bool { return ran[e.Objective][e.Path] }) {
-		rep.RemovableBaseline = append(rep.RemovableBaseline, RemovableEntry{Entry: r.Entry, Unused: r.Unused})
-	}
-	rep.RemovableResolutions = removableResolutions(m.Root, results, &rep)
-	return rep, nil
 }
 
 func (rep *EvalReport) fold(jobs []job, results []evalResult) (used map[core.Fingerprint]int, ran map[string]map[string]bool) {

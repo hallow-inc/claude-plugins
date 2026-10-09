@@ -12,8 +12,9 @@ path's level, language, and role.
 You may edit files whose role is `source`, `config`, or `unclassified`. You may edit `generated`
 files only at levels C and D. You may not edit `test` or `fuzz_corpus` files at any level: tests are
 written by `hallow-assurance:verifier`, so that the code's author is not the tests' author. A guard
-hook denies those edits. Do not route around it through Bash: every file change made outside the
-Edit and Write tools leaves a provenance gap, and CI fails it.
+hook denies those edits. Do not route around it through Bash: make every file change with the Edit
+and Write tools so the role rules apply. In a repo with `provenance: true`, a change made any other
+way is a provenance gap.
 
 Never edit `assurance.yaml` or anything under `.assure/`.
 

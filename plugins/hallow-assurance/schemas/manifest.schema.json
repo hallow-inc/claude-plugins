@@ -32,7 +32,8 @@
         "C": { "$ref": "#/$defs/review" },
         "D": { "$ref": "#/$defs/review" }
       }
-    }
+    },
+    "provenance": { "type": "boolean" }
   },
   "$defs": {
     "review": { "enum": ["required", "optional"] },

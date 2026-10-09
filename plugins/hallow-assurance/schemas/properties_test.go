@@ -126,6 +126,10 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 		}
 		doc["human_review"] = hr
 	}
+	r.bad("", "provenance", "yes", 1)
+	if rapid.Bool().Draw(t, "has provenance") {
+		doc["provenance"] = rapid.Bool().Draw(t, "provenance")
+	}
 	if rapid.Bool().Draw(t, "protected") {
 		prot := []any{}
 		for i := range rapid.IntRange(0, 2).Draw(t, "nprot") {

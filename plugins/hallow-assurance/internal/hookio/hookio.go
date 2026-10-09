@@ -267,15 +267,22 @@ func postToolUse(in input) response {
 		return response{}
 	}
 	p := in.target()
+	dir := filepath.Dir(p)
 	if p == "" {
-		return gapMessage(fmt.Sprintf("assure record: %s input has no file path", in.ToolName))
+		dir = in.Cwd
 	}
-	m, ok, err := adopted(filepath.Dir(p))
+	m, ok, err := adopted(dir)
 	if !ok {
 		return response{}
 	}
 	if err != nil {
 		return gapMessage("assure record: " + err.Error())
+	}
+	if !m.Provenance {
+		return response{}
+	}
+	if p == "" {
+		return gapMessage(fmt.Sprintf("assure record: %s input has no file path", in.ToolName))
 	}
 	rel, inside := m.Rel(p)
 	if !inside {
