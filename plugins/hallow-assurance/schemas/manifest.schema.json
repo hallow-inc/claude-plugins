@@ -27,6 +27,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "A": { "$ref": "#/$defs/review" },
         "B": { "$ref": "#/$defs/review" },
         "C": { "$ref": "#/$defs/review" },
         "D": { "$ref": "#/$defs/review" }

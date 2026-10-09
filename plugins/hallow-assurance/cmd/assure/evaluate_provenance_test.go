@@ -163,7 +163,15 @@ func (f provFixture) copySession(from, to string) {
 	f.write(core.ProvenanceDir+"/"+to, string(data))
 }
 
-const optionalManifest = xxManifest + "human_review: {B: optional}\n"
+const (
+	optionalManifest = xxManifest + "human_review: {B: optional}\n"
+	requiredManifest = xxManifest + "human_review: {B: required}\n"
+)
+
+func adoptManifest(f provFixture) {
+	f.write("assurance.yaml", xxManifest)
+	handEdit(f)
+}
 
 type evalScenario struct {
 	name     string
@@ -300,7 +308,7 @@ func TestEvaluateIndependenceScenarios(t *testing.T) {
 					}
 				}
 			}},
-		{name: "approved hand edit", code: 0, ind: "pass", cfg: "pass",
+		{name: "approved hand edit", manifest: requiredManifest, code: 0, ind: "pass", cfg: "pass",
 			pr:      func(f provFixture) { handEdit(f); f.write(".assure/waivers.yaml", xxWaivers+"# reviewed\n") },
 			reviews: func(f provFixture) string { return f.approval("Reviewer", f.head()) },
 			indHas:  [][]string{{"p/x.xx", "review"}},
@@ -309,9 +317,9 @@ func TestEvaluateIndependenceScenarios(t *testing.T) {
 		{name: "approval does not excuse a role violation", code: 1, ind: "fail", pr: implementerTest,
 			reviews: func(f provFixture) string { return f.approval("reviewer", f.head()) },
 			indHas:  [][]string{{"p/x_test.xx", core.Implementer}}},
-		{name: "author approves own PR", code: 1, ind: "fail", pr: handEdit,
+		{name: "author approves own PR", manifest: requiredManifest, code: 1, ind: "fail", pr: handEdit,
 			reviews: func(f provFixture) string { return f.approval("OWNER", f.head()) }},
-		{name: "approval on an older commit", code: 1, ind: "fail", pr: handEdit,
+		{name: "approval on an older commit", manifest: requiredManifest, code: 1, ind: "fail", pr: handEdit,
 			reviews: func(f provFixture) string {
 				out, err := exec.CommandContext(f.t.Context(), "git", "-C", f.root, "rev-parse", "main").Output()
 				if err != nil {
@@ -319,11 +327,26 @@ func TestEvaluateIndependenceScenarios(t *testing.T) {
 				}
 				return f.approval("reviewer", strings.TrimSpace(string(out)))
 			}},
-		{name: "turning review off is judged under required", code: 1, ind: "fail", cfg: "fail",
-			pr:     func(f provFixture) { f.write("assurance.yaml", optionalManifest); handEdit(f) },
+		{name: "turning review off is judged under required", manifest: requiredManifest, code: 1, ind: "fail", cfg: "fail",
+			pr:     adoptManifest,
 			indHas: [][]string{{"p/x.xx", "gap"}},
 			cfgHas: [][]string{{"assurance.yaml"}}},
-		{name: "optional review lists unreviewed paths", manifest: optionalManifest, code: 0, ind: "pass", cfg: "pass",
+		{name: "first adoption is judged under optional", code: 0, ind: "pass", cfg: "pass",
+			base: func(f provFixture) {
+				if err := os.Remove(filepath.Join(f.root, "assurance.yaml")); err != nil {
+					f.t.Fatal(err)
+				}
+			},
+			pr:      adoptManifest,
+			indHas:  [][]string{{"p/x.xx", "unreviewed", "human_review: optional"}},
+			cfgHas:  [][]string{{"assurance.yaml", "unreviewed", "human_review: optional"}},
+			summary: [][]string{{"p/x.xx", "unreviewed"}, {"assurance.yaml", "unreviewed"}}},
+		{name: "an unparseable base manifest is judged under optional", code: 0, ind: "pass", cfg: "pass",
+			base:   func(f provFixture) { f.write("assurance.yaml", "human_review: {B: required\n") },
+			pr:     adoptManifest,
+			indHas: [][]string{{"p/x.xx", "unreviewed", "human_review: optional"}},
+			cfgHas: [][]string{{"assurance.yaml", "unreviewed", "human_review: optional"}}},
+		{name: "optional review lists unreviewed paths", code: 0, ind: "pass", cfg: "pass",
 			pr:      func(f provFixture) { handEdit(f); f.write(".assure/waivers.yaml", xxWaivers+"# unreviewed\n") },
 			indHas:  [][]string{{"p/x.xx", "unreviewed", "human_review: optional"}},
 			cfgHas:  [][]string{{".assure/waivers.yaml", "unreviewed", "human_review: optional"}},

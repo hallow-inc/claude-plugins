@@ -27,7 +27,7 @@ type Manifest struct {
 	Languages      []string
 	Components     []Component
 	Protected      []Glob
-	ReviewOptional map[Level]bool
+	ReviewRequired map[Level]bool
 	Catalog        Catalog
 	Warnings       []schemas.Violation
 }
@@ -108,11 +108,11 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 	}
 	hr, _ := v["human_review"].(map[string]any)
 	for l, s := range hr {
-		if s == "optional" {
-			if m.ReviewOptional == nil {
-				m.ReviewOptional = map[Level]bool{}
+		if s == "required" {
+			if m.ReviewRequired == nil {
+				m.ReviewRequired = map[Level]bool{}
 			}
-			m.ReviewOptional[Level(l)] = true
+			m.ReviewRequired[Level(l)] = true
 		}
 	}
 	cat, err := LoadCatalog(v["catalog"].(string))

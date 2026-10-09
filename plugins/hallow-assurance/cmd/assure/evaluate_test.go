@@ -20,9 +20,19 @@ const unbuiltWaivers = `- {objective: IND-VERIFIER-DISTINCT, scope: '**', ration
 - {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in milestone M3b, approver: owner, expires: 2099-01-01}
 `
 
-func waivedGoRepo(t *testing.T) repo {
+const levelBReviewed = levelB + "human_review: {B: required}\n"
+
+func reviewedGoRepo(t *testing.T) repo {
 	t.Helper()
 	r := goRepo(t)
+	r.write("assurance.yaml", levelBReviewed)
+	r.git("commit", "-qam", "require review")
+	return r
+}
+
+func waivedGoRepo(t *testing.T) repo {
+	t.Helper()
+	r := reviewedGoRepo(t)
 	r.write(".assure/waivers.yaml", unbuiltWaivers)
 	r.git("add", "-A")
 	r.git("commit", "-qm", "waivers")
@@ -97,7 +107,7 @@ func TestEvaluateNothingChangedExitsZeroWithEmptyReport(t *testing.T) {
 }
 
 func TestEvaluateUnproducedObjectiveFailsWithoutWaiver(t *testing.T) {
-	r := goRepo(t)
+	r := reviewedGoRepo(t)
 	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
 	if code, _, _ := assure("evaluate", "--changed-from", "HEAD"); code != 1 {
 		t.Fatalf("exit %d, want 1: missing evidence must block", code)

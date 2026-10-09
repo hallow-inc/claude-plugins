@@ -41,10 +41,11 @@ guard enforces this; the agents' tool lists are a second line.
 Commit `.assure/provenance/` with your change. CI rebuilds each changed level A–B file's history
 from those records: a test file must be written only by the verifier or pruner, a source or config
 file never by them, and a file no adapter claims (a fixture, a recorded payload) by either. An edit
-made outside the file tools (through Bash, an editor, or a formatter) leaves a **gap**. A gap, or any change to a protected file, fails unless someone other than the PR author
-approves the PR's head commit. A repo with no second reviewer can set
-`human_review: {B: optional}` in `assurance.yaml` (not allowed for level A): gaps and protected
-changes then pass and are listed as unreviewed. Tests written by the wrong agent fail either way.
+made outside the file tools (through Bash, an editor, or a formatter) leaves a **gap**. Gaps and
+protected-file changes pass and are listed as unreviewed. A team that wants a second reviewer sets
+`human_review: {B: required}` (any of `A`–`D`) in `assurance.yaml`: at those levels a gap or
+protected change fails unless someone other than the PR author approves the PR's head commit.
+Tests written by the wrong agent fail either way.
 
 ## Install
 

@@ -115,10 +115,10 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "languages", "x", []any{}, []any{langs[0], langs[0]})
 	r.bad("", "components", "x", []any{"x"})
 	r.bad("", "protected", "x")
-	r.bad("", "human_review", "x", map[string]any{"A": "optional"}, map[string]any{"E": "optional"})
+	r.bad("", "human_review", "x", map[string]any{"E": "required"}, map[string]any{"a": "optional"})
 	if rapid.Bool().Draw(t, "review") {
 		hr := map[string]any{}
-		for _, l := range []string{"B", "C", "D"} {
+		for _, l := range levelKeys {
 			if rapid.Bool().Draw(t, "hr"+l) {
 				hr[l] = rapid.SampledFrom([]string{"required", "optional"}).Draw(t, "hrv")
 				r.bad("/human_review", l, "off", true, 1)
