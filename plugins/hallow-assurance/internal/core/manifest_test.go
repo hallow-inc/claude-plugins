@@ -64,9 +64,13 @@ func TestSchemaValidManifestWithWellFormedGlobsLoads(t *testing.T) {
 			}
 			comps = append(comps, c+"}")
 		}
-		m, err := parseManifest("m.yaml", []byte(manifestYAML(comps...)))
+		prov := rapid.SampledFrom([]string{"", "provenance: true\n", "provenance: false\n"}).Draw(t, "provenance")
+		m, err := parseManifest("m.yaml", []byte(manifestYAML(comps...)+prov))
 		if err != nil {
 			t.Fatal(err)
+		}
+		if want := prov == "provenance: true\n"; m.Provenance != want {
+			t.Fatalf("Provenance = %v for %q, want %v; an absent key must mean off", m.Provenance, prov, want)
 		}
 		for i, want := range wantInputs {
 			if m.Components[i].Inputs != want {

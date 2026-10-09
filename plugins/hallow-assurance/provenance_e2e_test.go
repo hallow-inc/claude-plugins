@@ -46,7 +46,7 @@ func newProvRepo(t *testing.T) provRepo {
 		t.Fatal(err)
 	}
 	r := provRepo{t, root, bin}
-	r.write("assurance.yaml", "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\n")
+	r.write("assurance.yaml", "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\nprovenance: true\n")
 	r.write(".gitignore", ".assure/state/\n")
 	r.write(".assure/waivers.yaml", waivedForIndependence)
 	r.write("p/x.xx", "one\n")

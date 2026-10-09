@@ -20,7 +20,7 @@ const recSession = "s1"
 
 func recordRepo(t *testing.T) (repo, *core.Manifest) {
 	t.Helper()
-	r := newRepo(t, levelB)
+	r := newRepo(t, levelB+"provenance: true\n")
 	r.write(".gitignore", ".assure/state/\n")
 	r.write("p/p.go", "package p\n")
 	r.write("p/p_test.go", "package p\n")
@@ -167,6 +167,26 @@ var recordScenarios = []struct {
 		}
 		if _, err := os.Stat(app.PendingPath(r.root, recSession, "toolu_1")); err != nil {
 			t.Fatalf("invalid arguments consumed the pending entry: %v", err)
+		}
+	}},
+	{"provenance off reads and writes nothing", func(t *testing.T, r repo, m *core.Manifest) {
+		pend(t, m, recSession, "toolu_1", "p/p.go")
+		r.write("p/p.go", "package p\n\n// edited\n")
+		r.write("assurance.yaml", levelB)
+		if code, _, stderr := assure("record", "--session", recSession, "--tool", "Edit", "--tool-use-id", "toolu_1"); code != 0 {
+			t.Fatalf("valid ids with provenance off: exit %d %s", code, stderr)
+		}
+		if code, _, stderr := assure("record", "--session", recSession, "--tool", "Edit", "--tool-use-id", "toolu_missing"); code != 0 {
+			t.Fatalf("provenance off must not look for a pending entry: exit %d %s", code, stderr)
+		}
+		if code, _, _ := assure("record", "--session", "../s1", "--tool", "Edit", "--tool-use-id", "toolu_1"); code != 2 {
+			t.Fatalf("invalid ids with provenance off: exit %d, want 2", code)
+		}
+		if _, err := os.Stat(filepath.Join(r.root, core.ProvenanceDir)); !os.IsNotExist(err) {
+			t.Fatalf("provenance off wrote under %s: %v", core.ProvenanceDir, err)
+		}
+		if _, err := os.Stat(app.PendingPath(r.root, recSession, "toolu_1")); err != nil {
+			t.Fatalf("provenance off consumed the pending entry: %v", err)
 		}
 	}},
 }

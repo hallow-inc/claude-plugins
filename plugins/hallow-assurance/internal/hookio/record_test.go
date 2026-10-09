@@ -18,6 +18,7 @@ import (
 func gitRepo(t *testing.T) string {
 	t.Helper()
 	root := fixture(t)
+	writeFile(t, root, "assurance.yaml", manifest+"provenance: true\n")
 	writeFile(t, root, ".gitignore", ".assure/state/\n")
 	writeFile(t, root, "notes.txt", "hey\n")
 	gitIn(t, root, "init", "-q")
@@ -233,6 +234,27 @@ var postToolUseScenarios = []struct {
 		}
 		noPendingState(t, root)
 	}},
+	{"provenance off is silent", func(t *testing.T, root string) {
+		pathless := func(m map[string]any) { m["tool_input"] = map[string]any{} }
+		code, out, _ := hook("post-tool-use", payload(t, "post-tool-use-edit-subagent", root, pathless))
+		if msg, _ := out["systemMessage"].(string); code != 0 || !strings.Contains(msg, "no file path") {
+			t.Fatalf("path-less input with provenance on: %d %v, want a gap message", code, out)
+		}
+		writeFile(t, root, "assurance.yaml", manifest)
+		if code, out, _ := hook("pre-tool-use", payload(t, "pre-tool-use-edit-subagent-paired", root, nil)); code != 0 || out != nil {
+			t.Fatalf("pre: %d %v", code, out)
+		}
+		noPendingState(t, root)
+		writeFile(t, root, "notes.txt", "hello\n")
+		for name, edit := range map[string]func(map[string]any){"edit": nil, "path-less input": pathless} {
+			if code, out, _ := hook("post-tool-use", payload(t, "post-tool-use-edit-subagent", root, edit)); code != 0 || out != nil {
+				t.Fatalf("%s with provenance off: %d %v, want no output", name, code, out)
+			}
+		}
+		if recs := provenanceLines(t, root); recs != nil {
+			t.Fatalf("recorded with provenance off: %v", recs)
+		}
+	}},
 	{"recording is not drift", func(t *testing.T, root string) {
 		writeFile(t, root, filepath.Join(core.ProvenanceDir, "earlier.jsonl"), "")
 		hook("session-start", payload(t, "session-start-startup", root, nil))
@@ -264,6 +286,7 @@ func TestPostToolUseRecords(t *testing.T) {
 
 func FuzzPostToolUse(f *testing.F) {
 	root := fixture(f)
+	writeFile(f, root, "assurance.yaml", manifest+"provenance: true\n")
 	writeFile(f, root, "notes.txt", "hey\n")
 	for _, name := range []string{"post-tool-use-edit-main", "post-tool-use-write-main", "post-tool-use-edit-subagent"} {
 		f.Add(payload(f, name, root, nil))
