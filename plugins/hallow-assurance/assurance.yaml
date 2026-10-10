@@ -2,6 +2,7 @@ version: 0
 catalog: v0
 languages: [go]
 default_level: B
+provenance: false
 human_review:
   B: optional
 components:
