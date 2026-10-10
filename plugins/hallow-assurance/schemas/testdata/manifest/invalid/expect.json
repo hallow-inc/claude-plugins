@@ -13,5 +13,9 @@
   "protected-traversal.yaml": [{"location": "/protected/0", "keyword": "not"}],
   "inputs-false.yaml": [{"location": "/components/0/inputs", "keyword": "const"}],
   "human-review-level-a.yaml": [{"location": "/human_review", "keyword": "additionalProperties"}],
-  "human-review-off.yaml": [{"location": "/human_review/B", "keyword": "enum"}]
+  "human-review-off.yaml": [{"location": "/human_review/B", "keyword": "enum"}],
+  "formal-spec-traversal.yaml": [{"location": "/components/0/formal/spec", "keyword": "not"}],
+  "formal-code-empty.yaml": [{"location": "/components/0/formal/code", "keyword": "minItems"}],
+  "formal-code-absolute.yaml": [{"location": "/components/0/formal/code/0", "keyword": "pattern"}],
+  "formal-code-string.yaml": [{"location": "/components/0/formal/code", "keyword": "type"}]
 }

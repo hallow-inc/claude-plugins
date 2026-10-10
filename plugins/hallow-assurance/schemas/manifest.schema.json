@@ -54,7 +54,13 @@
       "properties": {
         "model": { "$ref": "common.schema.json#/$defs/repoPath" },
         "challenge": { "$ref": "common.schema.json#/$defs/repoPath" },
-        "link": { "enum": ["drt", "conformance", "none"] }
+        "spec": { "$ref": "common.schema.json#/$defs/repoPath" },
+        "link": { "enum": ["drt", "conformance", "none"] },
+        "code": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "common.schema.json#/$defs/repoPath" }
+        }
       }
     },
     "dst": {

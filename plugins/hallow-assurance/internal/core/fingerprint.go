@@ -12,10 +12,11 @@ import (
 var (
 	ErrSnapshotMissing    = errors.New("protected-file snapshot missing or invalid")
 	ErrAdapterUnstartable = errors.New("adapter cannot be started")
+	ErrToolEnvironment    = errors.New("adapter could not get its tools")
 )
 
 func OutsideReach(err error) bool {
-	return errors.Is(err, ErrSnapshotMissing) || errors.Is(err, ErrAdapterUnstartable)
+	return errors.Is(err, ErrSnapshotMissing) || errors.Is(err, ErrAdapterUnstartable) || errors.Is(err, ErrToolEnvironment)
 }
 
 func (ev Evidence) Keys() []string {

@@ -15,7 +15,7 @@ func referenceAdapter(lang, behavior string) string {
 	describe := func(langs, ref string) string {
 		return fmt.Sprintf(`#!/bin/sh
 [ "$1" = describe ] || exit 1
-printf '%%s' '{"protocol":0,"languages":[%s],"claims":["**/*.%s"],"patterns":{},"objectives":{}%s}'
+printf '%%s' '{"protocol":1,"languages":[%s],"claims":["**/*.%s"],"patterns":{},"objectives":{}%s}'
 `, langs, lang, ref)
 	}
 	switch behavior {

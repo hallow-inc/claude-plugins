@@ -1,2 +1,2 @@
-{"version": 0, "commit": "7330276aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "changed_from": {"ref": "HEAD", "sha": "7330276aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "date": "2026-09-27", "catalog": "v0", "changed_files": 0, "tool_versions": {}, "problems": [], "expired_waivers": [],
+{"version": 0, "commit": "7330276aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "changed_from": {"ref": "HEAD", "sha": "7330276aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "date": "2026-09-27", "catalog": "v0", "changed_files": 0, "tool_versions": {}, "pinned_by": {}, "problems": [], "expired_waivers": [],
  "removable_baseline": [{"entry": {"objective": "CODE-ZERO-WARNINGS", "rule": "r", "path": "a.go", "message": "m", "count": 1}, "unused": 0}], "objectives": []}

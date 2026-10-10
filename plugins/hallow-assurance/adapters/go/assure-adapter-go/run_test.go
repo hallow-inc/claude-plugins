@@ -88,7 +88,7 @@ func TestConversionPreservesFailures(t *testing.T) {
 
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "core.excludesFile=/dev/null"}, args...)...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -254,23 +254,27 @@ func TestRunNoChangedGoFilesWritesEmptyEvidence(t *testing.T) {
 	}
 }
 
-func TestRunMissingLinterFails(t *testing.T) {
-	bin := t.TempDir()
-	for _, tool := range []string{"go", "git"} {
-		p, err := exec.LookPath(tool)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(p, filepath.Join(bin, tool)); err != nil {
-			t.Fatal(err)
-		}
-	}
+func TestRunGolangciMissingIsEnvironment(t *testing.T) {
 	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
-	t.Setenv("PATH", bin)
-	_, stderr, code := runIn(t, dir, "run", "CODE-ZERO-WARNINGS", "--changed-from", "HEAD", "--out", t.TempDir())
-	if code == 0 || !strings.Contains(stderr, "golangci-lint not found") {
-		t.Fatalf("want failure naming golangci-lint, got %d %q", code, stderr)
+	writeFiles(t, dir, map[string]string{"a/a.go": "package a\n\nvar X = 1\n"})
+	narrowPath(t, []string{"go", "git"}, nil)
+	out := filepath.Join(t.TempDir(), "ev")
+	resp, stderr, code := runIn(t, dir, "run", "CODE-ZERO-WARNINGS", "--changed-from", "HEAD", "--out", out)
+	if code != 0 {
+		t.Fatalf("exit %d: %s; a missing tool is the environment's fault and must reach the evaluator as a failing objective, not an adapter crash", code, stderr)
 	}
+	environmentIn(t, resp, out, "golangci-lint", golangciDefaultInstall)
+}
+
+func TestRunWithoutGoIsEnvironment(t *testing.T) {
+	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
+	narrowPath(t, []string{"git"}, nil)
+	out := filepath.Join(t.TempDir(), "ev")
+	resp, stderr, code := runIn(t, dir, "run", "VER-TESTS-PASS", "--changed-from", "HEAD", "--out", out)
+	if code != 0 {
+		t.Fatalf("exit %d: %s; a missing Go toolchain is the environment's fault, not an adapter crash", code, stderr)
+	}
+	environmentIn(t, resp, out, "go is not on PATH")
 }
 
 func TestRunUnknownObjective(t *testing.T) {

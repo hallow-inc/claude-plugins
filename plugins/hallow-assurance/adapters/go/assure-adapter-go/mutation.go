@@ -129,12 +129,7 @@ func gremlinsVersion() (string, error) {
 	return "", fmt.Errorf("go version -m %s: no github.com/go-gremlins/gremlins module line", bin)
 }
 
-func runMutation(root, ref, out string, sel map[string][]string, versions map[string]string) ([]evidence, error) {
-	v, err := gremlinsVersion()
-	if err != nil {
-		return nil, err
-	}
-	versions["gremlins"] = v
+func runMutation(root, ref, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	seed, err := rapidSeed(root)
 	if err != nil {
 		return nil, err

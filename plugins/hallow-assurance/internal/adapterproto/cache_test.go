@@ -3,6 +3,7 @@ package adapterproto
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
@@ -82,6 +83,27 @@ func TestCorruptCacheIsRebuilt(t *testing.T) {
 	mustDescribe(t, root)
 	if n := runs(t, root); n != 1 {
 		t.Fatalf("adapter ran %d times; want one rebuild then cache hits", n)
+	}
+}
+
+func TestCacheFromOlderProtocolIsRefreshed(t *testing.T) {
+	root := t.TempDir()
+	exe := countingAdapter(t, root)
+	sum, err := fileSHA256(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := strings.Replace(goodDescribe, `"protocol":1`, `"protocol":0`, 1)
+	if err := os.MkdirAll(filepath.Join(root, ".assure/state"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, CacheFile), []byte(`{"version":0,"adapters":{"go":{"path":"`+exe+`","sha256":"`+sum+`","describe":`+old+`}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustDescribe(t, root)
+	mustDescribe(t, root)
+	if n := runs(t, root); n != 1 {
+		t.Fatalf("adapter ran %d times; an entry an older assure wrote must be described again once, though the executable is unchanged", n)
 	}
 }
 

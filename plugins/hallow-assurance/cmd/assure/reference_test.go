@@ -61,7 +61,7 @@ func fakeReferenceAdapter(t *testing.T, bin, lang, ref, referenceScript string) 
 	}
 	script := `#!/bin/sh
 case "$1" in
-describe) printf '%s' '{"protocol":0,"languages":["` + lang + `"],"claims":["**/*.` + lang + `"],"patterns":{},"objectives":{}` + field + `}' ;;
+describe) printf '%s' '{"protocol":1,"languages":["` + lang + `"],"claims":["**/*.` + lang + `"],"patterns":{},"objectives":{}` + field + `}' ;;
 reference) ` + referenceScript + ` ;;
 *) echo "assure-adapter-` + lang + `: unexpected $*" >&2; exit 1 ;;
 esac

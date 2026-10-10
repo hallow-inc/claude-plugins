@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/adapter-tools.schema.json",
+  "title": "Adapter tools response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "tools"],
+  "properties": {
+    "protocol": { "$ref": "common.schema.json#/$defs/protocolV1" },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version", "pinned_by", "install"],
+        "properties": {
+          "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "pinned_by": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+          "install": { "type": "string", "pattern": "^[^\\n\\r]+$" }
+        }
+      }
+    },
+    "environment": { "$ref": "common.schema.json#/$defs/environment" }
+  },
+  "if": { "required": ["environment"] },
+  "then": {
+    "properties": { "tools": { "maxItems": 0 } }
+  }
+}

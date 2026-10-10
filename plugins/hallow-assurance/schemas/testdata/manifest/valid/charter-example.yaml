@@ -13,7 +13,9 @@ components:
     formal:
       model: formal/Ledger
       challenge: formal/Ledger/Challenge.lean
-      link: drt
+      spec: formal/Ledger/Spec/**
+      link: conformance
+      code: [internal/ledger/**]
     dst:
       harness: ./sim/ledger
 default_level: C

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os/exec"
 	"slices"
 	"strings"
@@ -20,6 +21,7 @@ const (
 	DescribeTimeout  = 2 * time.Second
 	ClassifyTimeout  = 30 * time.Second
 	ReferenceTimeout = 2 * time.Second
+	ToolsTimeout     = 30 * time.Second
 	MaxReference     = 256 << 10
 	maxStdout        = 16 << 20
 	maxStderr        = 64 << 10
@@ -47,6 +49,24 @@ type Evidence struct {
 type Run struct {
 	Evidence     []Evidence        `json:"evidence"`
 	ToolVersions map[string]string `json:"tool_versions"`
+	PinnedBy     map[string]string `json:"pinned_by"`
+	Environment  *Environment      `json:"environment"`
+}
+
+type Environment struct {
+	Message string `json:"message"`
+}
+
+type Tool struct {
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	PinnedBy string `json:"pinned_by"`
+	Install  string `json:"install"`
+}
+
+type Tools struct {
+	Tools       []Tool       `json:"tools"`
+	Environment *Environment `json:"environment"`
 }
 
 type File struct {
@@ -135,7 +155,37 @@ func invokeCapped(exe, dir, name, sub string, timeout time.Duration, limit int, 
 	return stdout.buf.Bytes(), nil
 }
 
+var protocols = map[schemas.Kind]int{
+	schemas.AdapterDescribe: 1,
+	schemas.AdapterClassify: 0,
+	schemas.AdapterRun:      1,
+	schemas.AdapterTools:    1,
+}
+
+func protocolOf(out []byte) (int64, bool) {
+	var env struct {
+		Protocol *json.Number `json:"protocol"`
+	}
+	if json.Unmarshal(out, &env) != nil || env.Protocol == nil {
+		return 0, false
+	}
+	got, err := env.Protocol.Int64()
+	return got, err == nil
+}
+
+func protocolMismatch(k schemas.Kind, out []byte) error {
+	got, ok := protocolOf(out)
+	want := protocols[k]
+	if !ok || got == int64(want) {
+		return nil
+	}
+	return fmt.Errorf("protocol mismatch: received protocol %d, expected %d; install assure and its adapters from the same release", got, want)
+}
+
 func conform(name, sub string, k schemas.Kind, out []byte, v any) error {
+	if err := protocolMismatch(k, out); err != nil {
+		return &Error{Adapter: name, Sub: sub, Err: err}
+	}
 	vs, err := schemas.Validate(k, out)
 	if err == nil && len(vs) > 0 {
 		msgs := make([]string, len(vs))
@@ -215,7 +265,36 @@ func RunObjective(dir, lang, objective, ref, out string, timeout time.Duration) 
 	if err := conform(name, "run", schemas.AdapterRun, raw, &r); err != nil {
 		return Run{}, err
 	}
+	for _, tool := range slices.Sorted(maps.Keys(r.PinnedBy)) {
+		if _, ok := r.ToolVersions[tool]; !ok {
+			return Run{}, &Error{Adapter: name, Sub: "run", Err: fmt.Errorf("response violates the protocol: /pinned_by: %q has no tool_versions entry", tool)}
+		}
+	}
 	return r, nil
+}
+
+func RunTools(dir, lang string) (Tools, error) {
+	exe, err := Resolve(lang)
+	if err != nil {
+		return Tools{}, err
+	}
+	name := Executable(lang)
+	raw, err := invoke(exe, dir, name, "tools", ToolsTimeout, "--root", dir)
+	if err != nil {
+		return Tools{}, err
+	}
+	var t Tools
+	if err := conform(name, "tools", schemas.AdapterTools, raw, &t); err != nil {
+		return Tools{}, err
+	}
+	seen := map[string]bool{}
+	for _, tool := range t.Tools {
+		if seen[tool.Name] {
+			return Tools{}, &Error{Adapter: name, Sub: "tools", Err: fmt.Errorf("response violates the protocol: /tools: duplicate tool name %q", tool.Name)}
+		}
+		seen[tool.Name] = true
+	}
+	return t, nil
 }
 
 func Reference(dir, lang string) ([]byte, error) {

@@ -72,12 +72,12 @@ func unbornAdapter(t *testing.T, log string) {
 	bin := t.TempDir()
 	script := `#!/bin/sh
 case "$1" in
-describe) printf '%s' '{"protocol":0,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"fake","fast":true}}}' ;;
+describe) printf '%s' '{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"fake","fast":true}}}' ;;
 run)
   echo "$4" >> '` + log + `'
   mkdir -p "$6"
   printf '%s' '<testsuites><testsuite name="xx" tests="1"><testcase name="TestXX" classname="xx"/></testsuite></testsuites>' > "$6/junit.xml"
-  printf '%s' '{"protocol":0,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"fake":"1"}}' ;;
+  printf '%s' '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"fake":"1"},"pinned_by":{}}' ;;
 *) echo "assure-adapter-xx: unexpected $*" >&2; exit 1 ;;
 esac
 `

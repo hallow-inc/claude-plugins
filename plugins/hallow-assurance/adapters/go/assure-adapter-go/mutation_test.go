@@ -162,23 +162,16 @@ func TestMutationReportsSurvivorOnChangedLineOnly(t *testing.T) {
 	}
 }
 
-func TestMutationMissingGremlinsFails(t *testing.T) {
-	bin := t.TempDir()
-	for _, tool := range []string{"go", "git"} {
-		p, err := exec.LookPath(tool)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(p, filepath.Join(bin, tool)); err != nil {
-			t.Fatal(err)
-		}
+func TestMutationGremlinsMissingIsEnvironment(t *testing.T) {
+	dir := committedModule(t, map[string]string{"a/a.go": boundarySrc})
+	writeFiles(t, dir, map[string]string{"a/a.go": strings.Replace(boundarySrc, "return n > 0", "return n > 0 && n < 1000", 1)})
+	narrowPath(t, []string{"go", "git"}, nil)
+	out := filepath.Join(t.TempDir(), "ev")
+	resp, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", out)
+	if code != 0 {
+		t.Fatalf("exit %d: %s; a missing tool is the environment's fault and must reach the evaluator as a failing objective, not an adapter crash", code, stderr)
 	}
-	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
-	t.Setenv("PATH", bin)
-	_, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", t.TempDir())
-	if code == 0 || !strings.Contains(stderr, "gremlins") {
-		t.Fatalf("want failure naming gremlins, got %d %q", code, stderr)
-	}
+	environmentIn(t, resp, out, "gremlins", gremlinsDefaultInstall)
 }
 
 func TestMutationNoGoChangesGivesEmptyReport(t *testing.T) {

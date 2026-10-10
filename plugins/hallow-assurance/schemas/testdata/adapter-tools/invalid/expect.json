@@ -1,0 +1,8 @@
+{
+  "multi-line-install.json": [{"location": "/tools/0/install", "keyword": "pattern"}],
+  "empty-install.json": [{"location": "/tools/0/install", "keyword": "pattern"}],
+  "missing-pinned-by.json": [{"location": "/tools/0", "keyword": "required"}],
+  "extra-field.json": [{"location": "/tools/0", "keyword": "additionalProperties"}],
+  "environment-with-tools.json": [{"location": "/tools", "keyword": "maxItems"}],
+  "old-protocol.json": [{"location": "/protocol", "keyword": "const"}]
+}

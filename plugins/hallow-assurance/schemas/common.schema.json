@@ -26,12 +26,23 @@
     "role": {
       "enum": ["source", "test", "generated", "fuzz_corpus", "config"]
     },
-    "protocol": {
+    "protocolV0": {
       "const": 0
+    },
+    "protocolV1": {
+      "const": 1
     },
     "nonEmptyString": {
       "type": "string",
       "minLength": 1
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message"],
+      "properties": {
+        "message": { "$ref": "#/$defs/nonEmptyString" }
+      }
     },
     "levelStatus": {
       "enum": ["required", "advisory"]

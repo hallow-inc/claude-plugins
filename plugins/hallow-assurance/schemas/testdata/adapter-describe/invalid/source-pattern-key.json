@@ -1,1 +1,1 @@
-{"protocol":0,"languages":["go"],"claims":["**/*.go"],"patterns":{"source":["**/*.go"]},"objectives":{}}
+{"protocol":1,"languages":["go"],"claims":["**/*.go"],"patterns":{"source":["**/*.go"]},"objectives":{}}

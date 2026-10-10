@@ -4,9 +4,9 @@
   "title": "Adapter run response",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol", "evidence", "tool_versions"],
+  "required": ["protocol", "evidence", "tool_versions", "pinned_by"],
   "properties": {
-    "protocol": { "$ref": "common.schema.json#/$defs/protocol" },
+    "protocol": { "$ref": "common.schema.json#/$defs/protocolV1" },
     "evidence": {
       "type": "array",
       "items": {
@@ -21,8 +21,19 @@
     },
     "tool_versions": {
       "type": "object",
-      "minProperties": 1,
       "additionalProperties": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
-    }
+    },
+    "pinned_by": {
+      "type": "object",
+      "additionalProperties": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "environment": { "$ref": "common.schema.json#/$defs/environment" }
+  },
+  "if": { "required": ["environment"] },
+  "then": {
+    "properties": { "evidence": { "maxItems": 0 } }
+  },
+  "else": {
+    "properties": { "tool_versions": { "minProperties": 1 } }
   }
 }
