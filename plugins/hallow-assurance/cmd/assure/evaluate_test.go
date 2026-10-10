@@ -20,7 +20,7 @@ const unbuiltWaivers = `- {objective: IND-VERIFIER-DISTINCT, scope: '**', ration
 - {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in milestone M3b, approver: owner, expires: 2099-01-01}
 `
 
-const levelBReviewed = levelB + "human_review: {B: required}\n"
+const levelBReviewed = levelB + "human_review: {B: required}\nprovenance: true\n"
 
 func reviewedGoRepo(t *testing.T) repo {
 	t.Helper()

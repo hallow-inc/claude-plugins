@@ -19,7 +19,10 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-const provManifest = "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\nprotected: ['docs/**']\n"
+const (
+	provManifestOff = "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\nprotected: ['docs/**']\n"
+	provManifest    = provManifestOff + "provenance: true\n"
+)
 
 const (
 	provManifestOptional = provManifest + "human_review: {B: optional}\n"
@@ -181,7 +184,7 @@ func (c *chainModel) checkEvidence(t *rapid.T, root string) {
 		changed = append(changed, core.ChangedFile{Path: p})
 	}
 	reviewed := rapid.Bool().Draw(t, "reviewed")
-	ev := provenanceEvidenceFor(builtinInputs{root: root, base: "main", changed: changed, reviewed: reviewed})
+	ev := provenanceEvidenceFor(newBuiltinInputs(root, "main", changed, reviewed))
 	if len(ev.Problems) > 0 || ev.Provenance == nil {
 		t.Fatalf("clean chain reported problems %v", ev.Problems)
 	}
@@ -223,20 +226,24 @@ func TestRecordRefusesWhatItCannotAttribute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	off := *m
+	off.Provenance = false
 	rapid.Check(t, func(t *rapid.T) {
 		bad := rapid.SampledFrom([]string{"", "..", "a/b", "a b", "../x", strings.Repeat("a", 129)}).Draw(t, "bad id")
+		mm := rapid.SampledFrom([]*core.Manifest{m, &off}).Draw(t, "manifest")
 		for _, id := range [][2]string{{bad, "t1"}, {"s1", bad}} {
-			if err := WritePending(m, id[0], id[1], "p/x.xx"); err == nil {
-				t.Fatalf("WritePending accepted session %q tool use %q", id[0], id[1])
+			if err := WritePending(mm, id[0], id[1], "p/x.xx"); err == nil {
+				t.Fatalf("WritePending (provenance %v) accepted session %q tool use %q", mm.Provenance, id[0], id[1])
 			}
-			if _, appended, err := Record(m, RecordInput{Session: id[0], ToolUseID: id[1]}); err == nil || appended {
-				t.Fatalf("Record accepted session %q tool use %q", id[0], id[1])
+			if _, appended, err := Record(mm, RecordInput{Session: id[0], ToolUseID: id[1]}); err == nil || appended {
+				t.Fatalf("Record (provenance %v) accepted session %q tool use %q", mm.Provenance, id[0], id[1])
 			}
 		}
 	})
 	if _, err := os.Stat(filepath.Join(pr.root, core.StateDir, "pending")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("an invalid id left pending state behind: %v", err)
 	}
+	offIsInert(t, pr, m, &off)
 	if _, appended, err := Record(m, RecordInput{Session: "s1", ToolUseID: "none"}); !errors.Is(err, ErrNoPending) || appended {
 		t.Fatalf("Record without a pending entry: appended %v err %v, want ErrNoPending", appended, err)
 	}
@@ -245,6 +252,36 @@ func TestRecordRefusesWhatItCannotAttribute(t *testing.T) {
 	if _, _, err := Record(m, RecordInput{Session: "s1", ToolUseID: "t2"}); err == nil || errors.Is(err, ErrNoPending) {
 		t.Fatalf("Record of a malformed pending entry: %v", err)
 	}
+}
+
+func offIsInert(t *testing.T, pr provRepo, on, off *core.Manifest) {
+	t.Helper()
+	if err := WritePending(off, "s1", "t1", "p/x.xx"); err != nil {
+		t.Fatalf("WritePending with provenance off: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(pr.root, core.StateDir, "pending")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("WritePending with provenance off wrote pending state: %v", err)
+	}
+	if rel, appended, err := Record(off, RecordInput{Session: "s1", ToolUseID: "t1"}); err != nil || appended || rel != "" {
+		t.Fatalf("Record with provenance off and no pending entry: rel %q appended %v err %v", rel, appended, err)
+	}
+	if err := WritePending(on, "s1", "t1", "p/x.xx"); err != nil {
+		t.Fatal(err)
+	}
+	putFile(t, pr.root, "p/x.xx", "changed while off\n")
+	if _, appended, err := Record(off, RecordInput{Session: "s1", ToolUseID: "t1"}); err != nil || appended {
+		t.Fatalf("Record with provenance off: appended %v err %v", appended, err)
+	}
+	if _, err := os.Stat(PendingPath(pr.root, "s1", "t1")); err != nil {
+		t.Fatalf("Record with provenance off consumed the pending entry: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(pr.root, core.ProvenanceDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Record with provenance off wrote provenance: %v", err)
+	}
+	if err := os.Remove(PendingPath(pr.root, "s1", "t1")); err != nil {
+		t.Fatal(err)
+	}
+	pr.reset(t)
 }
 
 func refusesWrongPath(t *testing.T, pr provRepo, m *core.Manifest) {
@@ -311,7 +348,7 @@ func TestProvenanceEvidenceRejectsTamperedHistory(t *testing.T) {
 		name := rapid.SampledFrom(names).Draw(t, "variant")
 		v := variants[name]
 		v.apply(t)
-		ev := provenanceEvidenceFor(builtinInputs{root: pr.root, base: "main", changed: []core.ChangedFile{{Path: "p/x.xx"}}})
+		ev := provenanceEvidenceFor(newBuiltinInputs(pr.root, "main", []core.ChangedFile{{Path: "p/x.xx"}}, false))
 		if v.want == "" {
 			if len(ev.Problems) > 0 || ev.Provenance == nil || len(ev.Provenance.Records) != 2 {
 				t.Fatalf("%s: problems %v evidence %+v", name, ev.Problems, ev.Provenance)
@@ -336,16 +373,19 @@ func TestProtectedEvidenceKeepsOnlyReviewableProtectedFiles(t *testing.T) {
 	gitIn(t, noBase.root, "commit", "-qm", "no manifest at base")
 	brokenBase := newProvRepo(t, provManifestRequired+"human_review: [\n", nil)
 	putFile(t, brokenBase.root, "assurance.yaml", provManifestRequired)
+	offBase := newProvRepo(t, provManifestOff+"human_review: {B: required}\n", nil)
+	putFile(t, offBase.root, "assurance.yaml", provManifestRequired)
 	bases := []struct {
-		name         string
-		pr           provRepo
-		wantRequired bool
+		name                         string
+		pr                           provRepo
+		wantRequired, wantProvenance bool
 	}{
-		{"no human_review", newProvRepo(t, provManifest, nil), false},
-		{"B optional", newProvRepo(t, provManifestOptional, nil), false},
-		{"B required", newProvRepo(t, provManifestRequired, nil), true},
-		{"no manifest at base", noBase, false},
-		{"unparseable manifest at base", brokenBase, false},
+		{"no human_review", newProvRepo(t, provManifest, nil), false, true},
+		{"B optional", newProvRepo(t, provManifestOptional, nil), false, true},
+		{"B required", newProvRepo(t, provManifestRequired, nil), true, true},
+		{"provenance off at base, on in the worktree", offBase, true, false},
+		{"no manifest at base", noBase, false, false},
+		{"unparseable manifest at base", brokenBase, false, false},
 	}
 	rapid.Check(t, func(t *rapid.T) {
 		b := rapid.SampledFrom(bases).Draw(t, "base")
@@ -364,7 +404,12 @@ func TestProtectedEvidenceKeepsOnlyReviewableProtectedFiles(t *testing.T) {
 			}
 		}
 		reviewed := rapid.Bool().Draw(t, "reviewed")
-		ev := protectedEvidenceFor(m, builtinInputs{root: pr.root, base: "main", changed: changed, reviewed: reviewed})
+		in := newBuiltinInputs(pr.root, "main", changed, reviewed)
+		if in.provenance != b.wantProvenance {
+			t.Fatalf("%s: provenance %v, want %v from the base manifest", b.name, in.provenance, b.wantProvenance)
+		}
+		decidesProvenanceOnlyWhenOn(t, m, in, b.wantProvenance)
+		ev := protectedEvidenceFor(m, in)
 		if ev.Protected == nil {
 			t.Fatalf("no protected evidence")
 		}
@@ -379,6 +424,24 @@ func TestProtectedEvidenceKeepsOnlyReviewableProtectedFiles(t *testing.T) {
 			t.Fatalf("%s: reviewed/required not carried from the base manifest: %+v", b.name, ev.Protected)
 		}
 	})
+}
+
+func decidesProvenanceOnlyWhenOn(t *rapid.T, m *core.Manifest, in builtinInputs, on bool) {
+	var builtin []core.Objective
+	for _, o := range m.Catalog.Objectives {
+		if o.Evidence == provenanceEvidence || o.Evidence == protectedEvidence {
+			builtin = append(builtin, o)
+		}
+	}
+	var rep EvalReport
+	rep.decideUnlisted(m, builtin, in, nil, core.Baseline{}, "2026-10-01")
+	got := map[string]bool{}
+	for _, e := range rep.Objectives {
+		got[e.Objective] = true
+	}
+	if got["IND-VERIFIER-DISTINCT"] != on || !got["CFG-PROTECTED"] {
+		t.Fatalf("provenance %v: decided %v", on, got)
+	}
 }
 
 func drawReviews(t *rapid.T, head string) []core.Review {

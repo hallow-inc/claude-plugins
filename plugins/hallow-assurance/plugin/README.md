@@ -7,7 +7,7 @@ the hooks exit immediately and do nothing.
 |---|---|
 | SessionStart | Injects the level map and applicable objectives; records hashes of protected files |
 | PreToolUse (`Edit`, `Write`, `NotebookEdit`) | Denies edits to protected files and edits the role rules forbid; before an allowed edit, records the file's blob |
-| PostToolUse (`Edit`, `Write`, `NotebookEdit`) | Appends a provenance record (file, blobs before and after, agent) to `.assure/provenance/<session>.jsonl`. Never blocks; if recording fails it warns you |
+| PostToolUse (`Edit`, `Write`, `NotebookEdit`) | With `provenance: true`, appends a provenance record (file, blobs before and after, agent) to `.assure/provenance/<session>.jsonl`. Never blocks; if recording fails it warns you. Otherwise does nothing |
 | Stop | Blocks stopping while changed code fails a fast objective or a protected file changed. Each distinct set of failures blocks at most 3 times per session; after that the agent may stop, and every later stop with the same failures warns you instead of blocking. Failures the agent cannot fix (no protected-file snapshot, an adapter not on `PATH`) warn you on the first stop and never block |
 | SubagentStop (`hallow-assurance:verifier`, `hallow-assurance:inspector`) | Verifier: blocks it from finishing while a changed package has a failing test (only `VER-TESTS-PASS`; source lint is the parent's Stop check). Inspector: reads the one fenced `sarif` block in its final message, validates it against the inspection profile, and writes it to `.assure/state/inspections/<session>-<agent_id>.sarif`; a missing, duplicated, or invalid block keeps it running. Findings never block. Same retry cap as Stop, counted per subagent. Other subagents are ignored |
 
@@ -38,14 +38,21 @@ guard enforces this; the agents' tool lists are a second line.
 
 ## Provenance and review
 
-Commit `.assure/provenance/` with your change. CI rebuilds each changed level A–B file's history
-from those records: a test file must be written only by the verifier or pruner, a source or config
-file never by them, and a file no adapter claims (a fixture, a recorded payload) by either. An edit
-made outside the file tools (through Bash, an editor, or a formatter) leaves a **gap**. Gaps and
-protected-file changes pass and are listed as unreviewed. A team that wants a second reviewer sets
-`human_review: {B: required}` (any of `A`–`D`) in `assurance.yaml`: at those levels a gap or
-protected change fails unless someone other than the PR author approves the PR's head commit.
-Tests written by the wrong agent fail either way.
+Provenance is off unless `assurance.yaml` sets `provenance: true`. Off, nothing is recorded, CI does
+not check who wrote each file, and the guard hook's role rules are the only enforcement; an edit
+through Bash goes unnoticed. CI reads the setting from the manifest at the base ref, so turning it
+on takes effect from the next PR.
+
+With provenance on, commit `.assure/provenance/` with your change. CI rebuilds each changed level
+A–B file's history from those records: a test file must be written only by the verifier or pruner,
+a source or config file never by them, and a file no adapter claims (a fixture, a recorded payload)
+by either. Tests written by the wrong agent fail. An edit made outside the file tools (through Bash,
+an editor, or a formatter) leaves a **gap**, which passes and is listed as unreviewed.
+
+Protected-file changes pass and are listed as unreviewed, whatever the provenance setting. A team
+that wants a second reviewer sets `human_review: {B: required}` (any of `A`–`D`) in
+`assurance.yaml`: at those levels a protected change, and with provenance on a gap, fails unless
+someone other than the PR author approves the PR's head commit.
 
 ## Install
 

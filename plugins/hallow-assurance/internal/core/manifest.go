@@ -28,6 +28,7 @@ type Manifest struct {
 	Components     []Component
 	Protected      []Glob
 	ReviewRequired map[Level]bool
+	Provenance     bool
 	Catalog        Catalog
 	Warnings       []schemas.Violation
 }
@@ -115,6 +116,7 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 			m.ReviewRequired[Level(l)] = true
 		}
 	}
+	m.Provenance, _ = v["provenance"].(bool)
 	cat, err := LoadCatalog(v["catalog"].(string))
 	if err != nil {
 		p.add("/catalog", "catalog", "%v", err)
