@@ -214,16 +214,5 @@ func TestSubagentStateLivesInItsOwnFilePerSessionAndAgent(t *testing.T) {
 		if got := ReadSubagentStopState(root, session, agent+"x"); got.Blocks != 0 {
 			t.Fatalf("another agent in the same session read %+v; each subagent has its own count", got)
 		}
-		sarif := []byte(rapid.StringN(1, 64, -1).Draw(t, "sarif"))
-		if err := WriteInspection(root, session, agent, sarif); err != nil {
-			t.Fatalf("%v", err)
-		}
-		inspection := filepath.Join(root, StateDir, "inspections", session+"-"+agent+".sarif")
-		if p := InspectionPath(root, session, agent); p != inspection {
-			t.Fatalf("InspectionPath = %s, want %s", p, inspection)
-		}
-		if got, err := os.ReadFile(inspection); err != nil || string(got) != string(sarif) {
-			t.Fatalf("inspection file holds %q (%v), want the exact bytes %q", got, err, sarif)
-		}
 	})
 }

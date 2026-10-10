@@ -147,8 +147,8 @@ func TestInvalidSessionIDs(t *testing.T) {
 
 func TestPruneStateRemovesOnlyOldSessionFiles(t *testing.T) {
 	root := t.TempDir()
-	oldFiles := []string{"snapshot-old.json", "stop-old.json", "subagent-stop-old-a1.json", "inspections/old-a1.sarif", "adapters.json"}
-	newFiles := []string{"snapshot-new.json", "subagent-stop-new-a1.json", "inspections/new-a1.sarif"}
+	oldFiles := []string{"snapshot-old.json", "stop-old.json", "subagent-stop-old-a1.json", "adapters.json"}
+	newFiles := []string{"snapshot-new.json", "subagent-stop-new-a1.json"}
 	for _, f := range append(slices.Clone(oldFiles), newFiles...) {
 		writeFile(t, root, filepath.Join(StateDir, f), "{}")
 	}
@@ -160,7 +160,7 @@ func TestPruneStateRemovesOnlyOldSessionFiles(t *testing.T) {
 	}
 	PruneState(root, 14*24*time.Hour, time.Now())
 	want := map[string]bool{"adapters.json": true}
-	for _, f := range oldFiles[:4] {
+	for _, f := range oldFiles[:3] {
 		want[f] = false
 	}
 	for _, f := range newFiles {

@@ -9,7 +9,7 @@ the hooks exit immediately and do nothing.
 | PreToolUse (`Edit`, `Write`, `NotebookEdit`) | Denies edits to protected files and edits the role rules forbid; before an allowed edit, records the file's blob |
 | PostToolUse (`Edit`, `Write`, `NotebookEdit`) | With `provenance: true`, appends a provenance record (file, blobs before and after, agent) to `.assure/provenance/<session>.jsonl`. Never blocks; if recording fails it warns you. Otherwise does nothing |
 | Stop | Blocks stopping while changed code fails a fast objective or a protected file changed. Each distinct set of failures blocks at most 3 times per session; after that the agent may stop, and every later stop with the same failures warns you instead of blocking. Failures the agent cannot fix (no protected-file snapshot, an adapter not on `PATH`) warn you on the first stop and never block |
-| SubagentStop (`hallow-assurance:verifier`, `hallow-assurance:inspector`) | Verifier: blocks it from finishing while a changed package has a failing test (only `VER-TESTS-PASS`; source lint is the parent's Stop check). Inspector: reads the one fenced `sarif` block in its final message, validates it against the inspection profile, and writes it to `.assure/state/inspections/<session>-<agent_id>.sarif`; a missing, duplicated, or invalid block keeps it running. Findings never block. Same retry cap as Stop, counted per subagent. Other subagents are ignored |
+| SubagentStop (`hallow-assurance:verifier`) | Blocks the verifier from finishing while a changed package has a failing test (only `VER-TESTS-PASS`; source lint is the parent's Stop check). Same retry cap as Stop, counted per subagent. Other subagents are ignored |
 
 Local hooks are early warning. CI reruns every check and is the authority.
 
@@ -20,7 +20,6 @@ Local hooks are early warning. CI reruns every check and is the authority.
 | `hallow-assurance:implementer` | source and config files; generated files at levels C–D |
 | `hallow-assurance:verifier` | test and fuzz-corpus files |
 | `hallow-assurance:pruner` | test and fuzz-corpus files, removing or merging tests on mutation evidence |
-| `hallow-assurance:inspector` | nothing (read-only review) |
 
 The verifier and pruner preload the `assure-testing` skill.
 
@@ -34,7 +33,6 @@ guard enforces this; the agents' tool lists are a second line.
 | `assure-testing` | by the model, when it writes tests or reads `assure` output | How tests are written here: properties over examples, fail-first bug fixes, coverage resolutions, reading `assure` output, deterministic simulation, formal models. Points to `assure reference <lang>` for the language detail, which ships inside each adapter |
 | `/hallow-assurance:check` | by you | Runs `assure check --fast`, then offers `assure evaluate` against the merge-base |
 | `/hallow-assurance:bugfix <issue\|seed>` | by you | Verifier writes a failing test, implementer fixes it, fast check passes; you commit with `Assure-Kind: fix` |
-| `/hallow-assurance:inspect` | by you | Inspector reviews the diff against the objectives `assure context` lists; reports the SARIF path |
 
 ## Provenance and review
 

@@ -69,25 +69,14 @@ func TestAgentFilesMatchTheGuard(t *testing.T) {
 			}
 		}
 		checkRoleContract(t, p, name, a)
-		if name == "inspector" {
-			for _, tool := range []string{"Edit", "Write", "NotebookEdit", "Bash"} {
-				if slices.Contains(a.tools, tool) {
-					t.Errorf("%s: the read-only inspector has %s", p, tool)
-				}
-			}
-			if len(a.tools) == 0 {
-				t.Errorf("%s: no tools list; an absent list inherits every tool", p)
-			}
-			continue
-		}
 		for _, tool := range []string{"Bash", "Edit", "Write"} {
 			if !slices.Contains(a.tools, tool) {
-				t.Errorf("%s: lacks %s", p, tool)
+				t.Errorf("%s: tools list lacks %s; every role edits files and runs tests", p, tool)
 			}
 		}
 		checkMayEdit(t, p, name, a.body)
 	}
-	want := []string{core.Implementer, core.Verifier, core.Pruner, core.Inspector}
+	want := []string{core.Implementer, core.Verifier, core.Pruner}
 	slices.Sort(got)
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
@@ -101,9 +90,6 @@ func checkRoleContract(t *testing.T, p, name string, a agentFile) {
 	preloads := slices.ContainsFunc(skills, func(s any) bool { return s == "assure-testing" || s == "hallow-assurance:assure-testing" })
 	if (name == "verifier" || name == "pruner") && !preloads {
 		t.Errorf("%s: skills %v does not preload assure-testing, so the first test edit runs without the testing guidance", p, a.front["skills"])
-	}
-	if name == "inspector" && (!strings.Contains(a.body, "```sarif") || !strings.Contains(a.body, core.Inspector)) {
-		t.Errorf("%s: prompt does not state the ```sarif output contract with tool name %s that the SubagentStop hook enforces", p, core.Inspector)
 	}
 }
 

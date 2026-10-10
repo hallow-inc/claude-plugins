@@ -70,7 +70,7 @@ In scope:
 - Manifest, catalog, waiver, provenance, evidence-index, and adapter-protocol schemas
 - Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test), Lean adapter (v1,
   staged M7a–c)
-- Claude Code plugin: hooks, four subagents, skills, commands
+- Claude Code plugin: hooks, three subagents, skills, commands
 - CI integration: required status check, PR report, nightly runs
 - Tool qualification fixtures (seeded-bug repos) for each adapter
 - Pilot: the Hallow AI repo (Go)
@@ -150,8 +150,8 @@ plugins/hallow-assurance/
     .claude-plugin/plugin.json
     hooks/hooks.json
     bin/assure-hook              # shim: no manifest → exit 0; assure missing → exit 2; else exec
-    agents/{implementer,verifier,inspector,pruner}.md
-    skills/{assure-testing,check,bugfix,inspect}/SKILL.md   # no commands/: Claude Code lists it as legacy
+    agents/{implementer,verifier,pruner}.md
+    skills/{assure-testing,check,bugfix}/SKILL.md   # no commands/: Claude Code lists it as legacy
   qualification/
     go/                          # seeded-bug fixture repos + expected results
   testdata/
@@ -450,13 +450,13 @@ keep local behavior as close to fail-closed as the harness allows:
 | PostToolUse | `Edit\|Write` | `lint` | Fast per-file rule-pack findings fed back to the agent |
 | PostToolUse | `Edit\|Write\|NotebookEdit` | `record` | With `provenance: true`, appends provenance (never blocks; a failure is a CI gap); otherwise silent |
 | Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail or protected files drifted; retry cap (own counter + `stop_hook_active`) then escalate |
-| SubagentStop | `^hallow-assurance:(verifier\|inspector)$` | `check --role <agent>` | Verifier must leave passing tests (`VER-TESTS-PASS` only); inspector must emit one fenced `sarif` block in its final message, which the hook reads from `last_assistant_message`, validates, and writes to `.assure/state/inspections/` |
+| SubagentStop | `^hallow-assurance:verifier$` | `check --role verifier` | Verifier must leave passing tests (`VER-TESTS-PASS` only) |
 
 Plugin subagent names are plugin-scoped (`hallow-assurance:verifier`), so the SubagentStop matcher is
-an anchored regex; an unanchored `verifier|inspector` never matches.
+an anchored regex; an unanchored `verifier` never matches.
 
-Subagents: **implementer** (source only), **verifier** (tests/fuzz/properties only), **inspector**
-(read-only, checklist → SARIF), **pruner** (deletes/merges tests, must cite mutation report).
+Subagents: **implementer** (source only), **verifier** (tests/fuzz/properties only),
+**pruner** (deletes/merges tests, must cite mutation report).
 
 Role rules are enforced by `guard`, keyed on the `agent_type` field that PreToolUse carries for
 subagent tool calls. Claude Code ignores `hooks` and `permissionMode` in plugin subagent frontmatter,
@@ -467,8 +467,7 @@ how to read `assure` output, designing for deterministic simulation, formal mode
 testing). Per-language references ship inside each adapter (`assure-adapter-<lang> reference`), so the
 plugin carries no language text; `assure reference <lang>` prints one.
 
-Commands: `/hallow-assurance:check`, `/hallow-assurance:bugfix <issue|seed>`, `/hallow-assurance:inspect`,
-shipped as user-invoked skills. Claude Code always prefixes plugin skills with the plugin name.
+Commands: `/hallow-assurance:check`, `/hallow-assurance:bugfix <issue|seed>`, shipped as user-invoked skills. Claude Code always prefixes plugin skills with the plugin name.
 
 ## Milestones
 
@@ -526,7 +525,7 @@ never reassigned, and new work takes a letter suffix.
 - ✅ Required status check on the pilot repo (blocking levels A–B)
 
 **M4a — Subagents, provenance, independence**
-- Four subagents; role rules in `guard` keyed on `agent_type`; frontmatter `tools` /
+- Three subagents; role rules in `guard` keyed on `agent_type`; frontmatter `tools` /
   `disallowedTools` as defense-in-depth
 - `assure record` + IND-VERIFIER-DISTINCT (tier1) and CFG-PROTECTED evaluation; `--reviews` input;
   manifest `human_review`
@@ -536,7 +535,7 @@ never reassigned, and new work takes a letter suffix.
 
 **M4b — Skills, commands**
 - `assure-testing` skill + Go reference embedded in the adapter (`describe` names it); `/hallow-assurance:*` commands
-- SubagentStop `check --role` for verifier and inspector
+- SubagentStop `check --role` for the verifier
 
 **M4c — Solo adoption**
 - `release-channel`: `go install` of `assure` and `assure-adapter-go` from one

@@ -153,19 +153,7 @@ func TestRecordedPayloadsDecode(t *testing.T) {
 			if s := fmt.Sprint(out); strings.Contains(s, "failed closed") || strings.Contains(s, "unparsable") {
 				t.Fatalf("payload did not decode: %v", out)
 			}
-			checkRecordedInspector(t, name, root, code, out)
 		})
-	}
-}
-
-func checkRecordedInspector(t *testing.T, name, root string, code int, out map[string]any) {
-	t.Helper()
-	_, inspected := os.Stat(filepath.Join(root, ".assure", "state", "inspections", session+"-aee260f3e590d62f9.sarif"))
-	if name == "subagent-stop-inspector-first" && (code != 2 || out["decision"] != "block") {
-		t.Fatalf("recorded prose-only inspector report was not blocked: %d %v", code, out)
-	}
-	if name == "subagent-stop-inspector-after-block" && (code != 0 || out["decision"] != nil || inspected != nil) {
-		t.Fatalf("recorded valid inspector report was not accepted and written: %d %v %v", code, out, inspected)
 	}
 }
 
@@ -234,11 +222,9 @@ func TestNotAdoptedIsSilent(t *testing.T) {
 			t.Errorf("%s: got %d %v", name, code, out)
 		}
 	}
-	for _, agent := range []string{core.Verifier, core.Inspector} {
-		in := payload(t, "subagent-stop", root, func(m map[string]any) { m["agent_type"] = agent })
-		if code, out, _ := hook("subagent-stop", in); code != 0 || out != nil {
-			t.Errorf("%s stop outside an adopted repo: got %d %v", agent, code, out)
-		}
+	in := payload(t, "subagent-stop", root, func(m map[string]any) { m["agent_type"] = core.Verifier })
+	if code, out, _ := hook("subagent-stop", in); code != 0 || out != nil {
+		t.Errorf("verifier stop outside an adopted repo: got %d %v", code, out)
 	}
 }
 
@@ -293,11 +279,11 @@ func TestMalformedStdinDenies(t *testing.T) {
 	root := fixture(t)
 	for _, bad := range []map[string]any{{"agent_id": "../escape"}, {"agent_id": ""}, {"session_id": "a/b"}, {"cwd": "relative"}, {"hook_event_name": "Stop"}} {
 		in := payload(t, "subagent-stop", root, func(m map[string]any) {
-			m["agent_type"] = core.Inspector
+			m["agent_type"] = core.Verifier
 			maps.Copy(m, bad)
 		})
 		if code, out, _ := hook("subagent-stop", in); code != 2 || out["decision"] != "block" || !strings.Contains(out["reason"].(string), "failed closed") {
-			t.Errorf("inspector stop with %v: got %d %v; an id that could escape the state directory must block as malformed input, before any state is read or written", bad, code, out)
+			t.Errorf("verifier stop with %v: got %d %v; an id that could escape the state directory must block as malformed input, before any state is read or written", bad, code, out)
 		}
 	}
 }

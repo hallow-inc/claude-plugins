@@ -1,10 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -24,7 +20,7 @@ func drawCheckArgs(t *rapid.T) (args []string, fast bool, role string, sarif boo
 		groups = append(groups, []string{"--role", role})
 	}
 	if sarif {
-		groups = append(groups, []string{"--sarif", "missing.sarif"})
+		groups = append(groups, []string{"--sarif", "findings.sarif"})
 	}
 	if rapid.Bool().Draw(t, "ref") {
 		groups = append(groups, []string{"--changed-from", "HEAD"})
@@ -35,23 +31,24 @@ func drawCheckArgs(t *rapid.T) (args []string, fast bool, role string, sarif boo
 func usageWanted(fast bool, role string, sarif bool) (string, bool) {
 	hasRole := role != "-"
 	switch {
+	case sarif:
+		return "usage: assure check", true
 	case fast && hasRole:
 		return "", true
 	case !fast && !hasRole:
 		return "assure evaluate", true
-	case hasRole && role != "verifier" && role != "inspector",
-		role == "inspector" && !sarif,
-		sarif && role != "inspector":
+	case hasRole && role != "verifier":
 		return "usage: assure check", true
 	}
 	return "", false
 }
 
 func TestCheckModeFlagsExitTwoNamingEvaluateOrUsage(t *testing.T) {
-	newRepo(t, "")
+	r := newRepo(t, "")
+	r.write("findings.sarif", `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"hallow-assurance:inspector"}},"results":[]}]}`)
 	rapid.Check(t, func(t *rapid.T) {
 		args, fast, role, sarif := drawCheckArgs(t)
-		code, _, stderr := assure(args...)
+		code, stdout, stderr := assure(args...)
 		want, usage := usageWanted(fast, role, sarif)
 		if !usage {
 			if code == 2 {
@@ -59,92 +56,11 @@ func TestCheckModeFlagsExitTwoNamingEvaluateOrUsage(t *testing.T) {
 			}
 			return
 		}
-		if code != 2 || !strings.Contains(stderr, want) {
-			t.Fatalf("%v: exit %d, stderr %q; want exit 2 naming %q", args, code, stderr, want)
+		if code != 2 || stdout != "" || !strings.Contains(stderr, want) {
+			t.Fatalf("%v: exit %d, stdout %q, stderr %q; want exit 2 naming %q, and no SARIF file read: the inspector role is retired", args, code, stdout, stderr, want)
 		}
-	})
-}
-
-func inspectionLog(t *rapid.T) (map[string]any, map[string]int) {
-	counts := map[string]int{}
-	var results []any
-	for range rapid.IntRange(0, 6).Draw(t, "results") {
-		level := rapid.SampledFrom([]string{"error", "warning", "note"}).Draw(t, "level")
-		counts[level]++
-		results = append(results, map[string]any{
-			"ruleId":  rapid.StringMatching(`[A-Za-z-]{1,10}`).Draw(t, "ruleId"),
-			"level":   level,
-			"message": map[string]any{"text": rapid.StringN(1, 20, -1).Draw(t, "text")},
-			"locations": []any{map[string]any{"physicalLocation": map[string]any{
-				"artifactLocation": map[string]any{"uri": rapid.StringMatching(`[a-z]{1,5}(/[a-z]{1,5}){0,2}\.go`).Draw(t, "uri")},
-				"region":           map[string]any{"startLine": rapid.IntRange(1, 9999).Draw(t, "line")},
-			}}},
-		})
-	}
-	if results == nil {
-		results = []any{}
-	}
-	run := map[string]any{"tool": map[string]any{"driver": map[string]any{"name": "hallow-assurance:inspector"}}, "results": results}
-	return map[string]any{"version": "2.1.0", "runs": []any{run}}, counts
-}
-
-func breakInspection(t *rapid.T, log map[string]any) string {
-	run := log["runs"].([]any)[0].(map[string]any)
-	breakage := rapid.SampledFrom([]string{"none", "none", "tool", "uri", "startLine", "level", "ruleId", "runs", "json"}).Draw(t, "breakage")
-	if breakage == "none" {
-		return breakage
-	}
-	run["results"] = append(run["results"].([]any), map[string]any{
-		"ruleId":    "R",
-		"level":     "error",
-		"message":   map[string]any{"text": "m"},
-		"locations": []any{map[string]any{"physicalLocation": map[string]any{"artifactLocation": map[string]any{"uri": "a.go"}, "region": map[string]any{"startLine": 1}}}},
-	})
-	res := run["results"].([]any)[0].(map[string]any)
-	loc := res["locations"].([]any)[0].(map[string]any)["physicalLocation"].(map[string]any)
-	switch breakage {
-	case "tool":
-		run["tool"] = map[string]any{"driver": map[string]any{"name": "golangci-lint"}}
-	case "uri":
-		loc["artifactLocation"] = map[string]any{"uri": "/etc/passwd"}
-	case "startLine":
-		loc["region"] = map[string]any{}
-	case "level":
-		res["level"] = "info"
-	case "ruleId":
-		res["ruleId"] = ""
-	case "runs":
-		log["runs"] = []any{run, run}
-	}
-	return breakage
-}
-
-func TestCheckRoleInspectorExitIgnoresFindings(t *testing.T) {
-	r := newRepo(t, "")
-	path := filepath.Join(r.root, "findings.sarif")
-	rapid.Check(t, func(t *rapid.T) {
-		log, counts := inspectionLog(t)
-		breakage := breakInspection(t, log)
-		data, err := json.Marshal(log)
-		if err != nil {
-			t.Fatalf("%v", err)
-		}
-		if breakage == "json" {
-			data = data[:len(data)/2]
-		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			t.Fatalf("%v", err)
-		}
-		code, stdout, stderr := assure("check", "--role", "inspector", "--sarif", path)
-		if breakage != "none" {
-			if code != 1 || stdout != "" || !strings.Contains(stderr, path) {
-				t.Fatalf("%s breakage: exit %d, stdout %q, stderr %q; an invalid log exits 1 and reports on stderr", breakage, code, stdout, stderr)
-			}
-			return
-		}
-		want := fmt.Sprintf("inspection valid: %d error, %d warning, %d note\n", counts["error"], counts["warning"], counts["note"])
-		if code != 0 || stdout != want {
-			t.Fatalf("exit %d, stdout %q, stderr %q; want exit 0 and %q: findings, even error-level ones, never fail the check", code, stdout, stderr, want)
+		if strings.Contains(want, "usage") && (!strings.Contains(stderr, "--role verifier") || strings.Contains(stderr, "inspector") || strings.Contains(stderr, "--sarif")) {
+			t.Fatalf("%v: usage %q must offer --role verifier and name neither inspector nor --sarif", args, stderr)
 		}
 	})
 }

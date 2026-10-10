@@ -228,7 +228,7 @@ func Drift(m *Manifest, s Snapshot, extra []Glob) ([]string, error) {
 }
 
 func PruneState(root string, maxAge time.Duration, now time.Time) {
-	for _, pattern := range []string{"snapshot-*.json", "stop-*.json", "subagent-stop-*.json", "inspections/*.sarif", "pending/*/*.json"} {
+	for _, pattern := range []string{"snapshot-*.json", "stop-*.json", "subagent-stop-*.json", "pending/*/*.json"} {
 		matches, _ := filepath.Glob(filepath.Join(root, StateDir, pattern))
 		for _, f := range matches {
 			if info, err := os.Stat(f); err == nil && now.Sub(info.ModTime()) > maxAge {

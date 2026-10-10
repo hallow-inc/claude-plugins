@@ -9,7 +9,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/decode"
 )
 
-var skillUserOnly = map[string]bool{"assure-testing": false, "check": true, "bugfix": true, "inspect": true}
+var skillUserOnly = map[string]bool{"assure-testing": false, "check": true, "bugfix": true}
 
 func skillFile(t *testing.T, p string) (map[string]any, string, bool) {
 	t.Helper()
@@ -57,6 +57,9 @@ func TestSkillFilesDeclareTheirInvocation(t *testing.T) {
 	bodies := map[string]string{}
 	for _, p := range paths {
 		dir := filepath.Base(filepath.Dir(p))
+		if _, known := skillUserOnly[dir]; !known {
+			t.Errorf("%s ships a skill outside the plugin's set %v; a retired workflow left behind still triggers", p, skillUserOnly)
+		}
 		if m, body, ok := skillFile(t, p); ok {
 			checkSkillFront(t, p, dir, m)
 			bodies[dir] = body

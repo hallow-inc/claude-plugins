@@ -122,7 +122,7 @@ func TestHooksJSONDeclaresEveryHookWithATimeout(t *testing.T) {
 		"PreToolUse":   {"Edit|Write|NotebookEdit", "pre-tool-use", 10},
 		"PostToolUse":  {"Edit|Write|NotebookEdit", "post-tool-use", 10},
 		"Stop":         {"", "stop", 180},
-		"SubagentStop": {"^hallow-assurance:(verifier|inspector)$", "subagent-stop", 180},
+		"SubagentStop": {"^hallow-assurance:verifier$", "subagent-stop", 180},
 	}
 	if len(cfg.Hooks) != len(want) {
 		t.Fatalf("events %v, want exactly %v", cfg.Hooks, want)
@@ -150,15 +150,15 @@ func checkSubagentMatcher(t *testing.T, matcher string) {
 	if err != nil {
 		t.Fatalf("SubagentStop matcher %q: %v", matcher, err)
 	}
-	roles := []string{"hallow-assurance:verifier", "hallow-assurance:inspector"}
-	near := rapid.SampledFrom(append([]string{"verifier", "inspector", "hallow-assurance:implementer", "hallow-assurance:pruner", "general-purpose"}, roles...))
+	roles := []string{"hallow-assurance:verifier"}
+	near := rapid.SampledFrom(append([]string{"verifier", "inspector", "hallow-assurance:implementer", "hallow-assurance:pruner", "hallow-assurance:inspector", "general-purpose"}, roles...))
 	rapid.Check(t, func(rt *rapid.T) {
 		s := rapid.StringMatching(`[a-z:-]{0,3}`).Draw(rt, "prefix") + near.Draw(rt, "agent") + rapid.StringMatching(`[a-z:-]{0,3}`).Draw(rt, "suffix")
 		if re.MatchString(s) != slices.Contains(roles, s) {
 			rt.Fatalf("matcher %q on %q: matched=%v; an unanchored matcher runs role checks on other subagents", matcher, s, re.MatchString(s))
 		}
 	})
-	for _, s := range []string{"verifier", "hallow-assurance:implementer", "x-hallow-assurance:verifier"} {
+	for _, s := range []string{"verifier", "hallow-assurance:implementer", "hallow-assurance:inspector", "x-hallow-assurance:verifier"} {
 		if re.MatchString(s) {
 			t.Errorf("SubagentStop matcher matches %q", s)
 		}

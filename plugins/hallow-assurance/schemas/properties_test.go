@@ -683,66 +683,7 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
-var inspectionGen = rapid.Custom(func(t *rapid.T) sample {
-	r := &rec{}
-	uriGen := rapid.StringMatching(`[a-z]{1,6}(/[a-z_]{1,6}){0,3}\.go`)
-	var results []any
-	for i := range rapid.IntRange(0, 3).Draw(t, "nresults") {
-		p := "/runs/0/results/" + idx(i)
-		var locs []any
-		for j := range rapid.IntRange(1, 2).Draw(t, "nlocs") {
-			lp := p + "/locations/" + idx(j)
-			pl, al, rg := lp+"/physicalLocation", lp+"/physicalLocation/artifactLocation", lp+"/physicalLocation/region"
-			region := map[string]any{"startLine": rapid.IntRange(1, 1<<20).Draw(t, "line")}
-			if rapid.Bool().Draw(t, "hascol") {
-				region["startColumn"] = rapid.IntRange(1, 200).Draw(t, "col")
-			}
-			locs = append(locs, map[string]any{"physicalLocation": map[string]any{
-				"artifactLocation": map[string]any{"uri": uriGen.Draw(t, "uri")},
-				"region":           region,
-			}})
-			for _, ptr := range []string{lp, pl, al, rg} {
-				r.closed(ptr)
-			}
-			r.required(lp, "physicalLocation")
-			r.required(pl, "artifactLocation", "region")
-			r.required(al, "uri")
-			r.required(rg, "startLine")
-			r.bad(al, "uri", badPath...)
-			r.bad(rg, "startLine", 0, -1)
-		}
-		results = append(results, map[string]any{
-			"ruleId":    objIDGen.Draw(t, "rule"),
-			"level":     rapid.SampledFrom([]string{"error", "warning", "note"}).Draw(t, "level"),
-			"message":   map[string]any{"text": textGen.Draw(t, "text")},
-			"locations": locs,
-		})
-		r.closed(p)
-		r.closed(p + "/message")
-		r.required(p, "ruleId", "level", "message", "locations")
-		r.required(p+"/message", "text")
-		r.bad(p, "ruleId", "")
-		r.bad(p, "level", "none", "info", "Error")
-		r.bad(p+"/message", "text", "")
-		r.bad(p, "locations", []any{})
-	}
-	if results == nil {
-		results = []any{}
-	}
-	run := map[string]any{"tool": map[string]any{"driver": map[string]any{"name": "hallow-assurance:inspector"}}, "results": results}
-	doc := map[string]any{"version": "2.1.0", "runs": []any{run}}
-	r.root("x", []any{})
-	for _, ptr := range []string{"", "/runs/0", "/runs/0/tool", "/runs/0/tool/driver"} {
-		r.closed(ptr)
-	}
-	r.required("/runs/0", "tool", "results")
-	r.bad("", "runs", []any{}, nil, []any{run, run})
-	r.bad("/runs/0/tool/driver", "name", "golangci-lint", "hallow-assurance:verifier", "")
-	return sample{doc, r.cs}
-})
-
 var generators = map[Kind]*rapid.Generator[sample]{
-	Inspection:      inspectionGen,
 	Baseline:        baselineGen,
 	Report:          reportGen,
 	Snapshot:        snapshotGen,
