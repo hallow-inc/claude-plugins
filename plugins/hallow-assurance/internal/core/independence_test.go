@@ -167,10 +167,18 @@ type indWorld struct {
 	pv      Provenance
 }
 
+func allRequired() map[Level]bool {
+	m := map[Level]bool{}
+	for _, l := range ruleLevels {
+		m[l] = true
+	}
+	return m
+}
+
 func indWorldGen(t *rapid.T) indWorld {
 	var w indWorld
 	w.pv.Ends = map[string]ChainEnds{}
-	w.pv.Optional = map[Level]bool{}
+	w.pv.Required = map[Level]bool{}
 	for _, p := range indPaths {
 		if rapid.Bool().Draw(t, "changed "+p) {
 			w.changed = append(w.changed, ChangedFile{
@@ -186,8 +194,8 @@ func indWorldGen(t *rapid.T) indWorld {
 	}
 	w.pv.Records = rapid.Permutation(w.pv.Records).Draw(t, "order")
 	w.pv.Reviewed = rapid.Bool().Draw(t, "reviewed")
-	for _, l := range []Level{"B", "C", "D"} {
-		w.pv.Optional[l] = rapid.Bool().Draw(t, "optional"+string(l))
+	for _, l := range ruleLevels {
+		w.pv.Required[l] = rapid.Bool().Draw(t, "required"+string(l))
 	}
 	return w
 }
@@ -247,13 +255,13 @@ func (w indWorld) expect(o Objective) indExpect {
 			}
 		}
 		if gap {
-			if w.pv.Reviewed || w.pv.Optional[f.Level] {
+			if w.pv.Reviewed || !w.pv.Required[f.Level] {
 				e.noted[f.Path] = true
 			} else {
 				e.failing[f.Path] = true
 			}
 		}
-		if tier := o.Independence[f.Level]; tier == "tier2" || tier == "tier3" {
+		if tier := o.Independence[f.Level]; tier == "tier2" || (tier == "tier3" && w.pv.Required[f.Level]) {
 			e.failing[f.Path] = true
 		}
 	}
@@ -336,7 +344,7 @@ func TestOptionalReviewOnlyExcusesGapsAndProtectedChanges(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		w := indWorldGen(t)
 		strict := w
-		strict.pv.Optional = nil
+		strict.pv.Required = allRequired()
 		relaxed, base := w.decide(ind), strict.decide(ind)
 		if base.Status == Pass && relaxed.Status != Pass {
 			t.Fatalf("optional turned a pass into %s", relaxed.Status)
@@ -350,10 +358,10 @@ func TestOptionalReviewOnlyExcusesGapsAndProtectedChanges(t *testing.T) {
 			}
 		}
 		for _, line := range failLines(base.Details) {
-			if slices.Contains(relaxed.Details, line) || strings.Contains(line, "gap") {
+			if slices.Contains(relaxed.Details, line) || strings.Contains(line, "gap") || strings.Contains(line, "needs tier3") {
 				continue
 			}
-			t.Fatalf("optional removed a non-gap failure %q", line)
+			t.Fatalf("optional removed a failure that is neither a gap nor tier3's approval %q", line)
 		}
 		checkProtectedOptional(t, prot, w)
 	})
@@ -364,15 +372,15 @@ func checkProtectedOptional(t *rapid.T, prot Objective, w indWorld) {
 	for _, f := range w.changed {
 		files = append(files, ChangedFile{Path: f.Path, Level: f.Level})
 	}
-	pd := ProtectedDiff{Files: files, Reviewed: w.pv.Reviewed}
+	pd := ProtectedDiff{Files: files, Reviewed: w.pv.Reviewed, Required: allRequired()}
 	strict := DecideObjective(prot, files, Evidence{Protected: &pd}, nil, nil, ruleDate)
-	pd.Optional = w.pv.Optional
+	pd.Required = w.pv.Required
 	relaxed := DecideObjective(prot, files, Evidence{Protected: &pd}, nil, nil, ruleDate)
 	s := splitDetails(t, relaxed.Details, indPaths)
 	for _, f := range files {
-		excused := pd.Reviewed || pd.Optional[f.Level]
+		excused := pd.Reviewed || !pd.Required[f.Level]
 		if s.failing[f.Path] == excused || s.noted[f.Path] != excused {
-			t.Fatalf("protected %s at %s (reviewed=%v optional=%v): details %v", f.Path, f.Level, pd.Reviewed, pd.Optional, relaxed.Details)
+			t.Fatalf("protected %s at %s (reviewed=%v required=%v): details %v", f.Path, f.Level, pd.Reviewed, pd.Required, relaxed.Details)
 		}
 	}
 	if strict.Status == Pass && relaxed.Status != Pass {
@@ -401,7 +409,7 @@ func one(f ChangedFile, agentType, pre, post string) []ProvRecord {
 
 func TestIndependenceScenarios(t *testing.T) {
 	o := catalogObjective(t, "IND-VERIFIER-DISTINCT")
-	optB := map[Level]bool{"B": true}
+	reqA, reqB := map[Level]bool{"A": true}, map[Level]bool{"B": true}
 	recordRoleSource := one(indTst, Implementer, "b0", "b1")
 	recordRoleSource[0].Role = Source
 	cases := []struct {
@@ -424,25 +432,29 @@ func TestIndependenceScenarios(t *testing.T) {
 			Provenance{Ends: indEnds("b0", "", indTst), Records: one(indTst, Pruner, "b0", "")}, Pass, nil},
 		{"the role comes from the changed file, not the record", []ChangedFile{indTst},
 			Provenance{Ends: indEnds("b0", "b1", indTst), Records: recordRoleSource}, Fail, []string{Implementer}},
-		{"level A needs tier3", []ChangedFile{indA},
-			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Verifier, "b0", "b1")}, Fail, []string{indA.Path, "tier3"}},
+		{"level A change, review required, needs tier3", []ChangedFile{indA},
+			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Verifier, "b0", "b1"), Required: reqA}, Fail, []string{indA.Path, "tier3"}},
+		{"level A change, review optional, evaluates as tier1", []ChangedFile{indA},
+			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Verifier, "b0", "b1")}, Pass, nil},
+		{"level A role violation, review optional, fails", []ChangedFile{indA},
+			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Implementer, "b0", "b1")}, Fail, []string{indA.Path, Implementer}},
 		{"a file without chain ends fails closed", []ChangedFile{indSrc}, Provenance{Ends: map[string]ChainEnds{}}, Fail, []string{indSrc.Path}},
-		{"an unexcused gap fails", []ChangedFile{indSrc},
-			Provenance{Ends: indEnds("b0", "b3", indSrc), Records: one(indSrc, "", "b0", "b1")}, Fail, []string{indSrc.Path, "gap"}},
+		{"gap at a review-required level fails", []ChangedFile{indSrc},
+			Provenance{Ends: indEnds("b0", "b3", indSrc), Records: one(indSrc, "", "b0", "b1"), Required: reqB}, Fail, []string{indSrc.Path, "gap"}},
 		{"gap at a review-optional level passes and is listed unreviewed", []ChangedFile{indSrc},
-			Provenance{Ends: indEnds("b0", "b3", indSrc), Records: one(indSrc, "", "b0", "b1"), Optional: optB}, Pass,
+			Provenance{Ends: indEnds("b0", "b3", indSrc), Records: one(indSrc, "", "b0", "b1")}, Pass,
 			[]string{indSrc.Path, "unreviewed", "human_review: optional"}},
 		{"gap does not hide the author", []ChangedFile{indTst},
-			Provenance{Ends: indEnds("b0", "b3", indTst), Records: one(indTst, Implementer, "b0", "b1"), Optional: optB}, Fail, []string{Implementer}},
+			Provenance{Ends: indEnds("b0", "b3", indTst), Records: one(indTst, Implementer, "b0", "b1")}, Fail, []string{Implementer}},
 		{"optional review does not excuse a role violation", []ChangedFile{indTst},
-			Provenance{Ends: indEnds("b0", "b1", indTst), Records: one(indTst, Implementer, "b0", "b1"), Optional: optB}, Fail, []string{Implementer}},
+			Provenance{Ends: indEnds("b0", "b1", indTst), Records: one(indTst, Implementer, "b0", "b1")}, Fail, []string{Implementer}},
 		{"owner hand-edit with approval passes and notes the review", []ChangedFile{indSrc},
-			Provenance{Ends: indEnds("b0", "b3", indSrc), Records: one(indSrc, "", "b0", "b1"), Reviewed: true}, Pass,
+			Provenance{Ends: indEnds("b0", "b3", indSrc), Records: one(indSrc, "", "b0", "b1"), Reviewed: true, Required: reqB}, Pass,
 			[]string{indSrc.Path, "covered by review"}},
 		{"verifier wrote an unclassified fixture", []ChangedFile{indFix},
 			Provenance{Ends: indEnds("b0", "b1", indFix), Records: one(indFix, Verifier, "b0", "b1")}, Pass, nil},
-		{"an unclassified fixture's gap still fails", []ChangedFile{indFix},
-			Provenance{Ends: indEnds("b0", "b3", indFix), Records: one(indFix, Verifier, "b0", "b1")}, Fail, []string{indFix.Path, "gap"}},
+		{"an unclassified fixture's gap still fails where review is required", []ChangedFile{indFix},
+			Provenance{Ends: indEnds("b0", "b3", indFix), Records: one(indFix, Verifier, "b0", "b1"), Required: reqB}, Fail, []string{indFix.Path, "gap"}},
 		{"review does not excuse a role violation", []ChangedFile{indTst},
 			Provenance{Ends: indEnds("b0", "b1", indTst), Records: one(indTst, Implementer, "b0", "b1"), Reviewed: true}, Fail, []string{Implementer}},
 	}
@@ -566,6 +578,7 @@ func TestApprovalScenarios(t *testing.T) {
 
 func TestProtectedDiffScenarios(t *testing.T) {
 	o := catalogObjective(t, "CFG-PROTECTED")
+	reqB := map[Level]bool{"B": true}
 	waivers := []ChangedFile{{Path: ".assure/waivers.yaml", Level: "B"}}
 	manifest := []ChangedFile{{Path: "assurance.yaml", Level: "B"}}
 	cases := []struct {
@@ -574,14 +587,14 @@ func TestProtectedDiffScenarios(t *testing.T) {
 		want    Status
 		mention []string
 	}{
-		{"waiver edited without review fails naming the path", ProtectedDiff{Files: waivers}, Fail, []string{".assure/waivers.yaml: "}},
-		{"turning review off is judged by the base setting, required", ProtectedDiff{Files: manifest}, Fail, []string{"assurance.yaml: "}},
-		{"waiver edited with approval passes, listed as covered by review", ProtectedDiff{Files: waivers, Reviewed: true}, Pass,
+		{"waiver edited without review fails naming the path", ProtectedDiff{Files: waivers, Required: reqB}, Fail, []string{".assure/waivers.yaml: "}},
+		{"turning review off is judged by the base setting, required", ProtectedDiff{Files: manifest, Required: reqB}, Fail, []string{"assurance.yaml: "}},
+		{"waiver edited with approval passes, listed as covered by review", ProtectedDiff{Files: waivers, Reviewed: true, Required: reqB}, Pass,
 			[]string{".assure/waivers.yaml: ", "covered by review"}},
-		{"protected change at a review-optional level passes as unreviewed", ProtectedDiff{Files: waivers, Optional: map[Level]bool{"B": true}}, Pass,
+		{"protected change at a review-optional level passes as unreviewed", ProtectedDiff{Files: waivers}, Pass,
 			[]string{".assure/waivers.yaml: ", "unreviewed", "human_review: optional"}},
-		{"optional at another level does not excuse B", ProtectedDiff{Files: waivers, Optional: map[Level]bool{"C": true}}, Fail,
-			[]string{".assure/waivers.yaml: "}},
+		{"required at another level leaves B optional", ProtectedDiff{Files: waivers, Required: map[Level]bool{"C": true}}, Pass,
+			[]string{".assure/waivers.yaml: ", "unreviewed", "human_review: optional"}},
 		{"no protected change passes", ProtectedDiff{}, Pass, nil},
 	}
 	for _, c := range cases {
@@ -609,23 +622,21 @@ func TestHumanReviewIsReadFromTheManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, l := range ruleLevels {
-		if m.ReviewOptional[l] {
-			t.Fatalf("absent human_review must mean required at every level; got optional at %s", l)
-		}
+	if len(m.ReviewRequired) != 0 {
+		t.Fatalf("absent human_review must mean optional at every level; got required at %v", m.ReviewRequired)
 	}
 	rapid.Check(t, func(t *rapid.T) {
 		indSrc := manifestYAML() + "human_review:\n"
 		want := map[Level]bool{}
 		some := false
-		for _, l := range []Level{"B", "C", "D"} {
+		for _, l := range ruleLevels {
 			switch rapid.SampledFrom([]string{"", "required", "optional"}).Draw(t, "hr"+string(l)) {
-			case "optional":
-				want[l] = true
-				indSrc += "  " + string(l) + ": optional\n"
-				some = true
 			case "required":
+				want[l] = true
 				indSrc += "  " + string(l) + ": required\n"
+				some = true
+			case "optional":
+				indSrc += "  " + string(l) + ": optional\n"
 				some = true
 			}
 		}
@@ -637,8 +648,8 @@ func TestHumanReviewIsReadFromTheManifest(t *testing.T) {
 			t.Fatalf("%v\n%s", err, indSrc)
 		}
 		for _, l := range ruleLevels {
-			if m.ReviewOptional[l] != want[l] {
-				t.Fatalf("level %s optional = %v, want %v\n%s", l, m.ReviewOptional[l], want[l], indSrc)
+			if m.ReviewRequired[l] != want[l] {
+				t.Fatalf("level %s required = %v, want %v\n%s", l, m.ReviewRequired[l], want[l], indSrc)
 			}
 		}
 	})

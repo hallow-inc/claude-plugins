@@ -26,13 +26,13 @@ type Provenance struct {
 	Ends     map[string]ChainEnds
 	Records  []ProvRecord
 	Reviewed bool
-	Optional map[Level]bool
+	Required map[Level]bool
 }
 
 type ProtectedDiff struct {
 	Files    []ChangedFile
 	Reviewed bool
-	Optional map[Level]bool
+	Required map[Level]bool
 }
 
 type Review struct {
@@ -113,14 +113,18 @@ func AgentConflicts(recs []ProvRecord) []string {
 	return out
 }
 
-func unreviewed(path, what string, reviewed bool, optional map[Level]bool, level Level) (note string, excused bool) {
+func unreviewed(path, what string, reviewed bool, required map[Level]bool, level Level) (note string, excused bool) {
 	switch {
 	case reviewed:
 		return fmt.Sprintf("%s: %s, covered by review", path, what), true
-	case optional[level]:
+	case !required[level]:
 		return fmt.Sprintf("%s: unreviewed %s (human_review: optional)", path, what), true
 	}
 	return "", false
+}
+
+func unproducedTier(tier string, required bool) bool {
+	return tier == "tier2" || (tier == "tier3" && required)
 }
 
 func independenceFindings(o Objective, changed []ChangedFile, pv Provenance) (out []Finding, notes []string) {
@@ -149,13 +153,13 @@ func independenceFindings(o Objective, changed []ChangedFile, pv Provenance) (ou
 		}
 		if gap {
 			what := "gap (an edit outside the file tools)"
-			if note, excused := unreviewed(f.Path, what, pv.Reviewed, pv.Optional, f.Level); excused {
+			if note, excused := unreviewed(f.Path, what, pv.Reviewed, pv.Required, f.Level); excused {
 				notes = append(notes, note)
 			} else {
 				at(fmt.Sprintf("%s: %s: no provenance links its base blob to its HEAD blob", f.Path, what))
 			}
 		}
-		if t := o.Independence[f.Level]; t == "tier2" || t == "tier3" {
+		if t := o.Independence[f.Level]; unproducedTier(t, pv.Required[f.Level]) {
 			at(fmt.Sprintf("%s: level %s needs %s; tier2 evidence is not produced yet", f.Path, f.Level, t))
 		}
 	}
@@ -169,7 +173,7 @@ func protectedFindings(o Objective, pd ProtectedDiff) (out []Finding, notes []st
 		if o.Levels[f.Level] == "" {
 			continue
 		}
-		if note, excused := unreviewed(f.Path, "protected-file change", pd.Reviewed, pd.Optional, f.Level); excused {
+		if note, excused := unreviewed(f.Path, "protected-file change", pd.Reviewed, pd.Required, f.Level); excused {
 			notes = append(notes, note)
 			continue
 		}

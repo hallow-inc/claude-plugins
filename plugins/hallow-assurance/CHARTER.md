@@ -50,10 +50,10 @@ model**, not their paperwork.
 5. **Fail closed.** Missing or malformed evidence fails the objective unless a valid waiver covers it.
 6. **Agents cannot move the goalposts.** Agents may not edit the catalog, thresholds, manifest
    levels, waivers, baselines, provenance, formal-model challenge files, or gate config. Enforced
-   by `assure guard` locally and by CI server-side: a PR that changes a protected file needs an
-   approving review from someone other than the PR author. At levels the base manifest marks
-   `human_review: optional`, CI detects and reports protected-file changes but does not prevent
-   them; prevention there is local and best-effort (guard, Stop drift check).
+   locally by `assure guard` and the Stop drift check. CI reports every protected-file change; at
+   levels the base manifest marks `human_review: required`, it also needs an approving review from
+   someone other than the PR author. Review is optional by default: the framework checks the
+   software, not the developer.
 7. **Every objective is computable from evidence.** If a check can't be computed, it doesn't belong
    in the catalog.
 8. **Reproducible.** Every result is tied to a commit SHA and toolchain versions.
@@ -299,10 +299,10 @@ provenance is detective, never preventive; CI is the authority.
 
 CI check, per changed file in a level A–B component: the records must form an unbroken blob chain
 `merge-base blob → pre→post → … → final blob`. Order comes from the hash links, not timestamps. Any
-break is a **gap**: unattributed, never assumed human. A gap fails IND-VERIFIER-DISTINCT for that
-file unless the PR has an approving review from someone other than the PR author. Gaps where the
-file also changed on the base branch are merge-shaped; counting them to decide whether a 3-way
-check is worth building is not built yet. CI also checks that a PR only appends to existing session files.
+break is a **gap**: unattributed, never assumed human. At a review-required level, a gap fails
+IND-VERIFIER-DISTINCT for that file unless the PR has an approving review from someone other than
+the PR author. Gaps where the file also changed on the base branch are merge-shaped; counting them
+to decide whether a 3-way check is worth building is not built yet. CI also checks that a PR only appends to existing session files.
 
 Any non-author approval counts; there is no approver list. GitHub rejects an author's approval of
 their own PR, so an agent running on the author's credentials cannot produce one. The PR template
@@ -310,10 +310,11 @@ lists what a reviewer is attesting to. CI passes reviews to `assure evaluate --r
 `{author, head, reviews:[{login, state, commit}]}` (fetched with `gh api`), so the evaluator stays
 offline. An approval counts only when it is the reviewer's latest review and was made on `head`.
 
-A repo with no second reviewer may set `human_review: {B|C|D: optional}` in the manifest (never A,
-which needs a named human). At those levels, gaps and protected-file changes pass and are listed as
-unreviewed; role violations, `agent_id` conflicts, and rewritten provenance still fail. The value is
-read from the manifest at the base ref, so a PR cannot relax its own gate.
+Review is optional at every level unless the manifest sets `human_review: {A|B|C|D: required}`; a
+base ref with no manifest uses the default. At review-optional levels, gaps and protected-file
+changes pass and are listed as unreviewed; role violations, `agent_id` conflicts, and rewritten
+provenance still fail. The value is read from the manifest at the base ref, so a PR cannot relax
+its own gate.
 
 Independence tiers (computed by the evaluator):
 
@@ -322,8 +323,9 @@ Independence tiers (computed by the evaluator):
 | tier1 | Distinct context: test-role files' chains written only by verifier-side agent types (`verifier`, `pruner`: the pruner edits tests and is not the code's author); source- and config-role files never by them; unclassified files (fixtures) by either; distinct `agent_id` (the main thread is its own identity) | provenance chains |
 | tier3 | tier1 + approving review from someone other than the PR author | GitHub review API |
 
-There is no tier2: a model reviewer is not code verification. Until `tier3-review` ships, the
-evaluator still fails `tier2`/`tier3` closed, so level A cannot block.
+There is no tier2: a model reviewer is not code verification. At a review-optional level, tier3 is
+evaluated as tier1, since its approval is optional. At a review-required level, until `tier3-review`
+ships, the evaluator fails `tier2`/`tier3` closed, so level A with required review cannot pass.
 
 `guard` denies main-thread (no `agent_type`) edits to test-role files in level A–B components, with
 a message to spawn `hallow-assurance:verifier`, so the tier1 failure surfaces at edit time rather
@@ -528,13 +530,12 @@ never reassigned, and new work takes a letter suffix.
 **M4c — Solo adoption**
 - `release-channel`: `go install` of `assure` and `assure-adapter-go` from one
   `plugins/hallow-assurance/v0.N.x` tag; reusable evaluate workflow with a required `version` input;
-  README licensing consent for personal repos; README adoption order: the manifest PR
-  (`assurance.yaml`, `.assure/**`) merges before the PR that adds the evaluate workflow, so the
-  first evaluated base already carries `human_review`. The evaluator has no exception for a base
-  without a manifest
+  README licensing consent for personal repos
+- `review-optional-default`: `human_review` defaults to `optional` at every level including A; a base
+  ref with no manifest uses the default, so the adopting PR needs no special order
 - `assure-init`: prints a suggested manifest (packages, `inputs: true` candidates, baseline counts per
   objective); never writes protected files and never proposes `formal:`
-- ✅ `hello-world-bfree/g` adopts at level B with no second reviewer
+- ✅ `hello-world-bfree/g` adopts at level B with no second reviewer and no `human_review` key
 
 **M4d — Evidence loops**
 - `fuzz-crasher-loop`: a nightly fuzz crasher becomes a committed seed and a
@@ -603,8 +604,9 @@ stays authoritative) once a stable Go implementation and JSON mapping exist.
   per failure fingerprint for the whole session, so an unchanged failure stops blocking after 3
   even across prompts; failures outside the agent's reach (missing snapshot, adapter that cannot
   start, `assure` itself missing) allow the stop with a `systemMessage` on the first attempt.
-- Level A cannot block until `tier3-review` ships (tier3 = tier1 + non-author approving review;
-  the evaluator fails `tier2`/`tier3` closed today). Level B (tier1) is unaffected.
+- Level A with `human_review: {A: required}` cannot pass until `tier3-review` ships (tier3 =
+  tier1 + non-author approving review; the evaluator fails `tier2`/`tier3` closed today).
+  Level B (tier1) is unaffected.
 - `TODO(decide)` Whether FM-LINK + FM-COMPLETE may substitute for VER-MUTATION-CHANGED at level A
   (`alternative_for`). Leaning no for v1.
 

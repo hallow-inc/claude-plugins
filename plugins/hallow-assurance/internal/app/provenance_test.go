@@ -21,7 +21,10 @@ import (
 
 const provManifest = "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\nprotected: ['docs/**']\n"
 
-const provManifestOptional = provManifest + "human_review: {B: optional}\n"
+const (
+	provManifestOptional = provManifest + "human_review: {B: optional}\n"
+	provManifestRequired = provManifest + "human_review: {B: required}\n"
+)
 
 func xxOnPath(t *testing.T) {
 	t.Helper()
@@ -182,8 +185,8 @@ func (c *chainModel) checkEvidence(t *rapid.T, root string) {
 	if len(ev.Problems) > 0 || ev.Provenance == nil {
 		t.Fatalf("clean chain reported problems %v", ev.Problems)
 	}
-	if ev.Provenance.Reviewed != reviewed || len(ev.Provenance.Optional) != 0 {
-		t.Fatalf("reviewed/optional not carried: %+v", ev.Provenance)
+	if ev.Provenance.Reviewed != reviewed || len(ev.Provenance.Required) != 0 {
+		t.Fatalf("reviewed/required not carried: %+v", ev.Provenance)
 	}
 	if len(ev.Provenance.Records) != len(c.want) || len(ev.Provenance.Ends) != len(c.touched) {
 		t.Fatalf("evidence carries %d records and %d ends, want %d and %d",
@@ -328,13 +331,25 @@ func TestProtectedEvidenceKeepsOnlyReviewableProtectedFiles(t *testing.T) {
 		core.ProvenanceDir + "/notes.txt", provSub, "p/x.xx", "docs/guard.md", "docs/deep/a.md"}
 	protected := map[string]bool{"assurance.yaml": true, ".assure/waivers.yaml": true, core.ProvenanceDir + "/notes.txt": true,
 		provSub: true, "docs/guard.md": true, "docs/deep/a.md": true}
-	optional := newProvRepo(t, provManifestOptional, nil)
-	plain := newProvRepo(t, provManifest, nil)
+	noBase := newProvRepo(t, provManifest, nil)
+	gitIn(t, noBase.root, "rm", "-q", "--cached", "assurance.yaml")
+	gitIn(t, noBase.root, "commit", "-qm", "no manifest at base")
+	brokenBase := newProvRepo(t, provManifestRequired+"human_review: [\n", nil)
+	putFile(t, brokenBase.root, "assurance.yaml", provManifestRequired)
+	bases := []struct {
+		name         string
+		pr           provRepo
+		wantRequired bool
+	}{
+		{"no human_review", newProvRepo(t, provManifest, nil), false},
+		{"B optional", newProvRepo(t, provManifestOptional, nil), false},
+		{"B required", newProvRepo(t, provManifestRequired, nil), true},
+		{"no manifest at base", noBase, false},
+		{"unparseable manifest at base", brokenBase, false},
+	}
 	rapid.Check(t, func(t *rapid.T) {
-		pr, wantOptional := plain, false
-		if rapid.Bool().Draw(t, "optional") {
-			pr, wantOptional = optional, true
-		}
+		b := rapid.SampledFrom(bases).Draw(t, "base")
+		pr := b.pr
 		m, err := ManifestFor(pr.root)
 		if err != nil {
 			t.Fatalf("%v", err)
@@ -360,8 +375,8 @@ func TestProtectedEvidenceKeepsOnlyReviewableProtectedFiles(t *testing.T) {
 		if !slices.Equal(got, want) {
 			t.Fatalf("protected files %v, want %v", got, want)
 		}
-		if ev.Protected.Reviewed != reviewed || ev.Protected.Optional[core.Level("B")] != wantOptional {
-			t.Fatalf("reviewed/optional not carried: %+v", ev.Protected)
+		if ev.Protected.Reviewed != reviewed || ev.Protected.Required[core.Level("B")] != b.wantRequired {
+			t.Fatalf("%s: reviewed/required not carried from the base manifest: %+v", b.name, ev.Protected)
 		}
 	})
 }

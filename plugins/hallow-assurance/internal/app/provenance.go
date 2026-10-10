@@ -292,7 +292,7 @@ func baseBlobs(root, base string, rels []string) (map[string]string, error) {
 	return out, nil
 }
 
-func baseReviewOptional(root, base string) map[core.Level]bool {
+func baseReviewRequired(root, base string) map[core.Level]bool {
 	data, err := gitBytes(root, "show", base+":./"+core.ManifestName)
 	if err != nil {
 		return nil
@@ -301,7 +301,7 @@ func baseReviewOptional(root, base string) map[core.Level]bool {
 	if err != nil {
 		return nil
 	}
-	return m.ReviewOptional
+	return m.ReviewRequired
 }
 
 type builtinInputs struct {
@@ -336,7 +336,7 @@ func provenanceEvidenceFor(in builtinInputs) core.Evidence {
 		return ev
 	}
 	pv := core.Provenance{Ends: map[string]core.ChainEnds{}, Records: recs, Reviewed: in.reviewed,
-		Optional: baseReviewOptional(in.root, in.base)}
+		Required: baseReviewRequired(in.root, in.base)}
 	for _, p := range rels {
 		pv.Ends[p] = core.ChainEnds{Base: bb[p], Head: hb[p]}
 	}
@@ -345,7 +345,7 @@ func provenanceEvidenceFor(in builtinInputs) core.Evidence {
 }
 
 func protectedEvidenceFor(m *core.Manifest, in builtinInputs) core.Evidence {
-	pd := core.ProtectedDiff{Reviewed: in.reviewed, Optional: baseReviewOptional(in.root, in.base)}
+	pd := core.ProtectedDiff{Reviewed: in.reviewed, Required: baseReviewRequired(in.root, in.base)}
 	for _, f := range in.changed {
 		p := f.Path
 		if strings.HasPrefix(p, core.StateDir+"/") ||
