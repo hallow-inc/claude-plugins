@@ -97,9 +97,41 @@ func ParseJUnit(data []byte) (JUnit, error) {
 		if err := trailing(dec); err != nil {
 			return JUnit{}, err
 		}
+		if err := strayCase(data); err != nil {
+			return JUnit{}, err
+		}
 		var j JUnit
 		j.add(root, start.Name.Local == "testsuite")
 		return j, nil
+	}
+}
+
+func strayCase(data []byte) error {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	var parents []string
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("junit: %w", err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "testcase" {
+				parent := ""
+				if len(parents) > 0 {
+					parent = parents[len(parents)-1]
+				}
+				if parent != "testsuite" && parent != "testsuites" {
+					return fmt.Errorf("junit: <testcase> inside <%s>, want <testsuite> or <testsuites>", parent)
+				}
+			}
+			parents = append(parents, t.Name.Local)
+		case xml.EndElement:
+			parents = parents[:len(parents)-1]
+		}
 	}
 }
 
