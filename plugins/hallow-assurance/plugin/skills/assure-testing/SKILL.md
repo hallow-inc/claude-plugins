@@ -75,8 +75,6 @@ from one seed, so any failure replays exactly.
 
 - Pass clocks, random sources, and I/O as interfaces; production wires the real ones.
 - Make the seed of every generated test visible in its failure message.
-- A component whose `assurance.yaml` entry declares `dst:` is held to the `VER-DST-*` objectives
-  (`assure context` lists them).
 
 ## Formal models and differential testing
 

@@ -45,7 +45,6 @@
         "path": { "$ref": "common.schema.json#/$defs/repoPath" },
         "level": { "$ref": "common.schema.json#/$defs/level" },
         "formal": { "$ref": "#/$defs/formal" },
-        "dst": { "$ref": "#/$defs/dst" },
         "inputs": { "const": true }
       }
     },
@@ -63,14 +62,6 @@
           "minItems": 1,
           "items": { "$ref": "common.schema.json#/$defs/repoPath" }
         }
-      }
-    },
-    "dst": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["harness"],
-      "properties": {
-        "harness": { "$ref": "common.schema.json#/$defs/repoPath" }
       }
     }
   }

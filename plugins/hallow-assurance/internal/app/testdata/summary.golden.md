@@ -8,7 +8,7 @@ Commit `7330276f12e1`, 3 changed files since `origin/master` (`7330276f12e1`), c
 | CODE-RESOURCE-BOUNDS | go | fail |
 | IND-VERIFIER-DISTINCT | — | waived |
 | VER-TESTS-PASS | go | fail |
-| VER-TRACE-REQ | — | advisory-fail |
+| FM-COMPLETE | — | advisory-fail |
 
 ### CODE-RESOURCE-BOUNDS (go): fail
 
@@ -43,9 +43,9 @@ Commit `7330276f12e1`, 3 changed files since `origin/master` (`7330276f12e1`), c
 - failing test: example.com/m/p.TestX: boom
   p_test.go:9: boom
 
-### VER-TRACE-REQ: advisory-fail
+### FM-COMPLETE: advisory-fail
 
-- no adapter lists VER-TRACE-REQ
+- no adapter lists FM-COMPLETE
 
 ### Expired waivers
 

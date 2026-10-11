@@ -43,7 +43,7 @@ const envMessage = "golangci-lint 2.13.2 is pinned by mise.toml but is not on PA
 var envWaivers = func() string {
 	var b strings.Builder
 	for _, id := range []string{"CODE-RESOURCE-BOUNDS", "CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE",
-		"VER-TRACE-REQ", "VER-FAIL-ON-BASE", "VER-TEST-BUDGET", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
+		"VER-FAIL-ON-BASE", "VER-TEST-BUDGET", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
 		b.WriteString("- {objective: " + id + ", scope: '**', rationale: the canned adapter in this test produces no evidence, approver: owner, expires: 2099-01-01}\n")
 	}
 	return b.String()

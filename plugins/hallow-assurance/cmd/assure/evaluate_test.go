@@ -107,15 +107,19 @@ func TestEvaluateNothingChangedExitsZeroWithEmptyReport(t *testing.T) {
 }
 
 func TestEvaluateUnproducedObjectiveFailsWithoutWaiver(t *testing.T) {
-	r := reviewedGoRepo(t)
+	r := goRepo(t)
+	r.write("assurance.yaml", "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents:\n"+
+		"  - {path: 'p/**', level: B, formal: {model: formal/P, challenge: formal/P/C.lean, link: drt}}\n"+
+		"human_review: {B: required}\nprovenance: true\n")
+	r.git("commit", "-qam", "formal component, require review")
 	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
 	if code, _, _ := assure("evaluate", "--changed-from", "HEAD"); code != 1 {
 		t.Fatalf("exit %d, want 1: missing evidence must block", code)
 	}
 	rep, _ := readReport(t, r)
-	e, ok := entry(rep, "VER-TRACE-REQ", "")
-	if !ok || e.Status != "advisory-fail" || len(e.Details) != 1 || e.Details[0] != "no adapter lists VER-TRACE-REQ" {
-		t.Fatalf("VER-TRACE-REQ (advisory at B): %+v %v", e, ok)
+	e, ok := entry(rep, "FM-COMPLETE", "")
+	if !ok || e.Status != "advisory-fail" || len(e.Details) != 1 || e.Details[0] != "no adapter lists FM-COMPLETE" {
+		t.Fatalf("FM-COMPLETE (advisory at B, no adapter lists it): %+v %v", e, ok)
 	}
 	ind, ok := entry(rep, "IND-VERIFIER-DISTINCT", "")
 	if !ok || ind.Status != "fail" || len(ind.Details) != 1 || !strings.HasPrefix(ind.Details[0], "p/p.go: gap") {
