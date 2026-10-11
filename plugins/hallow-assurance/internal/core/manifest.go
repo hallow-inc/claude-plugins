@@ -17,7 +17,6 @@ type Component struct {
 	Level     Level
 	Challenge string
 	Formal    bool
-	DST       bool
 	Inputs    bool
 }
 
@@ -95,7 +94,6 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 			comp.Formal = true
 			comp.Challenge = f["challenge"].(string)
 		}
-		_, comp.DST = cm["dst"]
 		_, comp.Inputs = cm["inputs"]
 		m.Components = append(m.Components, comp)
 	}

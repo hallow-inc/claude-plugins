@@ -82,8 +82,7 @@ func TestEveryCrossFieldRuleIsEnforcedAtItsLocation(t *testing.T) {
 		}
 		if absent != "" {
 			cs = append(cs,
-				corruption{"threshold for absent level", fmt.Sprintf("/%d/threshold/%s", i, absent), func(o map[string]any) { o["threshold"].(map[string]any)[absent] = 1 }},
-				corruption{"independence for absent level", fmt.Sprintf("/%d/independence/%s", i, absent), func(o map[string]any) { o["independence"] = map[string]any{absent: "tier1"} }})
+				corruption{"threshold for absent level", fmt.Sprintf("/%d/threshold/%s", i, absent), func(o map[string]any) { o["threshold"].(map[string]any)[absent] = 1 }})
 		}
 		if len(objs) > 1 {
 			j := (i + 1) % len(objs)
@@ -110,6 +109,11 @@ func TestEmbeddedStarterCatalogLoads(t *testing.T) {
 	}
 	if len(c.Objectives) == 0 {
 		t.Fatal("v0 has no objectives")
+	}
+	for _, o := range c.Objectives {
+		if o.ID == "VER-TRACE-REQ" || strings.HasPrefix(o.ID, "VER-DST-") {
+			t.Errorf("v0 contains %s, whose evidence no adapter produces, so it can only ever fail closed", o.ID)
+		}
 	}
 }
 

@@ -35,12 +35,6 @@
   levels: { A: required, B: required, C: required, D: required }
   evidence: test.junit
 
-- id: VER-TRACE-REQ
-  title: Every requirement ID has tests; at level A every test traces to a requirement
-  source: [DO-178B requirements-based testing]
-  levels: { A: required, B: advisory }
-  evidence: trace.report
-
 - id: VER-MUTATION-CHANGED
   title: Tests on changed code kill mutants
   source: [DO-178B 6.4.4.2 (alternative to MC/DC)]
@@ -86,7 +80,6 @@
   title: Verification authored by a different agent or human than implementation
   source: [DO-178B independence, NASA-STD-8739.8]
   levels: { A: required, B: required }
-  independence: { A: tier3, B: tier1 }
   evidence: provenance.chain
 
 - id: CFG-PROTECTED
@@ -129,31 +122,3 @@
   levels: { A: advisory, B: advisory, C: advisory }
   evidence: drt.run
   applies_to: formal
-
-- id: VER-DST-REPLAY
-  title: A failing seed replays to an identical trace digest
-  source: [TigerBeetle VOPR]
-  levels: { A: advisory, B: advisory, C: advisory }
-  evidence: dst.replay
-  applies_to: dst
-
-- id: VER-DST-FAULTS
-  title: Every declared fault class fired at least once across the seed set
-  source: [TigerBeetle VOPR]
-  levels: { A: advisory, B: advisory, C: advisory }
-  evidence: dst.faults
-  applies_to: dst
-
-- id: VER-DST-LIVENESS
-  title: At least one liveness run in which faults heal or freeze and the core converges
-  source: [TigerBeetle VOPR liveness mode]
-  levels: { A: advisory, B: advisory, C: advisory }
-  evidence: dst.liveness
-  applies_to: dst
-
-- id: VER-DST-BUDGET
-  title: Aggregate simulated time meets the target at a minimum acceleration ratio
-  source: [TigerBeetle VOPR]
-  levels: { A: advisory, B: advisory, C: advisory }
-  evidence: dst.budget
-  applies_to: dst

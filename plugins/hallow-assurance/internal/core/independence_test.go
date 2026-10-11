@@ -261,9 +261,6 @@ func (w indWorld) expect(o Objective) indExpect {
 				e.failing[f.Path] = true
 			}
 		}
-		if tier := o.Independence[f.Level]; tier == "tier2" || (tier == "tier3" && w.pv.Required[f.Level]) {
-			e.failing[f.Path] = true
-		}
 	}
 	return e
 }
@@ -303,11 +300,16 @@ func splitDetails(t interface{ Fatalf(string, ...any) }, details []string, paths
 	return s
 }
 
-func TestIndependenceMatchesTheTier1Oracle(t *testing.T) {
+func TestIndependenceMatchesTheChainAndRoleOracle(t *testing.T) {
 	o := catalogObjective(t, "IND-VERIFIER-DISTINCT")
 	rapid.Check(t, func(t *rapid.T) {
 		w := indWorldGen(t)
 		got := w.decide(o)
+		for _, line := range got.Details {
+			if strings.Contains(line, "tier2") || strings.Contains(line, "tier3") {
+				t.Fatalf("detail names a tier, but every level applies the same chain and role rules: %q", line)
+			}
+		}
 		e := w.expect(o)
 		want := Pass
 		if len(e.failing) > 0 {
@@ -358,10 +360,10 @@ func TestOptionalReviewOnlyExcusesGapsAndProtectedChanges(t *testing.T) {
 			}
 		}
 		for _, line := range failLines(base.Details) {
-			if slices.Contains(relaxed.Details, line) || strings.Contains(line, "gap") || strings.Contains(line, "needs tier3") {
+			if slices.Contains(relaxed.Details, line) || strings.Contains(line, "gap") {
 				continue
 			}
-			t.Fatalf("optional removed a failure that is neither a gap nor tier3's approval %q", line)
+			t.Fatalf("optional removed a failure that is not a gap %q", line)
 		}
 		checkProtectedOptional(t, prot, w)
 	})
@@ -432,9 +434,9 @@ func TestIndependenceScenarios(t *testing.T) {
 			Provenance{Ends: indEnds("b0", "", indTst), Records: one(indTst, Pruner, "b0", "")}, Pass, nil},
 		{"the role comes from the changed file, not the record", []ChangedFile{indTst},
 			Provenance{Ends: indEnds("b0", "b1", indTst), Records: recordRoleSource}, Fail, []string{Implementer}},
-		{"level A change, review required, needs tier3", []ChangedFile{indA},
-			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Verifier, "b0", "b1"), Required: reqA}, Fail, []string{indA.Path, "tier3"}},
-		{"level A change, review optional, evaluates as tier1", []ChangedFile{indA},
+		{"level A change, review required", []ChangedFile{indA},
+			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Verifier, "b0", "b1"), Required: reqA}, Pass, nil},
+		{"level A change, review optional", []ChangedFile{indA},
 			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Verifier, "b0", "b1")}, Pass, nil},
 		{"level A role violation, review optional, fails", []ChangedFile{indA},
 			Provenance{Ends: indEnds("b0", "b1", indA), Records: one(indA, Implementer, "b0", "b1")}, Fail, []string{indA.Path, Implementer}},

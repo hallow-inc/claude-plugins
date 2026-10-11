@@ -65,9 +65,6 @@ func componentLine(c Component) string {
 	if c.Inputs {
 		tags = append(tags, "inputs")
 	}
-	if c.DST {
-		tags = append(tags, "dst")
-	}
 	suffix := ""
 	if len(tags) > 0 {
 		suffix = " [" + strings.Join(tags, ", ") + "]"
@@ -106,7 +103,7 @@ func RenderContext(m *Manifest, only []string) string {
 		for _, block := range []struct {
 			on   bool
 			name string
-		}{{c.Formal, "formal"}, {c.Inputs, "inputs"}, {c.DST, "dst"}} {
+		}{{c.Formal, "formal"}, {c.Inputs, "inputs"}} {
 			if block.on {
 				fmt.Fprintf(&b, "\nObjectives for %s (%s, level %s):\n", c.Glob, block.name, c.Level)
 				writeObjectives(&b, m.Catalog.Objectives, c.Level, block.name, m.Provenance)

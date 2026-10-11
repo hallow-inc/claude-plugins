@@ -189,11 +189,14 @@ func TestContextScenarios(t *testing.T) {
 	if !regexpLine(out, "VER-MUTATION-CHANGED", "required") {
 		t.Errorf("VER-MUTATION-CHANGED not required at B:\n%s", out)
 	}
-	if regexpLine(out, "VER-TRACE-REQ", "required") {
-		t.Errorf("VER-TRACE-REQ listed as required at B")
+	if regexpLine(out, "VER-COVERAGE-RESOLUTION", "required") {
+		t.Errorf("VER-COVERAGE-RESOLUTION listed as required at B, where the catalog makes it advisory")
 	}
-	if strings.Contains(out, "FM-") || strings.Contains(out, "VER-DST-") {
-		t.Errorf("formal/dst objectives listed without a declaring component")
+	if strings.Contains(out, "FM-") {
+		t.Errorf("formal objectives listed without a declaring component")
+	}
+	if strings.Contains(out, "VER-TRACE-REQ") || strings.Contains(out, "VER-DST-") {
+		t.Errorf("context lists objectives no adapter can decide:\n%s", out)
 	}
 	if !strings.Contains(out, "assure reference go") {
 		t.Errorf("Go adapter installed but context does not point at assure reference go:\n%s", out)

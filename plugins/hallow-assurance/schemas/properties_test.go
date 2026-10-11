@@ -75,6 +75,7 @@ var (
 	textGen   = rapid.StringMatching(`[A-Za-z][A-Za-z0-9 ]{0,20}`)
 	blobGen   = rapid.OneOf(rapid.StringMatching(`[0-9a-f]{40}`), rapid.StringMatching(`[0-9a-f]{64}`))
 	levelKeys = []string{"A", "B", "C", "D"}
+	appliesTo = []string{"formal", "inputs", "fix"}
 )
 
 func levelSubset(t *rapid.T, label string, min int) []string {
@@ -148,7 +149,7 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 		r.bad(p, "level", badLevel...)
 		r.bad("/components", idx(i), "x")
 		r.bad(p, "formal", "x", map[string]any{"model": "m", "challenge": "c", "link": "lean"})
-		r.bad(p, "dst", "x", map[string]any{"harness": "/abs"})
+		r.add("dst block at "+p, p, op{at: p, key: "dst", val: map[string]any{"harness": pathGen.Draw(t, "h")}})
 		if rapid.Bool().Draw(t, "formal") {
 			c["formal"] = map[string]any{"model": pathGen.Draw(t, "m"), "challenge": pathGen.Draw(t, "ch"), "link": rapid.SampledFrom([]string{"drt", "conformance", "none"}).Draw(t, "link")}
 			fp := p + "/formal"
@@ -157,13 +158,6 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 			r.bad(fp, "model", badPath...)
 			r.bad(fp, "challenge", badPath...)
 			r.bad(fp, "link", "lean", 1)
-		}
-		if rapid.Bool().Draw(t, "dst") {
-			c["dst"] = map[string]any{"harness": pathGen.Draw(t, "h")}
-			dp := p + "/dst"
-			r.closed(dp)
-			r.required(dp, "harness")
-			r.bad(dp, "harness", badPath...)
 		}
 		comps = append(comps, c)
 	}
@@ -197,18 +191,13 @@ var catalogGen = rapid.Custom(func(t *rapid.T) sample {
 		r.bad(p, "source", "x", []any{}, []any{""}, []any{7})
 		r.bad(p, "levels", "x", map[string]any{}, map[string]any{"E": "required"}, map[string]any{"A": "mandatory"})
 		r.bad(p, "evidence", badEv...)
-		r.bad(p, "independence", "x", map[string]any{"E": "tier1"}, map[string]any{"A": "tier4"})
+		r.add("independence at "+p, p, op{at: p, key: "independence", val: map[string]any{levelGen.Draw(t, "ind level"): "tier1"}})
 		r.bad(p, "threshold", "x", map[string]any{"E": 1}, map[string]any{"A": 101}, map[string]any{"A": -1}, map[string]any{"A": "80"})
 		r.bad(p, "implementations", "x", map[string]any{"Go": "t"}, map[string]any{"go": ""}, map[string]any{"go": 7})
 		r.bad(p, "alternative_for", badObjID...)
-		r.bad(p, "applies_to", "lean", 1)
-		if rapid.Bool().Draw(t, "ind") {
-			ind := map[string]any{}
-			for _, l := range levelSubset(t, "ind", 1) {
-				ind[l] = rapid.SampledFrom([]string{"tier1", "tier2", "tier3"}).Draw(t, "tier")
-			}
-			o["independence"] = ind
-		}
+		r.bad(p, "applies_to", "dst", 1, rapid.StringMatching(`[ -~]{0,12}`).Filter(func(s string) bool {
+			return !slices.Contains(appliesTo, s)
+		}).Draw(t, "bad applies"))
 		if rapid.Bool().Draw(t, "thr") {
 			thr := map[string]any{}
 			for _, l := range levelSubset(t, "thr", 1) {
@@ -223,7 +212,7 @@ var catalogGen = rapid.Custom(func(t *rapid.T) sample {
 			o["alternative_for"] = objIDGen.Draw(t, "alt")
 		}
 		if rapid.Bool().Draw(t, "applies") {
-			o["applies_to"] = rapid.SampledFrom([]string{"formal", "dst"}).Draw(t, "applies")
+			o["applies_to"] = rapid.SampledFrom(appliesTo).Draw(t, "applies")
 		}
 		objs = append(objs, o)
 	}
