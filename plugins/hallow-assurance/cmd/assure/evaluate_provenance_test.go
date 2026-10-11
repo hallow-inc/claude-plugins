@@ -22,7 +22,7 @@ const (
 var xxWaivers = func() string {
 	var b strings.Builder
 	for _, id := range []string{"CODE-ZERO-WARNINGS", "CODE-RESOURCE-BOUNDS", "CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE",
-		"VER-TESTS-PASS", "VER-TRACE-REQ", "VER-MUTATION-CHANGED", "VER-FAIL-ON-BASE", "VER-TEST-BUDGET", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
+		"VER-TESTS-PASS", "VER-MUTATION-CHANGED", "VER-FAIL-ON-BASE", "VER-TEST-BUDGET", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
 		b.WriteString("- {objective: " + id + ", scope: '**', rationale: the fake adapter in this test produces no evidence, approver: owner, expires: 2099-01-01}\n")
 	}
 	return b.String()

@@ -49,7 +49,6 @@ type ChangedFile struct {
 	Path   string
 	Level  Level
 	Formal bool
-	DST    bool
 	Inputs bool
 	Fix    bool
 	Role   Role
@@ -61,7 +60,7 @@ func (m *Manifest) ChangedFile(path string) ChangedFile {
 	f := ChangedFile{Path: path, Level: level}
 	if comp >= 0 {
 		c := m.Components[comp]
-		f.Formal, f.DST, f.Inputs = c.Formal, c.DST, c.Inputs
+		f.Formal, f.Inputs = c.Formal, c.Inputs
 	}
 	return f
 }
@@ -70,8 +69,6 @@ func inScope(o Objective, f ChangedFile) bool {
 	switch o.AppliesTo {
 	case "formal":
 		return f.Formal
-	case "dst":
-		return f.DST
 	case "inputs":
 		return f.Inputs
 	case "fix":

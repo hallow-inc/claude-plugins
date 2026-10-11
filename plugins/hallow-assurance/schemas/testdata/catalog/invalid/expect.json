@@ -4,6 +4,8 @@
   "threshold-out-of-range.yaml": [{"location": "/0/threshold/A", "keyword": "maximum"}],
   "unknown-level-status.yaml": [{"location": "/0/levels/A", "keyword": "enum"}],
   "unknown-applies-to.yaml": [{"location": "/0/applies_to", "keyword": "enum"}],
+  "applies-to-dst.yaml": [{"location": "/0/applies_to", "keyword": "enum"}],
+  "independence-field.yaml": [{"location": "/0", "keyword": "additionalProperties"}],
   "budget-floor-zero.yaml": [{"location": "/0/budget/B/floor", "keyword": "minimum"}],
   "budget-lines-zero.yaml": [{"location": "/0/budget/B/lines_per_case", "keyword": "minimum"}],
   "budget-fractional.yaml": [{"location": "/0/budget/B/floor", "keyword": "type"}],

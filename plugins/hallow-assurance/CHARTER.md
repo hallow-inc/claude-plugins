@@ -32,7 +32,7 @@ model**, not their paperwork.
    protocol. They classify files, run tools, and emit normalized evidence. They never decide
    pass/fail.
 3. **An objectives catalog** — language-neutral objectives (our Annex A), each with the levels it
-   applies at, independence requirements, evidence type, thresholds, and per-language
+   applies at, evidence type, thresholds, and per-language
    implementations or declared alternatives.
 4. **A Claude Code plugin** (`hallow-assurance`) — hooks, subagents, skills, and commands that make
    agents follow the framework during development. Distributed through the existing Hallow plugin
@@ -97,7 +97,7 @@ v1:
 
 - `assure evaluate` is a required check on the pilot repo, blocking on levels A–B
 - The TypeScript adapter ships with **zero** diffs to `plugin/` and `internal/core/`
-- Independence Tier 1 verified from provenance on every PR touching level A–B code in a repo with
+- Verifier independence verified from provenance on every PR touching level A–B code in a repo with
   `provenance: true`
 - Each adapter passes its qualification fixtures in CI
 - Within six weeks of blocking mode: at least a few real bugs attributed to framework layers
@@ -182,8 +182,6 @@ components:
       spec: formal/Ledger/Spec/**                  # optional; trusted definitions; protected
       link: conformance                            # conformance | drt | none
       code: [internal/ledger/**]                   # optional; changes here bring FM-LINK into scope
-    dst:                                           # optional: deterministic simulation harness
-      harness: ./sim/ledger
 default_level: C
 protected:                                         # optional: extra paths guard denies to agents
   - .github/workflows/**
@@ -201,7 +199,6 @@ latter two match, the stricter of their levels applies. Unmatched paths take `de
   title: Tests on changed code kill mutants
   source: [DO-178B 6.4.4.2 (alternative to MC/DC)]
   levels: { A: required, B: required, C: advisory }
-  independence: { A: tier3, B: tier1 }
   evidence: mutation.report
   threshold: { A: 80, B: 65, C: 50 }
   implementations:
@@ -210,7 +207,7 @@ latter two match, the stricter of their levels applies. Unmatched paths take `de
   alternative_for: VER-STRUCT-MCDC
 ```
 
-Optional `applies_to: formal | dst` restricts an objective to components that declare that block;
+Optional `applies_to: formal` restricts an objective to components that declare a `formal:` block;
 `applies_to: inputs` restricts it to components that declare `inputs: true`;
 `applies_to: fix` restricts it to changes with a commit, between the ref and `HEAD`, carrying the
 git trailer `Assure-Kind: fix`.
@@ -325,19 +322,15 @@ changes pass and are listed as unreviewed; role violations, `agent_id` conflicts
 provenance still fail. The value is read from the manifest at the base ref, so a PR cannot relax
 its own gate.
 
-Independence tiers (computed by the evaluator):
-
-| Tier | Meaning | Evidence |
-|---|---|---|
-| tier1 | Distinct context: test-role files' chains written only by verifier-side agent types (`verifier`, `pruner`: the pruner edits tests and is not the code's author); source- and config-role files never by them; unclassified files (fixtures) by either; distinct `agent_id` (the main thread is its own identity) | provenance chains |
-| tier3 | tier1 + approving review from someone other than the PR author | GitHub review API |
-
-There is no tier2: a model reviewer is not code verification. At a review-optional level, tier3 is
-evaluated as tier1, since its approval is optional. At a review-required level, until `tier3-review`
-ships, the evaluator fails `tier2`/`tier3` closed, so level A with required review cannot pass.
+Independence (computed by the evaluator from provenance chains, the same rule at levels A and B):
+test-role files' chains are written only by verifier-side agent types (`verifier`, `pruner`: the
+pruner edits tests and is not the code's author); source- and config-role files never by them;
+unclassified files (fixtures) by either; distinct `agent_id` (the main thread is its own identity).
+`human_review` alone decides where a non-author approval is also needed. A model reviewer is not
+code verification and never counts.
 
 `guard` denies main-thread (no `agent_type`) edits to test-role files in level A–B components, with
-a message to spawn `hallow-assurance:verifier`, so the tier1 failure surfaces at edit time rather
+a message to spawn `hallow-assurance:verifier`, so the independence failure surfaces at edit time rather
 than in CI.
 
 **Adapter protocol v0** — subprocess, JSON on stdin/stdout:
@@ -383,27 +376,21 @@ Schemas: `schemas/adapter-{describe,classify,run,tools}.schema.json`; `lint` is 
 | CODE-COMPLEXITY | Cyclomatic complexity ≤ 15 per function (P10-4) | req | req | adv | – |
 | CODE-NO-UNSAFE | No unsafe/reflect/eval outside allow-list (P10-8, P10-9) | req | req | adv | – |
 | VER-TESTS-PASS | Tests pass with race/shuffle where supported | req | req | req | req |
-| VER-TRACE-REQ | Every requirement ID has tests; level A: every test traces to a requirement | req | adv | – | – |
 | VER-MUTATION-CHANGED | Mutation threshold on changed code | req | req | adv | – |
 | VER-FAIL-ON-BASE | Bugfix tests fail on base commit | req | req | req | adv |
 | VER-TEST-BUDGET | New test cases within budget or justified | req | req | req | adv |
 | VER-ROBUST-FUZZ | Fuzz targets exist and ran for input-handling code | req | req | adv | – |
 | VER-COVERAGE-RESOLUTION | Uncovered code has an approved resolution (missing test / missing req / dead / deactivated) | req | adv | – | – |
-| IND-VERIFIER-DISTINCT | Verification authored by a different agent/human than implementation | tier3 | tier1 | – | – |
+| IND-VERIFIER-DISTINCT | Verification authored by a different agent/human than implementation | req | req | – | – |
 | CFG-PROTECTED | No agent-authored changes to protected files | req | req | req | req |
 | FM-COMPLETE | Lean model builds with `--wfail`; zero `sorry`; axiom-audit reports no violations | req | req | adv | – |
 | FM-AXIOMS | Axioms used ⊆ {propext, Classical.choice, Quot.sound}; native-evaluation axioms need a waiver | req | req | adv | – |
 | FM-RECHECK | Independent kernel re-check passes (`leanchecker` at every level; `lake comparator` later, once Lean ≥ 4.35 runs on Linux) | req | req | adv | – |
 | FM-TRACE | Each requirement in `.assure/requirements.yaml` cites challenge theorems that build, use standard axioms only, and prove by reference over the protected `Spec` library | req | req | adv | – |
 | FM-LINK | Linked tests named in `.assure/requirements.yaml` pass and each reports ≥ N inputs (N = 100), same commit | req | req | adv | – |
-| VER-DST-REPLAY | A failing seed replays to an identical trace digest | adv | adv | adv | – |
-| VER-DST-FAULTS | Every declared fault class fired at least once across the seed set | adv | adv | adv | – |
-| VER-DST-LIVENESS | At least one liveness run (faults heal or freeze; core must converge) | adv | adv | adv | – |
-| VER-DST-BUDGET | Aggregate simulated time ≥ T at a minimum acceleration ratio | adv | adv | adv | – |
 
-FM-* objectives apply only to components that declare `formal:`; VER-DST-* only to components that
-declare `dst:`; FM-LINK also applies to changed files matching a component's `formal.code` globs.
-VER-DST-* are advisory in v1. FM-* gate as the table states once their milestone ships (M7a for
+FM-* objectives apply only to components that declare `formal:`; FM-LINK also applies to changed
+files matching a component's `formal.code` globs. FM-* gate as the table states once their milestone ships (M7a for
 COMPLETE, AXIOMS and RECHECK; M7b for TRACE; M7c for LINK) and are advisory until then. A `formal:`
 component without `challenge` or `spec` fails FM-TRACE closed. Lean evidence without FM-LINK counts
 only toward design- and spec-level objectives, never code-level ones: a proof about a model is not
@@ -527,7 +514,7 @@ never reassigned, and new work takes a letter suffix.
 **M4a — Subagents, provenance, independence**
 - Three subagents; role rules in `guard` keyed on `agent_type`; frontmatter `tools` /
   `disallowedTools` as defense-in-depth
-- `assure record` + IND-VERIFIER-DISTINCT (tier1) and CFG-PROTECTED evaluation; `--reviews` input;
+- `assure record` + IND-VERIFIER-DISTINCT and CFG-PROTECTED evaluation; `--reviews` input;
   manifest `human_review`
 - ✅ Evaluator rejects a PR where implementer == verifier on level B code
 - Provenance became opt-in in M4c (`provenance-opt-in`); the record and independence check above run
@@ -594,6 +581,7 @@ never reassigned, and new work takes a letter suffix.
 - ✅ A linked test without the input marker fails FM-LINK
 
 **M8 (post-v1) — DST runner**
+- Re-adds the `VER-DST-*` objectives to the catalog and the `dst:` block to the manifest
 - Seed runner (budget, timeout, concurrency) and seed-record store with failing-first retention
 - Replay check: run a seed twice, compare trace digests → VER-DST-REPLAY
 - ✅ A deliberately nondeterministic harness fails VER-DST-REPLAY
@@ -616,9 +604,6 @@ stays authoritative) once a stable Go implementation and JSON mapping exist.
   per failure fingerprint for the whole session, so an unchanged failure stops blocking after 3
   even across prompts; failures outside the agent's reach (missing snapshot, adapter that cannot
   start, `assure` itself missing) allow the stop with a `systemMessage` on the first attempt.
-- Level A with `human_review: {A: required}` cannot pass until `tier3-review` ships (tier3 =
-  tier1 + non-author approving review; the evaluator fails `tier2`/`tier3` closed today).
-  Level B (tier1) is unaffected.
 - `TODO(decide)` Whether FM-LINK + FM-COMPLETE may substitute for VER-MUTATION-CHANGED at level A
   (`alternative_for`). Leaning no for v1.
 

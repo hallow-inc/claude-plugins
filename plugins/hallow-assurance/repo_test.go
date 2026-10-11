@@ -86,7 +86,8 @@ func TestFormalAndSimulationObjectivesStayAdvisory(t *testing.T) {
 		case strings.HasPrefix(id, "FM-"):
 			family = "formal"
 		case strings.HasPrefix(id, "VER-DST-"):
-			family = "dst"
+			t.Errorf("%s: no adapter produces simulation evidence, so the catalog must not carry it", id)
+			continue
 		default:
 			continue
 		}

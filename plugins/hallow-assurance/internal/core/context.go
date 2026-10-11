@@ -19,9 +19,12 @@ func (m *Manifest) ProtectedList() []string {
 	return out
 }
 
-func writeObjectives(b *strings.Builder, objs []Objective, level Level, appliesTo string) {
+func writeObjectives(b *strings.Builder, objs []Objective, level Level, appliesTo string, provenance bool) {
 	for _, status := range []string{"required", "advisory"} {
 		for _, o := range objs {
+			if o.Evidence == ProvenanceEvidence && !provenance {
+				continue
+			}
 			if (o.AppliesTo == appliesTo || appliesTo == "" && o.AppliesTo == "fix") && o.Levels[level] == status {
 				title := o.Title
 				if o.AppliesTo == "fix" {
@@ -59,8 +62,8 @@ func componentLine(c Component) string {
 	if c.Formal {
 		tags = append(tags, "formal")
 	}
-	if c.DST {
-		tags = append(tags, "dst")
+	if c.Inputs {
+		tags = append(tags, "inputs")
 	}
 	suffix := ""
 	if len(tags) > 0 {
@@ -91,7 +94,7 @@ func RenderContext(m *Manifest, only []string) string {
 			continue
 		}
 		fmt.Fprintf(&b, "\nObjectives at level %s:\n", l)
-		writeObjectives(&b, m.Catalog.Objectives, l, "")
+		writeObjectives(&b, m.Catalog.Objectives, l, "", m.Provenance)
 	}
 	for i, c := range m.Components {
 		if !comps[i] {
@@ -100,10 +103,10 @@ func RenderContext(m *Manifest, only []string) string {
 		for _, block := range []struct {
 			on   bool
 			name string
-		}{{c.Formal, "formal"}, {c.DST, "dst"}} {
+		}{{c.Formal, "formal"}, {c.Inputs, "inputs"}} {
 			if block.on {
 				fmt.Fprintf(&b, "\nObjectives for %s (%s, level %s):\n", c.Glob, block.name, c.Level)
-				writeObjectives(&b, m.Catalog.Objectives, c.Level, block.name)
+				writeObjectives(&b, m.Catalog.Objectives, c.Level, block.name, m.Provenance)
 			}
 		}
 	}

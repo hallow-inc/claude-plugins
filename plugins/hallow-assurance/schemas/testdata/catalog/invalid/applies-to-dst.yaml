@@ -1,0 +1,6 @@
+- id: SIM-SEEDS
+  title: Simulation runs clean across seeds
+  source: [hallow-assurance charter]
+  levels: { A: advisory }
+  evidence: dst.report
+  applies_to: dst
