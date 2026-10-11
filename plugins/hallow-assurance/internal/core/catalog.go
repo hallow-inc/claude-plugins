@@ -33,6 +33,8 @@ type Budget struct {
 
 const budgetEvidence = "test.budget"
 
+const ProvenanceEvidence = "provenance.chain"
+
 type Catalog struct {
 	Version    string
 	Objectives []Objective

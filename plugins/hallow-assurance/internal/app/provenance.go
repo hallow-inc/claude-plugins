@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	provenanceEvidence = "provenance.chain"
+	provenanceEvidence = core.ProvenanceEvidence
 	protectedEvidence  = "protected.diff"
 )
 
