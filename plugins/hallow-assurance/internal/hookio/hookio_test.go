@@ -235,6 +235,9 @@ func TestSessionStartInjectsContextAndSnapshots(t *testing.T) {
 	if code != 0 || !strings.Contains(ctx, "Default level: B") {
 		t.Fatalf("got %d %v", code, out)
 	}
+	if strings.Contains(ctx, "IND-VERIFIER-DISTINCT") {
+		t.Fatalf("manifest has no provenance key, yet SessionStart context lists IND-VERIFIER-DISTINCT, which evaluate cannot decide without the provenance chain:\n%s", ctx)
+	}
 	if _, err := os.Stat(core.SnapshotPath(root, session)); err != nil {
 		t.Fatalf("no snapshot: %v", err)
 	}

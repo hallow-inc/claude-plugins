@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -99,6 +100,50 @@ func TestContextListsInputsObjectivesOnlyUnderInputsComponents(t *testing.T) {
 		}
 		for _, comp := range m.Components {
 			checkInputsComponent(t, fuzz, comp, out, sections)
+		}
+	})
+}
+
+func TestContextListsProvenanceObjectivesOnlyWithProvenanceOn(t *testing.T) {
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prov []Objective
+	for _, o := range c.Objectives {
+		if o.Evidence == "provenance.chain" {
+			prov = append(prov, o)
+		}
+	}
+	if !slices.ContainsFunc(prov, func(o Objective) bool { return o.ID == "IND-VERIFIER-DISTINCT" && o.Levels["B"] == "required" }) {
+		t.Fatalf("catalog objectives with evidence provenance.chain = %+v, want IND-VERIFIER-DISTINCT required at B among them; the spec scenarios are stated for that row", prov)
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		m, _ := inputsManifest(t, c)
+		m.Provenance = rapid.Bool().Draw(t, "provenance")
+		out := RenderContext(m, nil)
+		for header, rows := range contextSections(out) {
+			l, ok := strings.CutPrefix(header, "Objectives at level ")
+			if !ok {
+				continue
+			}
+			l = strings.TrimSuffix(l, ":")
+			for _, o := range prov {
+				want := ""
+				if s := o.Levels[Level(l)]; m.Provenance && s != "" {
+					want = o.ID + " " + s
+				}
+				if got := rowFor(rows, o.ID); got != want {
+					t.Fatalf("provenance=%v: under %q the %s row = %q, want %q; without the provenance chain evaluate cannot decide it, so context must list it only when provenance is on, with the catalog's status\n%s", m.Provenance, header, o.ID, got, want, out)
+				}
+			}
+		}
+		if !m.Provenance {
+			for _, o := range prov {
+				if strings.Contains(out, o.ID) {
+					t.Fatalf("provenance off, yet %s appears\n%s", o.ID, out)
+				}
+			}
 		}
 	})
 }
