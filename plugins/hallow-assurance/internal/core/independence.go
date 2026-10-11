@@ -123,10 +123,6 @@ func unreviewed(path, what string, reviewed bool, required map[Level]bool, level
 	return "", false
 }
 
-func unproducedTier(tier string, required bool) bool {
-	return tier == "tier2" || (tier == "tier3" && required)
-}
-
 func independenceFindings(o Objective, changed []ChangedFile, pv Provenance) (out []Finding, notes []string) {
 	byPath := map[string][]ProvRecord{}
 	for _, r := range pv.Records {
@@ -158,9 +154,6 @@ func independenceFindings(o Objective, changed []ChangedFile, pv Provenance) (ou
 			} else {
 				at(fmt.Sprintf("%s: %s: no provenance links its base blob to its HEAD blob", f.Path, what))
 			}
-		}
-		if t := o.Independence[f.Level]; unproducedTier(t, pv.Required[f.Level]) {
-			at(fmt.Sprintf("%s: level %s needs %s; tier2 evidence is not produced yet", f.Path, f.Level, t))
 		}
 	}
 	slices.SortFunc(out, compareFindings)

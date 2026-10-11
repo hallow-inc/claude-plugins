@@ -29,7 +29,7 @@ func goldenReport() EvalReport {
 			{Objective: "CODE-RESOURCE-BOUNDS", Language: "go", Status: core.Fail, Details: many},
 			{Objective: "IND-VERIFIER-DISTINCT", Status: core.Waived, Details: []string{"waived: no adapter lists IND-VERIFIER-DISTINCT"}, Waivers: []core.Waiver{w}},
 			{Objective: "VER-TESTS-PASS", Language: "go", Status: core.Fail, Details: []string{"failing test: example.com/m/p.TestX: boom\np_test.go:9: boom"}},
-			{Objective: "VER-TRACE-REQ", Status: core.AdvisoryFail, Details: []string{"no adapter lists VER-TRACE-REQ"}},
+			{Objective: "FM-COMPLETE", Status: core.AdvisoryFail, Details: []string{"no adapter lists FM-COMPLETE"}},
 		},
 	}
 }

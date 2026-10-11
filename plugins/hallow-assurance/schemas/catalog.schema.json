@@ -30,16 +30,6 @@
           }
         },
         "evidence": { "$ref": "common.schema.json#/$defs/evidenceType" },
-        "independence": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "A": { "$ref": "common.schema.json#/$defs/tier" },
-            "B": { "$ref": "common.schema.json#/$defs/tier" },
-            "C": { "$ref": "common.schema.json#/$defs/tier" },
-            "D": { "$ref": "common.schema.json#/$defs/tier" }
-          }
-        },
         "threshold": {
           "type": "object",
           "additionalProperties": false,
@@ -68,7 +58,7 @@
           }
         },
         "alternative_for": { "$ref": "common.schema.json#/$defs/objectiveId" },
-        "applies_to": { "enum": ["formal", "dst", "inputs", "fix"] }
+        "applies_to": { "enum": ["formal", "inputs", "fix"] }
       }
     },
     "budget": {

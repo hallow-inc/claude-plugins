@@ -47,9 +47,6 @@
     "levelStatus": {
       "enum": ["required", "advisory"]
     },
-    "tier": {
-      "enum": ["tier1", "tier2", "tier3"]
-    },
     "percent": {
       "type": "number",
       "minimum": 0,
