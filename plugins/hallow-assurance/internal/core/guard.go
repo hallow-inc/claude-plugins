@@ -10,7 +10,6 @@ const (
 	Implementer = "hallow-assurance:implementer"
 	Verifier    = "hallow-assurance:verifier"
 	Pruner      = "hallow-assurance:pruner"
-	Inspector   = "hallow-assurance:inspector"
 )
 
 type rule int
@@ -25,7 +24,6 @@ var roleRules = map[string]map[Role]rule{
 	Implementer: {Source: allow, Config: allow, Test: deny, FuzzCorpus: deny, Generated: lowOnly, Unclassified: allow},
 	Verifier:    {Source: deny, Config: deny, Test: allow, FuzzCorpus: allow, Generated: deny, Unclassified: allow},
 	Pruner:      {Source: deny, Config: deny, Test: allow, FuzzCorpus: allow, Generated: deny, Unclassified: allow},
-	Inspector:   {},
 	"":          {Source: allow, Config: allow, Test: lowOnly, FuzzCorpus: lowOnly, Generated: lowOnly, Unclassified: allow},
 }
 

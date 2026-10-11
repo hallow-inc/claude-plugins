@@ -12,7 +12,7 @@ import (
 
 var (
 	indBlobs    = []string{"", "b0", "b1", "b2", "b3"}
-	indAgents   = []string{Implementer, Verifier, Pruner, Inspector, "", "someone:else"}
+	indAgents   = []string{Implementer, Verifier, Pruner, "", "someone:else"}
 	indRoles    = []Role{Source, Test, Generated, FuzzCorpus, Config, Unclassified}
 	indPaths    = []string{"pkg/a.go", "pkg/a_test.go", "pkg/b.go", "testdata/fuzz/x", "README.md"}
 	indSessions = []string{"s1", "s2", "s3"}

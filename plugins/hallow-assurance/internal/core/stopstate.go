@@ -128,11 +128,3 @@ func writeStopState(file string, s StopState) error {
 	}
 	return writeState(file, data)
 }
-
-func InspectionPath(root, session, agent string) string {
-	return filepath.Join(root, StateDir, "inspections", session+"-"+agent+".sarif")
-}
-
-func WriteInspection(root, session, agent string, data []byte) error {
-	return writeState(InspectionPath(root, session, agent), data)
-}

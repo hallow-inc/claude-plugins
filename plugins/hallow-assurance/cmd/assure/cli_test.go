@@ -94,7 +94,6 @@ func TestGuardScenarios(t *testing.T) {
 		{"main thread level-B test", "", "internal/chat/stream_test.go", "deny", "hallow-assurance:verifier"},
 		{"main thread level-C test", "", "low/a_test.go", "allow", ""},
 		{"verifier level-D source", core.Verifier, "tools/gen.go", "deny", "may not edit source"},
-		{"inspector README", "hallow-assurance:inspector", "README.md", "deny", "inspector"},
 		{"verifier level-B test", core.Verifier, "internal/chat/stream_test.go", "allow", ""},
 	}
 	for _, c := range cases {

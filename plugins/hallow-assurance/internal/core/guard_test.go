@@ -12,12 +12,11 @@ var specTable = map[string]map[Role]string{
 	"hallow-assurance:implementer": {"source": "allow", "config": "allow", "test": "deny", "fuzz_corpus": "deny", "generated": "C-D", "unclassified": "allow"},
 	"hallow-assurance:verifier":    {"source": "deny", "config": "deny", "test": "allow", "fuzz_corpus": "allow", "generated": "deny", "unclassified": "allow"},
 	"hallow-assurance:pruner":      {"source": "deny", "config": "deny", "test": "allow", "fuzz_corpus": "allow", "generated": "deny", "unclassified": "allow"},
-	"hallow-assurance:inspector":   {"source": "deny", "config": "deny", "test": "deny", "fuzz_corpus": "deny", "generated": "deny", "unclassified": "deny"},
 	"other":                        {"source": "allow", "config": "allow", "test": "C-D", "fuzz_corpus": "C-D", "generated": "C-D", "unclassified": "allow"},
 }
 
 var (
-	agentGen = rapid.SampledFrom([]string{"", Implementer, Verifier, Pruner, Inspector, "general-purpose", "hallow-assurance:unknown", "Hallow-Assurance:verifier"})
+	agentGen = rapid.SampledFrom([]string{"", Implementer, Verifier, Pruner, "hallow-assurance:inspector", "general-purpose", "hallow-assurance:unknown", "Hallow-Assurance:verifier"})
 	roleGen  = rapid.SampledFrom([]Role{Source, Config, Test, FuzzCorpus, Generated, Unclassified})
 	levelG   = rapid.SampledFrom(levels)
 )
@@ -39,6 +38,17 @@ func TestDecisionMatchesSpecTable(t *testing.T) {
 		}
 		if !got && reason == "" {
 			t.Fatal("deny without a reason")
+		}
+	})
+}
+
+func TestFormerInspectorFollowsMainThreadRow(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		level, role, prot := levelG.Draw(t, "level"), roleGen.Draw(t, "role"), rapid.Bool().Draw(t, "protected")
+		got, _ := Decide("hallow-assurance:inspector", level, role, prot)
+		want, _ := Decide("", level, role, prot)
+		if got != want {
+			t.Fatalf("retired inspector at %s/%s protected=%v: %v, main thread: %v", level, role, prot, got, want)
 		}
 	})
 }
