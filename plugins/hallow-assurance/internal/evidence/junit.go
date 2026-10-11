@@ -3,7 +3,9 @@ package evidence
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 )
 
 type JUnit struct {
@@ -92,9 +94,27 @@ func ParseJUnit(data []byte) (JUnit, error) {
 		if err := dec.DecodeElement(&root, &start); err != nil {
 			return JUnit{}, fmt.Errorf("junit: %w", err)
 		}
+		if err := trailing(dec); err != nil {
+			return JUnit{}, err
+		}
 		var j JUnit
 		j.add(root, start.Name.Local == "testsuite")
 		return j, nil
+	}
+}
+
+func trailing(dec *xml.Decoder) error {
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("junit: %w", err)
+		}
+		if el, ok := tok.(xml.StartElement); ok {
+			return fmt.Errorf("junit: element <%s> after the root element", el.Name.Local)
+		}
 	}
 }
 
