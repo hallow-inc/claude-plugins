@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -251,6 +252,110 @@ func TestJSONLinesErrorsCarryLineNumbers(t *testing.T) {
 				t.Fatalf("got %v, want error at line %d", err, c.line)
 			}
 		})
+	}
+}
+
+type jsonObject struct {
+	ptr string
+	m   map[string]any
+}
+
+func collectObjects(v any, ptr string, out []jsonObject) []jsonObject {
+	switch x := v.(type) {
+	case []any:
+		for i, e := range x {
+			out = collectObjects(e, ptr+"/"+strconv.Itoa(i), out)
+		}
+	case map[string]any:
+		out = append(out, jsonObject{ptr, x})
+		for k, e := range x {
+			out = collectObjects(e, ptr+"/"+escape(k), out)
+		}
+	}
+	return out
+}
+
+func encodeWithDuplicate(t *rapid.T, b *strings.Builder, v any, ptr, dupPtr, dupKey string) {
+	switch x := v.(type) {
+	case []any:
+		b.WriteByte('[')
+		for i, e := range x {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			encodeWithDuplicate(t, b, e, ptr+"/"+strconv.Itoa(i), dupPtr, dupKey)
+		}
+		b.WriteByte(']')
+	case map[string]any:
+		b.WriteByte('{')
+		if ptr == dupPtr {
+			b.WriteString(strconv.Quote(dupKey) + ":0,")
+		}
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteString(strconv.Quote(k) + ":")
+			encodeWithDuplicate(t, b, x[k], ptr+"/"+escape(k), dupPtr, dupKey)
+		}
+		b.WriteByte('}')
+	default:
+		src, err := json.Marshal(x)
+		if err != nil {
+			t.Fatalf("marshal %#v: %v", x, err)
+		}
+		b.Write(src)
+	}
+}
+
+func TestJSONRejectsADuplicateKeyAtAnyDepth(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		root := rapid.MapOfN(keyGen, valueGen(3), 0, 5).Draw(t, "doc")
+		clean, err := json.Marshal(root)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		doc, err := JSON(clean)
+		if err != nil {
+			t.Fatalf("rejected a document without duplicates %s: %v", clean, err)
+		}
+		if !reflect.DeepEqual(normalize(doc.Value), normalize(root)) {
+			t.Fatalf("round trip changed value\nsrc: %s\ngot: %#v", clean, doc.Value)
+		}
+
+		objs := collectObjects(root, "", nil)
+		target := objs[rapid.IntRange(0, len(objs)-1).Draw(t, "object")]
+		key := keyGen.Draw(t, "dupKey")
+		if _, ok := target.m[key]; !ok {
+			target.m[key] = nil
+		}
+		var b strings.Builder
+		encodeWithDuplicate(t, &b, root, "", target.ptr, key)
+		wantPtr := target.ptr + "/" + escape(key)
+
+		_, err = JSON([]byte(b.String()))
+		if err == nil {
+			t.Fatalf("accepted duplicate key %q at %s in %s; the last value would silently replace the first", key, wantPtr, b.String())
+		}
+		if !strings.Contains(err.Error(), key) || !strings.Contains(err.Error(), wantPtr) {
+			t.Fatalf("error %q does not name key %q and pointer %s", err, key, wantPtr)
+		}
+	})
+}
+
+func TestJSONLinesRejectsARepeatedKeyOnItsLine(t *testing.T) {
+	_, err := JSONLines([]byte("{\"v\":0}\n{\"v\":0,\"session\":\"s1\"}\n{\"v\":0,\"session\":\"s1\",\"session\":\"s2\"}\n"))
+	var de *Error
+	if !errors.As(err, &de) {
+		t.Fatalf("got %v, want *Error for the repeated key on line 3", err)
+	}
+	if de.Line != 3 || !strings.Contains(de.Error(), "line 3") || !strings.Contains(de.Msg, "session") {
+		t.Fatalf("error %q (line %d) does not name line 3 and key session", de, de.Line)
 	}
 }
 
