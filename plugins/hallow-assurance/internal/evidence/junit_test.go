@@ -144,6 +144,20 @@ func TestJUnitUnknownRoot(t *testing.T) {
 	}
 }
 
+func TestJUnitSecondRootIsAnError(t *testing.T) {
+	doc := `<testsuite name="a"/><testsuite name="b"><testcase name="TestX" classname="p"><failure/></testcase></testsuite>`
+	if got, err := ParseJUnit([]byte(doc)); err == nil {
+		t.Fatalf("got %+v, nil error; a failing case after the first root must not be hidden as a pass", got)
+	}
+}
+
+func TestJUnitCaseInsideUnknownElementIsAnError(t *testing.T) {
+	doc := `<testsuite name="a"><group><testcase name="x"><failure/></testcase></group></testsuite>`
+	if got, err := ParseJUnit([]byte(doc)); err == nil {
+		t.Fatalf("got %+v, nil error; a failing case wrapped in an unknown element must not be hidden as a pass", got)
+	}
+}
+
 func escape(s string) string {
 	var b strings.Builder
 	_ = xml.EscapeText(&b, []byte(s))

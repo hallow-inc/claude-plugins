@@ -185,7 +185,48 @@ func JSON(data []byte) (Doc, error) {
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return Doc{}, &Error{Msg: "invalid JSON: trailing data after document"}
 	}
+	dup := json.NewDecoder(bytes.NewReader(data))
+	dup.UseNumber()
+	if err := uniqueKeys(dup, ""); err != nil {
+		return Doc{}, &Error{Msg: "invalid JSON: " + err.Error()}
+	}
 	return Doc{Value: v}, nil
+}
+
+func uniqueKeys(dec *json.Decoder, ptr string) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	switch tok {
+	case json.Delim('{'):
+		seen := map[string]bool{}
+		for dec.More() {
+			kt, err := dec.Token()
+			if err != nil {
+				return err
+			}
+			k, _ := kt.(string)
+			p := ptr + "/" + escape(k)
+			if seen[k] {
+				return fmt.Errorf("duplicate key %q at %s", k, p)
+			}
+			seen[k] = true
+			if err := uniqueKeys(dec, p); err != nil {
+				return err
+			}
+		}
+	case json.Delim('['):
+		for i := 0; dec.More(); i++ {
+			if err := uniqueKeys(dec, ptr+"/"+strconv.Itoa(i)); err != nil {
+				return err
+			}
+		}
+	default:
+		return nil
+	}
+	_, err = dec.Token()
+	return err
 }
 
 func JSONLines(data []byte) ([]Doc, error) {
