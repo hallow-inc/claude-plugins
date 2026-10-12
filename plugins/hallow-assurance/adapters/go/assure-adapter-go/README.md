@@ -12,7 +12,6 @@ go build -o "$HOME/go/bin/assure-adapter-go" ./adapters/go/assure-adapter-go
 | Objective | Tool |
 |---|---|
 | `VER-TESTS-PASS`, `VER-FAIL-ON-BASE`, `VER-ROBUST-FUZZ`, `VER-COVERAGE-RESOLUTION` | `go` |
-| `VER-TEST-BUDGET` | built into the adapter |
 | `CODE-ZERO-WARNINGS` | `go vet`, `golangci-lint` v2 |
 | `CODE-CHECK-RETURNS`, `CODE-RESOURCE-BOUNDS` | `golangci-lint` v2 |
 | `CODE-COMPLEXITY`, `CODE-NO-UNSAFE` | built into the adapter |
@@ -58,19 +57,6 @@ is a suite with zero cases. Generated files and files under `testdata/` are not 
 Coverage-guided fuzzing runs nightly in CI (`hallow-assurance-fuzz.yml`, 60 s per target), not in
 `evaluate`. A fuzz worker reruns `TestMain` with the parent's environment, so a test package that
 narrows `PATH` in `TestMain` fails there with "terminated without fuzzing: EOF".
-
-## Test budget
-
-Counted from source, for each changed `.go` file that is not generated:
-
-- `_test.go` file: each top-level `Test*` or `Fuzz*` function absent at `--changed-from` counts 1,
-  and each top-level test function adds the increase, if any, in its `t.Run` call sites. A call
-  site is `<t>.Run(name, fn)` where `<t>` is a `*testing.T` parameter of the function or of a
-  function literal inside it. A loop around one `t.Run` is one site; table rows, `rapid.Check`,
-  examples, and benchmarks are not cases. A renamed test counts as new.
-- other `.go` file: lines added by `git diff --numstat`; deletions are free.
-
-Untracked files count as wholly new.
 
 ## Coverage
 

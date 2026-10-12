@@ -308,8 +308,6 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 		readBaseRun(data, ev)
 	case "fuzz.run":
 		readFuzz(data, ev)
-	case "test.budget":
-		readBudget(m, data, ev)
 	case "coverage.resolution":
 		readCoverage(m, data, ev)
 	default:
@@ -400,19 +398,6 @@ func readFuzz(data []byte, ev *core.Evidence) {
 			fs.Cases = append(fs.Cases, core.FuzzCase{Name: c.Name, Outcome: string(c.Outcome)})
 		}
 		ev.Fuzz.Suites = append(ev.Fuzz.Suites, fs)
-	}
-}
-
-func readBudget(m *core.Manifest, data []byte, ev *core.Evidence) {
-	files, err := evidence.ParseTestBudget(data)
-	if err != nil {
-		ev.Problems = append(ev.Problems, err.Error())
-		return
-	}
-	ev.Budget = &core.TestBudget{}
-	for _, f := range files {
-		_, level := m.Resolve(f.Path)
-		ev.Budget.Files = append(ev.Budget.Files, core.BudgetEntry{Path: f.Path, Level: level, Test: f.Role == "test", Cases: f.AddedCases, Lines: f.ChangedLines})
 	}
 }
 

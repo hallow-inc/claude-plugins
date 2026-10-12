@@ -107,13 +107,6 @@ func TestEvidenceRejectsRepeatedKeysThatWouldHideEntries(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "a.go") {
 		t.Errorf("mutation report error %q does not name the repeated key a.go", err)
 	}
-
-	budget := []byte(`{"version":0,"files":[{"path":"a_test.go","role":"test","added_cases":9,"changed_lines":1}],"files":[]}`)
-	if got, err := ParseTestBudget(budget); err == nil {
-		t.Errorf("test budget accepted, read %+v; the second files hides 9 added cases from VER-TEST-BUDGET", got)
-	} else if !strings.Contains(err.Error(), "files") {
-		t.Errorf("test budget error %q does not name the repeated key files", err)
-	}
 }
 
 func TestMutationReportAcceptsDottedNames(t *testing.T) {

@@ -65,37 +65,6 @@ func TestReadEvidenceFuzzKeepsSourcesAndEveryCaseOutcome(t *testing.T) {
 	})
 }
 
-func TestReadEvidenceBudgetTakesLevelFromTheManifest(t *testing.T) {
-	m := evidenceManifest(t, t.TempDir())
-	rapid.Check(t, func(t *rapid.T) {
-		files := []map[string]any{}
-		var want core.TestBudget
-		for _, p := range rapid.SliceOfNDistinct(rapid.SampledFrom(evidencePaths), 0, 4, rapid.ID[string]).Draw(t, "paths") {
-			n := rapid.IntRange(0, 50).Draw(t, "count")
-			_, level := m.Resolve(p)
-			if rapid.Bool().Draw(t, "is test") {
-				files = append(files, map[string]any{"path": p, "role": "test", "added_cases": n})
-				want.Files = append(want.Files, core.BudgetEntry{Path: p, Level: level, Test: true, Cases: n})
-			} else {
-				files = append(files, map[string]any{"path": p, "role": "source", "changed_lines": n})
-				want.Files = append(want.Files, core.BudgetEntry{Path: p, Level: level, Lines: n})
-			}
-		}
-		data, err := json.Marshal(map[string]any{"version": 0, "files": files})
-		if err != nil {
-			t.Fatal(err)
-		}
-		var ev core.Evidence
-		readEvidence(m, "test.budget", data, &ev)
-		if len(ev.Problems) > 0 || ev.Budget == nil {
-			t.Fatalf("problems %v, budget %v for %s", ev.Problems, ev.Budget, data)
-		}
-		if !reflect.DeepEqual(*ev.Budget, want) {
-			t.Fatalf("got %+v, want %+v", *ev.Budget, want)
-		}
-	})
-}
-
 func TestReadEvidenceCoverageCarriesLinesFunctionsAndResolutions(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		dir, err := os.MkdirTemp("", "assure-evidence")
@@ -161,14 +130,13 @@ func TestReadEvidenceMalformedInputIsAProblemNotEvidence(t *testing.T) {
 	}
 	cases := map[string]string{
 		"fuzz.run":            "<nope/>",
-		"test.budget":         `{"version": 0, "files": [{"path": "a.go", "role": "test"}]}`,
 		"coverage.resolution": "SF:a.go\nDA:1,1\nend_of_record\n",
 	}
 	for typ, data := range cases {
 		var ev core.Evidence
 		readEvidence(m, typ, []byte(data), &ev)
-		if len(ev.Problems) == 0 || ev.Fuzz != nil || ev.Budget != nil || ev.Coverage != nil {
-			t.Errorf("%s: problems %v, fuzz %v, budget %v, coverage %v; unreadable evidence must fail closed, not pass as empty", typ, ev.Problems, ev.Fuzz, ev.Budget, ev.Coverage)
+		if len(ev.Problems) == 0 || ev.Fuzz != nil || ev.Coverage != nil {
+			t.Errorf("%s: problems %v, fuzz %v, coverage %v; unreadable evidence must fail closed, not pass as empty", typ, ev.Problems, ev.Fuzz, ev.Coverage)
 		}
 	}
 }

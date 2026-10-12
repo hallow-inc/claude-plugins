@@ -16,7 +16,6 @@ const unbuiltWaivers = `- {objective: IND-VERIFIER-DISTINCT, scope: '**', ration
 - {objective: CFG-PROTECTED, scope: '**', rationale: provenance arrives in milestone M4, approver: owner, expires: 2099-01-01}
 - {objective: VER-MUTATION-CHANGED, scope: '**', rationale: mutation runner arrives in M3b, approver: owner, expires: 2099-01-01}
 - {objective: VER-FAIL-ON-BASE, scope: '**', rationale: fail-on-base runner arrives in M3b, approver: owner, expires: 2099-01-01}
-- {objective: VER-TEST-BUDGET, scope: '**', rationale: test budget check arrives in M3b, approver: owner, expires: 2099-01-01}
 - {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in milestone M3b, approver: owner, expires: 2099-01-01}
 `
 
@@ -192,11 +191,11 @@ func TestEvaluateReportIsReproducible(t *testing.T) {
 
 func TestEvaluateExpiredWaiverBlocksEvenWithNothingChanged(t *testing.T) {
 	r := goRepo(t)
-	r.write(".assure/waivers.yaml", "- {objective: VER-FAIL-ON-BASE, scope: 'nowhere/**', rationale: fail-on-base runner arrives in M3b, approver: owner, expires: 2026-01-01}\n- {objective: VER-TEST-BUDGET, scope: 'nowhere/**', rationale: test budget check arrives in M3b, approver: owner, expires: 2026-01-02}\n")
+	r.write(".assure/waivers.yaml", "- {objective: VER-FAIL-ON-BASE, scope: 'nowhere/**', rationale: fail-on-base runner arrives in M3b, approver: owner, expires: 2026-01-01}\n- {objective: VER-ROBUST-FUZZ, scope: 'nowhere/**', rationale: fuzz evidence arrives in M3b, approver: owner, expires: 2026-01-02}\n")
 	r.git("add", "-A")
 	r.git("commit", "-qm", "waivers")
 	code, stdout, _ := assure("evaluate", "--changed-from", "HEAD", "--date", "2026-01-02")
-	if code != 1 || !strings.Contains(stdout, "- VER-FAIL-ON-BASE, scope `nowhere/**`") || strings.Contains(stdout, "- VER-TEST-BUDGET") {
+	if code != 1 || !strings.Contains(stdout, "- VER-FAIL-ON-BASE, scope `nowhere/**`") || strings.Contains(stdout, "- VER-ROBUST-FUZZ") {
 		t.Fatalf("got %d\n%s", code, stdout)
 	}
 	if rep, _ := readReport(t, r); len(rep.ExpiredWaivers) != 1 || rep.ExpiredWaivers[0].Expires != "2026-01-01" {

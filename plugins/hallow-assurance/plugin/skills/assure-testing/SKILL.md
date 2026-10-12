@@ -25,8 +25,7 @@ a **property**: generate inputs, assert the invariant. Typical invariants are ro
 - Any function over untrusted bytes or text gets a fuzz target with a committed seed corpus.
 - A test earns its place only if it can fail when the behavior changes. `VER-MUTATION-CHANGED`
   measures this: a surviving mutant is a line whose behavior no test observes.
-- Each new test case counts against `VER-TEST-BUDGET`. One property replaces a table of examples
-  at the cost of one case.
+- Prefer one property to a table of examples: it covers more inputs and is one test to maintain.
 
 ## Fail-first for bug fixes
 

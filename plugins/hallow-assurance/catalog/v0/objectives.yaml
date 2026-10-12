@@ -52,17 +52,6 @@
   evidence: test.fail_on_base
   applies_to: fix
 
-- id: VER-TEST-BUDGET
-  title: New test cases are within budget or justified
-  source: [hallow-assurance charter]
-  levels: { A: required, B: required, C: required, D: advisory }
-  evidence: test.budget
-  budget:
-    A: { floor: 3, lines_per_case: 15 }
-    B: { floor: 3, lines_per_case: 15 }
-    C: { floor: 3, lines_per_case: 15 }
-    D: { floor: 3, lines_per_case: 15 }
-
 - id: VER-ROBUST-FUZZ
   title: Fuzz targets exist and ran for input-handling code
   source: [DO-178B robustness testing]
