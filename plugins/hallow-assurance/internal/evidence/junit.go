@@ -106,6 +106,12 @@ func ParseJUnit(data []byte) (JUnit, error) {
 	}
 }
 
+var countedParents = map[string]map[string]bool{
+	"testsuites": {"": true},
+	"testsuite":  {"": true, "testsuites": true, "testsuite": true},
+	"testcase":   {"testsuites": true, "testsuite": true},
+}
+
 func strayCase(data []byte) error {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	var parents []string
@@ -119,14 +125,12 @@ func strayCase(data []byte) error {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			if t.Name.Local == "testcase" {
-				parent := ""
-				if len(parents) > 0 {
-					parent = parents[len(parents)-1]
-				}
-				if parent != "testsuite" && parent != "testsuites" {
-					return fmt.Errorf("junit: <testcase> inside <%s>, want <testsuite> or <testsuites>", parent)
-				}
+			parent := ""
+			if len(parents) > 0 {
+				parent = parents[len(parents)-1]
+			}
+			if allowed, counted := countedParents[t.Name.Local]; counted && !allowed[parent] {
+				return fmt.Errorf("junit: <%s> inside <%s> is not counted", t.Name.Local, parent)
 			}
 			parents = append(parents, t.Name.Local)
 		case xml.EndElement:
