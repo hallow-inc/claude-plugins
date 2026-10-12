@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -172,6 +173,36 @@ func TestMutationGremlinsMissingIsEnvironment(t *testing.T) {
 		t.Fatalf("exit %d: %s; a missing tool is the environment's fault and must reach the evaluator as a failing objective, not an adapter crash", code, stderr)
 	}
 	environmentIn(t, resp, out, "gremlins", gremlinsDefaultInstall)
+}
+
+func TestMutationBoundsGremlinsWorkers(t *testing.T) {
+	const maxWorkers = 2
+	argv := filepath.Join(t.TempDir(), "argv")
+	narrowPath(t, nil, map[string]string{"gremlins": `printf '%s\n' "$@" >| '` + argv + `'
+while [ $# -gt 0 ]; do
+	if [ "$1" = --output ]; then shift; printf '{"files":[]}' >| "$1"; fi
+	shift
+done
+`})
+	if _, err := unleash(t.TempDir(), "HEAD", t.TempDir(), "1"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(argv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	workers := ""
+	for i, a := range args {
+		if a == "--workers" && i+1 < len(args) {
+			workers = args[i+1]
+		} else if v, ok := strings.CutPrefix(a, "--workers="); ok {
+			workers = v
+		}
+	}
+	if n, err := strconv.Atoi(workers); err != nil || n < 1 || n > maxWorkers {
+		t.Fatalf("gremlins argv %q: --workers %q, want 1..%d; Gremlins defaults to one worker per CPU, which starves each mutant's test run past the timeout coefficient, and TIMED OUT counts as detected, so surviving mutants are scored as kills (measured on internal/decode: 33 false timeouts, 3 survivors hidden)", args, workers, maxWorkers)
+	}
 }
 
 func TestMutationNoGoChangesGivesEmptyReport(t *testing.T) {
