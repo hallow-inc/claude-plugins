@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<testsuite><testsuites><testcase name=\"b\"><failure/></testcase></testsuites></testsuite>")

@@ -16,20 +16,73 @@ var strykerStatuses = []string{"Killed", "Survived", "NoCoverage", "CompileError
 func strykerDoc(files map[string][]Mutant) []byte {
 	out := map[string]any{}
 	for p, ms := range files {
-		mutants := []any{}
-		for i, m := range ms {
-			pos := map[string]any{"line": m.Line, "column": 1}
-			mutants = append(mutants, map[string]any{
-				"id":          fmt.Sprintf("%s:%d:%d", p, m.Line, i),
-				"mutatorName": m.Mutator,
-				"location":    map[string]any{"start": pos, "end": pos},
-				"status":      m.Status,
-			})
-		}
-		out[p] = map[string]any{"language": "go", "source": "package x\n", "mutants": mutants}
+		out[p] = strykerFile(p, ms)
 	}
 	data, _ := json.Marshal(map[string]any{"schemaVersion": "1", "thresholds": map[string]any{"high": 80, "low": 60}, "files": out})
 	return data
+}
+
+func strykerFile(p string, ms []Mutant) map[string]any {
+	mutants := []any{}
+	for i, m := range ms {
+		pos := map[string]any{"line": m.Line, "column": 1}
+		mutants = append(mutants, map[string]any{
+			"id":          fmt.Sprintf("%s:%d:%d", p, m.Line, i),
+			"mutatorName": m.Mutator,
+			"location":    map[string]any{"start": pos, "end": pos},
+			"status":      m.Status,
+		})
+	}
+	return map[string]any{"language": "go", "source": "package x\n", "mutants": mutants}
+}
+
+func TestMutationReportNeverHidesASurvivor(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		pool := rapid.SliceOfNDistinct(rapid.StringMatching(`[a-z]{1,6}(/[a-z]{1,6}){0,2}\.go`), 1, 3, func(s string) string { return s }).Draw(t, "pool")
+		var b strings.Builder
+		b.WriteString(`{"schemaVersion":"1","thresholds":{"high":80,"low":60},"files":{`)
+		seen := map[string]bool{}
+		distinct := true
+		survived := 0
+		for i := range rapid.IntRange(0, 4).Draw(t, "nfiles") {
+			p := rapid.SampledFrom(pool).Draw(t, "path")
+			distinct = distinct && !seen[p]
+			seen[p] = true
+			var ms []Mutant
+			for range rapid.IntRange(0, 3).Draw(t, "nmutants") {
+				m := Mutant{Line: rapid.IntRange(1, 500).Draw(t, "line"), Mutator: "M", Status: rapid.SampledFrom(strykerStatuses).Draw(t, "status")}
+				if m.Status == "Survived" {
+					survived++
+				}
+				ms = append(ms, m)
+			}
+			key, _ := json.Marshal(p)
+			val, _ := json.Marshal(strykerFile(p, ms))
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.Write(key)
+			b.WriteByte(':')
+			b.Write(val)
+		}
+		b.WriteString(`}}`)
+		got, err := ParseMutationReport([]byte(b.String()))
+		if err != nil {
+			if distinct {
+				t.Fatalf("valid report rejected: %v\n%s", err, b.String())
+			}
+			return
+		}
+		n := 0
+		for _, m := range got {
+			if m.Status == "Survived" {
+				n++
+			}
+		}
+		if n != survived {
+			t.Fatalf("read %d Survived mutants, report holds %d; a hidden survivor raises the score\n%s", n, survived, b.String())
+		}
+	})
 }
 
 func TestMutationReportRoundTrip(t *testing.T) {
@@ -98,10 +151,12 @@ func TestMutationReportRejects(t *testing.T) {
 	}
 }
 
+var repeatedKeyReport = []byte(`{"schemaVersion":"1","thresholds":{"high":80,"low":60},"files":{` +
+	`"a.go":{"language":"go","source":"package x\n","mutants":[{"id":"1","mutatorName":"M","location":{"start":{"line":1,"column":1},"end":{"line":1,"column":1}},"status":"Survived"}]},` +
+	`"a.go":{"language":"go","source":"package x\n","mutants":[]}}}`)
+
 func TestEvidenceRejectsRepeatedKeysThatWouldHideEntries(t *testing.T) {
-	doc := []byte(`{"schemaVersion":"1","thresholds":{"high":80,"low":60},"files":{` +
-		`"a.go":{"language":"go","source":"package x\n","mutants":[{"id":"1","mutatorName":"M","location":{"start":{"line":1,"column":1},"end":{"line":1,"column":1}},"status":"Survived"}]},` +
-		`"a.go":{"language":"go","source":"package x\n","mutants":[]}}}`)
+	doc := repeatedKeyReport
 	if got, err := ParseMutationReport(doc); err == nil {
 		t.Errorf("mutation report accepted, read %+v; the second a.go hides a Survived mutant and raises the score", got)
 	} else if !strings.Contains(err.Error(), "a.go") {
