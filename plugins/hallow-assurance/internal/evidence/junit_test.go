@@ -158,6 +158,18 @@ func TestJUnitCaseInsideUnknownElementIsAnError(t *testing.T) {
 	}
 }
 
+func TestJUnitSuiteTheReaderCannotReachIsAnError(t *testing.T) {
+	for _, doc := range []string{
+		`<testsuite><testcase name="a"><testsuite><testcase name="b"><failure/></testcase></testsuite></testcase></testsuite>`,
+		`<testsuite><group><testsuite><testcase name="b"><failure/></testcase></testsuite></group></testsuite>`,
+		`<testsuite><testsuites><testcase name="b"><failure/></testcase></testsuites></testsuite>`,
+	} {
+		if got, err := ParseJUnit([]byte(doc)); err == nil {
+			t.Errorf("%s: got %+v, nil error; a failing case in a suite the reader never counts would pass VER-TESTS-PASS", doc, got)
+		}
+	}
+}
+
 func escape(s string) string {
 	var b strings.Builder
 	_ = xml.EscapeText(&b, []byte(s))
