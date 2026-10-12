@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"pgregory.net/rapid"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
 func manifestYAML(comps ...string) string {
@@ -114,6 +116,55 @@ func TestManifestFoundFromSubdirectoryWithoutCatalogFiles(t *testing.T) {
 	if m.Root != root || len(m.Catalog.Objectives) == 0 {
 		t.Fatalf("root=%s objectives=%d", m.Root, len(m.Catalog.Objectives))
 	}
+}
+
+func addFixtureSeeds(f *testing.F, globs ...string) {
+	f.Helper()
+	f.Add([]byte{})
+	f.Add([]byte("---\n"))
+	for _, g := range globs {
+		files, err := filepath.Glob(g)
+		if err != nil {
+			f.Fatal(err)
+		}
+		if len(files) == 0 {
+			f.Fatalf("no seed files match %s", g)
+		}
+		for _, file := range files {
+			data, err := os.ReadFile(file)
+			if err != nil {
+				f.Fatal(err)
+			}
+			f.Add(data)
+		}
+	}
+}
+
+func TestDocumentMarkerAloneIsNotAManifest(t *testing.T) {
+	if m, err := ParseManifest("m.yaml", []byte("---\n")); err == nil {
+		t.Fatalf("want error for a bare document marker, got manifest %+v", m)
+	}
+}
+
+func FuzzParseManifest(f *testing.F) {
+	addFixtureSeeds(f,
+		"../../schemas/testdata/manifest/valid/*.yaml",
+		"../../schemas/testdata/manifest/invalid/*.yaml",
+		"../../"+ManifestName,
+	)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		m, err := ParseManifest("m.yaml", data)
+		if err != nil {
+			return
+		}
+		if m == nil {
+			t.Fatal("nil manifest with nil error")
+		}
+		vs, verr := schemas.Validate(schemas.Manifest, data)
+		if verr != nil || len(vs) > 0 {
+			t.Fatalf("manifest accepted but schema rejects it: err=%v violations=%v", verr, vs)
+		}
+	})
 }
 
 func TestNoManifest(t *testing.T) {

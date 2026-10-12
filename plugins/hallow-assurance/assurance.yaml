@@ -12,3 +12,6 @@ components:
   - path: internal/evidence/**
     level: B
     inputs: true
+  - path: internal/decode/**
+    inputs: true
+    level: B
