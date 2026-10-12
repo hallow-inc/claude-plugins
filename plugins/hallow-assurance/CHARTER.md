@@ -265,12 +265,6 @@ has no cases, or any case did not pass. Coverage-guided fuzzing runs nightly in 
 crasher fails that workflow and is uploaded as an artifact, and feeds no objective (its result
 depends on wall-clock time).
 
-**Test budget** — `test.budget` evidence is a small JSON document (`schemas/test-budget.schema.json`;
-no standard format exists for test counts) listing added cases per test file and added lines per
-source file. Per level, the change may add max(`floor`, ⌈added source lines ÷ `lines_per_case`⌉)
-cases, from the catalog's `budget` field (not `threshold`, which stays a 0–100 percentage). Over
-budget fails the level; only an owner waiver justifies it.
-
 **Coverage resolution** — `coverage.resolution` evidence is LCOV with `FN` records.
 `.assure/coverage-resolutions.yaml` (human-only) holds `{path, function, resolution, rationale,
 approver}` entries, `resolution` one of `missing-test`, `missing-requirement`, `dead`, `deactivated`.
@@ -378,7 +372,6 @@ Schemas: `schemas/adapter-{describe,classify,run,tools}.schema.json`; `lint` is 
 | VER-TESTS-PASS | Tests pass with race/shuffle where supported | req | req | req | req |
 | VER-MUTATION-CHANGED | Mutation threshold on changed code | req | req | adv | – |
 | VER-FAIL-ON-BASE | Bugfix tests fail on base commit | req | req | req | adv |
-| VER-TEST-BUDGET | New test cases within budget or justified | req | req | req | adv |
 | VER-ROBUST-FUZZ | Fuzz targets exist and ran for input-handling code | req | req | adv | – |
 | VER-COVERAGE-RESOLUTION | Uncovered code has an approved resolution (missing test / missing req / dead / deactivated) | req | adv | – | – |
 | IND-VERIFIER-DISTINCT | Verification authored by a different agent/human than implementation | req | req | – | – |
@@ -505,7 +498,7 @@ never reassigned, and new work takes a letter suffix.
 
 **M3b-2 — Remaining evidence, required check**
 - Parser: LCOV
-- Go adapter `run` for: fuzz (seed corpus in PR, time-boxed nightly), test budget;
+- Go adapter `run` for: fuzz (seed corpus in PR, time-boxed nightly);
   `VER-COVERAGE-RESOLUTION`
 - CI: an always-running `assure-gate` job is the required check, so a path-filtered skip never
   leaves an unrelated PR Pending
@@ -541,8 +534,6 @@ never reassigned, and new work takes a letter suffix.
   `/hallow-assurance:bugfix` PR
 - `mutation-sweep`: scheduled, advisory whole-repo mutation run that feeds the verifier and pruner;
   never a gate
-- `orchestration-skills`: when VER-TEST-BUDGET fails on a tests-only branch, `assure-testing` and the
-  verifier hand the owner a ready-to-paste campaign waiver (7-day expiry)
 - Acceptance criteria are set in each change's grill
 
 **M5 — Qualification**

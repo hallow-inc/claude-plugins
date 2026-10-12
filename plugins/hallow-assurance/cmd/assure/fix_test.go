@@ -11,7 +11,6 @@ import (
 
 const waiversExceptM3b1 = `- {objective: IND-VERIFIER-DISTINCT, scope: '**', rationale: provenance arrives in milestone M4, approver: owner, expires: 2099-01-01}
 - {objective: CFG-PROTECTED, scope: '**', rationale: provenance arrives in milestone M4, approver: owner, expires: 2099-01-01}
-- {objective: VER-TEST-BUDGET, scope: '**', rationale: test budget check arrives in M3b-2, approver: owner, expires: 2099-01-01}
 - {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in M3b-2, approver: owner, expires: 2099-01-01}
 `
 

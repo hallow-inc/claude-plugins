@@ -45,7 +45,6 @@ var runners = map[string]runner{
 	"VER-MUTATION-CHANGED":    runMutation,
 	"VER-FAIL-ON-BASE":        runFailOnBase,
 	"VER-ROBUST-FUZZ":         runFuzz,
-	"VER-TEST-BUDGET":         runBudget,
 	"VER-COVERAGE-RESOLUTION": runCoverage,
 }
 

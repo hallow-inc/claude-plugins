@@ -39,7 +39,6 @@ type Evidence struct {
 	Mutants    []Mutant
 	Base       *BaseRun
 	Fuzz       *FuzzRun
-	Budget     *TestBudget
 	Coverage   *Coverage
 	Provenance *Provenance
 	Protected  *ProtectedDiff
@@ -257,9 +256,6 @@ func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waive
 func (d *decision) fileRules(o Objective, changed []ChangedFile, ev Evidence, req bool, active []Waiver) []Resolution {
 	if ev.Fuzz != nil {
 		d.located(o, fuzzFindings(o, changed, *ev.Fuzz), req, active)
-	}
-	if ev.Budget != nil {
-		d.budget(o, changed, *ev.Budget, active)
 	}
 	if ev.Provenance != nil {
 		fs, notes := independenceFindings(o, changed, *ev.Provenance)

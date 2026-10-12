@@ -39,7 +39,6 @@ func TestRoundTrip(t *testing.T) {
   interface such as `interface{ Helper(); Fatalf(string, ...any) }`.
 - A failing property writes a fail file under `testdata/rapid/`. Do not commit it; add
   `**/testdata/rapid/` to `.gitignore`.
-- One `rapid.Check` counts as one test case for `VER-TEST-BUDGET`, however many inputs it draws.
 
 ## Native fuzz targets
 
@@ -87,9 +86,3 @@ functions the change added or edited. Each must fail there.
 A test that calls a function the fix added does not compile on the base, and counts as an error, not
 as a failure. Reproduce the bug through the API that already existed.
 
-## Test budget (`VER-TEST-BUDGET`)
-
-Counted from source for each changed `_test.go` file: each new top-level `Test*` or `Fuzz*` counts 1,
-and each test function adds the increase in its `t.Run` call sites. A loop around one `t.Run` is one
-site. Table rows, `rapid.Check` draws, examples, and benchmarks are not cases. A renamed test counts
-as new.

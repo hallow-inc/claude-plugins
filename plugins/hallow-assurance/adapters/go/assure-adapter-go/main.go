@@ -46,7 +46,6 @@ var description = describe{
 		"VER-MUTATION-CHANGED":    map[string]any{"tool": "gremlins"},
 		"VER-FAIL-ON-BASE":        map[string]any{"tool": "go test on the base commit"},
 		"VER-ROBUST-FUZZ":         map[string]any{"tool": "go test fuzz seed corpus"},
-		"VER-TEST-BUDGET":         map[string]any{"tool": "assure-adapter-go test-budget/v1", "fast": true},
 		"VER-COVERAGE-RESOLUTION": map[string]any{"tool": "go test -cover"},
 	},
 }
