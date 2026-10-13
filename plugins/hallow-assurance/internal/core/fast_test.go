@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -102,6 +103,27 @@ func TestMissingEvidenceFails(t *testing.T) {
 	if got := DecideFast(o, []Level{"D"}, Evidence{Problems: []string{"no test.junit evidence"}}); got.Status != Fail {
 		t.Fatalf("got %+v", got)
 	}
+}
+
+func TestChangedFileCarriesItsComponentsFlags(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		m := &Manifest{DefaultLevel: levelGen.Draw(t, "default")}
+		for i := range rapid.IntRange(0, 4).Draw(t, "ncomp") {
+			m.Components = append(m.Components, Component{
+				Glob: mustGlob(t, fmt.Sprintf("c%d/**", i)), Level: levelGen.Draw(t, "level"),
+				Formal: rapid.Bool().Draw(t, "formal"), Inputs: rapid.Bool().Draw(t, "inputs"),
+			})
+		}
+		want := ChangedFile{Path: "other/x.go", Level: m.DefaultLevel}
+		if i := rapid.IntRange(-1, len(m.Components)-1).Draw(t, "component"); i >= 0 {
+			c := m.Components[i]
+			want = ChangedFile{Path: fmt.Sprintf("c%d/x.go", i), Level: c.Level, Formal: c.Formal, Inputs: c.Inputs}
+		}
+		got := m.ChangedFile(want.Path)
+		if got.Path != want.Path || got.Level != want.Level || got.Formal != want.Formal || got.Inputs != want.Inputs {
+			t.Fatalf("ChangedFile(%q) = %+v, want %+v; formal and inputs objectives apply only to files of components that declare them", want.Path, got, want)
+		}
+	})
 }
 
 func TestLintFindingAtLevelDIsAdvisory(t *testing.T) {

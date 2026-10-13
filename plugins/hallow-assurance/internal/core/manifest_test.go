@@ -89,6 +89,34 @@ func TestMalformedComponentGlobIsLocated(t *testing.T) {
 	}
 }
 
+func TestProtectedGlobsLoadAsWritten(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		globs := rapid.SliceOfN(globGen, 0, 4).Draw(t, "protected")
+		src := manifestYAML() + "protected: ['" + strings.Join(globs, "', '") + "']\n"
+		if len(globs) == 0 {
+			src = manifestYAML() + "protected: []\n"
+		}
+		m, err := parseManifest("m.yaml", []byte(src))
+		if err != nil {
+			t.Fatalf("protected %q: %v; a manifest rejected over well-formed globs stops every hook decision", globs, err)
+		}
+		var got []string
+		for _, g := range m.Protected {
+			got = append(got, g.String())
+		}
+		if strings.Join(got, "\n") != strings.Join(globs, "\n") {
+			t.Fatalf("protected %q loaded as %q; guard would protect the wrong paths", globs, got)
+		}
+	})
+}
+
+func TestMalformedProtectedGlobIsLocated(t *testing.T) {
+	src := manifestYAML() + "protected: ['docs/**', 'internal/[billing/**']\n"
+	if _, err := parseManifest("m.yaml", []byte(src)); !problemAt(err, "/protected/1") {
+		t.Fatalf("want problem at /protected/1, got %v; a glob that cannot compile would protect nothing", err)
+	}
+}
+
 func TestUnknownCatalogVersionIsLocated(t *testing.T) {
 	src := strings.Replace(manifestYAML(), "catalog: v0", "catalog: v9", 1)
 	if _, err := parseManifest("m.yaml", []byte(src)); !problemAt(err, "/catalog") {

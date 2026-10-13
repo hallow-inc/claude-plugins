@@ -173,6 +173,26 @@ func TestPruneStateRemovesOnlyOldSessionFiles(t *testing.T) {
 	}
 }
 
+func TestPruneStateKeepsAFileForTheWholeMaxAge(t *testing.T) {
+	root := t.TempDir()
+	maxAge := 14 * 24 * time.Hour
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	ages := map[string]time.Duration{"stop-edge.json": maxAge, "stop-over.json": maxAge + time.Second}
+	for f, age := range ages {
+		writeFile(t, root, filepath.Join(StateDir, f), "{}")
+		if err := os.Chtimes(filepath.Join(root, StateDir, f), now.Add(-age), now.Add(-age)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	PruneState(root, maxAge, now)
+	for f, age := range ages {
+		_, err := os.Stat(filepath.Join(root, StateDir, f))
+		if want := age <= maxAge; (err == nil) != want {
+			t.Errorf("%s aged %v with max age %v: exists=%v, want %v; state younger than or exactly max age belongs to a session that may still resume", f, age, maxAge, err == nil, want)
+		}
+	}
+}
+
 func TestUnreadableSnapshotIsOutsideReach(t *testing.T) {
 	root := t.TempDir()
 	m, _ := snapshotManifest(t, root)

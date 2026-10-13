@@ -68,3 +68,28 @@ func TestFailOnBasePassesExactlyWhenAllCasesFailed(t *testing.T) {
 		}
 	})
 }
+
+func TestFailOnBaseNamesEveryCaseThatDidNotFail(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		names := func(label string) []string {
+			var out []string
+			for i := range rapid.IntRange(0, 2).Draw(t, label) {
+				out = append(out, fmt.Sprintf("%s%d", label, i))
+			}
+			return out
+		}
+		b := BaseRun{Failed: rapid.IntRange(0, 3).Draw(t, "failed"), Passed: names("passed"), Skipped: names("skipped"), Errored: names("errored")}
+		cases := b.Failed + len(b.Passed) + len(b.Skipped) + len(b.Errored)
+		d := strings.Join(decideBase(b).Details, "\n")
+		if strings.Contains(d, "changes no test") != (cases == 0) {
+			t.Fatalf("%+v (%d cases): details %q; only a fix with no test case may be told it changes no test", b, cases, d)
+		}
+		for prefix, ns := range map[string][]string{"passes on base: ": b.Passed, "skipped on base: ": b.Skipped, "error on base: ": b.Errored} {
+			for _, n := range ns {
+				if !strings.Contains(d, prefix+n) {
+					t.Fatalf("%+v: details %q lack %q; the author must learn which case does not reproduce the bug", b, d, prefix+n)
+				}
+			}
+		}
+	})
+}

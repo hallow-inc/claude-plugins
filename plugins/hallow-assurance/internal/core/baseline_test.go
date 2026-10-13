@@ -1,6 +1,7 @@
 package core
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"slices"
@@ -129,4 +130,58 @@ func TestBaselineMarshalRoundTrips(t *testing.T) {
 	if err != nil || !slices.Equal(got.Entries, b.Entries) || b.Entries[0].Count != 2 || b.Entries[0].Objective != "CODE-A" {
 		t.Fatalf("got %+v, %v from %+v", got, err, b)
 	}
+}
+
+var baselineFpGen = rapid.Custom(func(t *rapid.T) Fingerprint {
+	pick := func(label string, vs ...string) string { return rapid.SampledFrom(vs).Draw(t, label) }
+	return Fingerprint{pick("objective", "CODE-A", "CODE-B"), pick("rule", "r1", "r2"), pick("path", "a.go", "b.go"), pick("msg", "m1", "m2")}
+})
+
+func compareEntries(a, b BaselineEntry) int {
+	return cmp.Or(cmp.Compare(a.Objective, b.Objective), cmp.Compare(a.Path, b.Path), cmp.Compare(a.Rule, b.Rule), cmp.Compare(a.Message, b.Message))
+}
+
+func TestNewBaselineIsSortedAndCountsEachFingerprint(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		fps := rapid.SliceOfN(baselineFpGen, 0, 24).Draw(t, "fps")
+		b := NewBaseline(fps)
+		for i := 1; i < len(b.Entries); i++ {
+			if compareEntries(b.Entries[i-1], b.Entries[i]) >= 0 {
+				t.Fatalf("entries %d and %d out of order in %+v; the spec orders a written baseline by objective, path, rule, message, so regenerating it gives a byte-stable, reviewable diff", i-1, i, b.Entries)
+			}
+		}
+		counts := map[Fingerprint]int{}
+		for _, fp := range fps {
+			counts[fp]++
+		}
+		if len(b.Entries) != len(counts) {
+			t.Fatalf("%d entries for %d distinct fingerprints: %+v", len(b.Entries), len(counts), b.Entries)
+		}
+		for _, e := range b.Entries {
+			if e.Count != counts[e.Fingerprint()] {
+				t.Fatalf("entry %+v counts %d, findings had %d; a wrong count lets new copies through or fails accepted ones", e, e.Count, counts[e.Fingerprint()])
+			}
+		}
+	})
+}
+
+func TestRemovableListsExactlyTheUnusedCounts(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		b := NewBaseline(rapid.SliceOfN(baselineFpGen, 0, 24).Draw(t, "fps"))
+		used := map[Fingerprint]int{}
+		for _, e := range b.Entries {
+			used[e.Fingerprint()] = rapid.IntRange(0, e.Count).Draw(t, "used")
+		}
+		skip := rapid.SampledFrom([]string{"", "CODE-A", "CODE-B"}).Draw(t, "unconsidered")
+		got := b.Removable(used, func(e BaselineEntry) bool { return e.Objective != skip })
+		var want []Removable
+		for _, e := range b.Entries {
+			if n := e.Count - used[e.Fingerprint()]; n != 0 && e.Objective != skip {
+				want = append(want, Removable{Entry: e, Unused: n})
+			}
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("removable %+v, want %+v; listing a fully used entry tells the human to delete one the next run still needs", got, want)
+		}
+	})
 }

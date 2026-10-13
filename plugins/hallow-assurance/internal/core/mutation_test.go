@@ -2,8 +2,10 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -202,4 +204,58 @@ func TestMutationDecisionMatchesOracle(t *testing.T) {
 			t.Fatalf("result depends on mutant order: %v %v vs %v %v", got.Status, got.Details, again.Status, again.Details)
 		}
 	})
+}
+
+func statedPercent(details []string, head string) (float64, bool) {
+	for _, d := range details {
+		rest, ok := strings.CutPrefix(d, head)
+		if !ok {
+			continue
+		}
+		num, _, ok := strings.Cut(rest, "%)")
+		if !ok {
+			return 0, false
+		}
+		p, err := strconv.ParseFloat(num, 64)
+		return p, err == nil
+	}
+	return 0, false
+}
+
+func TestMutationScoreLineStatesTheScore(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		det := rapid.IntRange(1, 60).Draw(t, "killed")
+		und := rapid.IntRange(1, 60).Draw(t, "survived")
+		o := mutation
+		o.Threshold = map[Level]float64{"B": 100}
+		got := decideMutation(o, mutants("a.go", "B", map[string]int{"Killed": det, "Survived": und}), nil)
+		head := fmt.Sprintf("level B: %d of %d mutants detected (", det, det+und)
+		p, ok := statedPercent(got.Details, head)
+		if want := 100 * float64(det) / float64(det+und); !ok || math.Abs(p-want) > 0.05+1e-9 {
+			t.Fatalf("details %q, want %q followed by %.2f%%; the score line is how the reader learns how far the level is from its threshold", got.Details, head, want)
+		}
+	})
+}
+
+func TestMutationListsEachWaiverOnce(t *testing.T) {
+	ws := mustWaivers(t, waiverYAML(mutation.ID, "legacy/**", "2026-12-31")+waiverYAML(mutation.ID, "old/**", "2026-12-31"))
+	ms := slices.Concat(
+		mutants("legacy/a.go", "B", map[string]int{"Survived": 2}),
+		mutants("old/b.go", "B", map[string]int{"Survived": 2}),
+		mutants("app/c.go", "B", map[string]int{"Killed": 1}),
+	)
+	got := decideMutation(mutation, ms, ws)
+	var scopes []string
+	for _, w := range got.Waivers {
+		scopes = append(scopes, w.Scope)
+	}
+	excused := 0
+	for _, d := range got.Details {
+		if strings.HasPrefix(d, "waived: level B") {
+			excused++
+		}
+	}
+	if got.Status != Waived || !slices.Equal(scopes, []string{"legacy/**", "old/**"}) || excused != len(scopes) {
+		t.Fatalf("got %+v; both waivers excused level B, so each must be listed once with the waived score, or the report hides a waiver the result relies on", got)
+	}
 }

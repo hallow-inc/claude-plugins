@@ -60,6 +60,24 @@ func TestMainThreadTestDenialPointsAtVerifier(t *testing.T) {
 	}
 }
 
+func TestDenialPointsAtTheVerifierOnlyWhenItCanEdit(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		agent, level, role := agentGen.Draw(t, "agent"), levelG.Draw(t, "level"), roleGen.Draw(t, "role")
+		ok, reason := Decide(agent, level, role, false)
+		if ok {
+			return
+		}
+		points := strings.Contains(reason, "spawn") && strings.Contains(reason, Verifier)
+		if verifierOK, _ := Decide(Verifier, level, role, false); points && !verifierOK {
+			t.Fatalf("Decide(%q, %s, %s) says %q, but the verifier is denied that edit too; the agent would spawn it for nothing", agent, level, role, reason)
+		}
+		_, ownRow := specTable[agent]
+		if !ownRow && (role == Test || role == FuzzCorpus) && !points {
+			t.Fatalf("Decide(%q, %s, %s) says %q; an agent on the main-thread row is denied %s at A/B only because the verifier must write them, so the reason must say to spawn it", agent, level, role, reason, role)
+		}
+	})
+}
+
 var challengeGen = rapid.Custom(func(t *rapid.T) string { return "formal/" + pathGen.Draw(t, "c") + ".lean" })
 
 func TestProtectedPathsAreDeniedToEveryAgent(t *testing.T) {
