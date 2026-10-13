@@ -13,7 +13,9 @@ import (
 	"strings"
 )
 
-const timeoutCoefficient = 10
+// At 10 with 2 workers, internal/hookio still reported 15 false TIMED OUT that hid 9 survivors;
+// 100 measured clean. A genuinely looping mutant waits longer, but a false kill is worse.
+const timeoutCoefficient = 100
 
 // Gremlins' default of one worker per CPU starved test runs past the timeout on a 12-core
 // machine (33 of 47 mutants TIMED OUT, hiding 3 survivors); 2 measured clean.
