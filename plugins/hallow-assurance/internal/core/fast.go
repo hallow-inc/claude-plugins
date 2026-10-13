@@ -55,11 +55,12 @@ type ChangedFile struct {
 }
 
 func (m *Manifest) ChangedFile(path string) ChangedFile {
-	comp, level := m.Resolve(path)
+	_, level := m.Resolve(path)
 	f := ChangedFile{Path: path, Level: level}
-	if comp >= 0 {
-		c := m.Components[comp]
-		f.Formal, f.Inputs = c.Formal, c.Inputs
+	for _, i := range m.winners(path) {
+		c := m.Components[i]
+		f.Formal = f.Formal || c.Formal
+		f.Inputs = f.Inputs || c.Inputs
 	}
 	return f
 }
