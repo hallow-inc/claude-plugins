@@ -104,6 +104,52 @@ func TestContextListsInputsObjectivesOnlyUnderInputsComponents(t *testing.T) {
 	})
 }
 
+func checkContextSelection(t *rapid.T, m *Manifest, only []string, wantDefault bool, picked map[int]bool) {
+	out := RenderContext(m, only)
+	if got := strings.Contains(out, "\nDefault level: "+string(m.DefaultLevel)+" "); got != wantDefault {
+		t.Fatalf("paths %q: default-level line shown=%v, want %v; the default level concerns the reader only when some path matches no component\n%s", only, got, wantDefault, out)
+	}
+	if got := strings.Contains(out, "\nComponents ("); got != (len(picked) > 0) {
+		t.Fatalf("paths %q: components header shown=%v with %d components selected\n%s", only, got, len(picked), out)
+	}
+	for i, comp := range m.Components {
+		suffix := ""
+		if comp.Inputs {
+			suffix = " [inputs]"
+		}
+		line := fmt.Sprintf("\n  %s  level %s%s\n", comp.Glob, comp.Level, suffix)
+		if got := strings.Contains(out, line); got != picked[i] {
+			t.Fatalf("paths %q: line %q shown=%v, want %v; context lists exactly the components the paths resolve to, tagged only with what they declare\n%s", only, line, got, picked[i], out)
+		}
+	}
+}
+
+func TestContextForPathsShowsOnlyWhatTheyResolveTo(t *testing.T) {
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		m, _ := inputsManifest(t, c)
+		var only []string
+		unmatched, picked := false, map[int]bool{}
+		for range rapid.IntRange(1, 3).Draw(t, "npaths") {
+			i := rapid.IntRange(-1, len(m.Components)-1).Draw(t, "component")
+			if i < 0 {
+				only, unmatched = append(only, "other/x.go"), true
+				continue
+			}
+			only, picked[i] = append(only, fmt.Sprintf("c%d/x.go", i)), true
+		}
+		checkContextSelection(t, m, only, unmatched, picked)
+		all := map[int]bool{}
+		for i := range m.Components {
+			all[i] = true
+		}
+		checkContextSelection(t, m, nil, true, all)
+	})
+}
+
 func TestContextListsProvenanceObjectivesOnlyWithProvenanceOn(t *testing.T) {
 	c, err := LoadCatalog("v0")
 	if err != nil {

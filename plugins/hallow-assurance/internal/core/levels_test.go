@@ -49,6 +49,24 @@ func TestMoreSpecificComponentDecidesLevel(t *testing.T) {
 	})
 }
 
+func TestSoleMatchingComponentDecidesWhateverItsSpecificity(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		p := pathGen.Draw(t, "path")
+		segs := strings.Split(p, "/")
+		var globs []string
+		for _, g := range []string{"**", strings.Repeat("*/", len(segs)-1) + "*", segs[0] + "/**", "**/" + segs[len(segs)-1], p} {
+			if mustGlob(t, g).Match(p) {
+				globs = append(globs, g)
+			}
+		}
+		g := rapid.SampledFrom(globs).Draw(t, "glob")
+		lvl, dflt := rapid.SampledFrom(levels).Draw(t, "lvl"), rapid.SampledFrom(levels).Draw(t, "dflt")
+		if comp, got := manifestWith(dflt, Component{Glob: mustGlob(t, g), Level: lvl}).Resolve(p); comp != 0 || got != lvl {
+			t.Fatalf("only %q (level %s) matches %q, default %s: got component %d level %s; a matching component decides however few literal segments it has", g, lvl, p, dflt, comp, got)
+		}
+	})
+}
+
 func TestUnmatchedPathTakesDefault(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		p := pathGen.Draw(t, "path")
