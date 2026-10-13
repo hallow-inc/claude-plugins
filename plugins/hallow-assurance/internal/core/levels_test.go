@@ -34,14 +34,15 @@ func TestLevelIsIndependentOfComponentOrder(t *testing.T) {
 func TestMoreSpecificComponentDecidesLevel(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		p := pathGen.Draw(t, "path")
+		g := mustGlob(t, p)
 		var comps []Component
 		for _, c := range rapid.SliceOfN(componentGen, 0, 5).Draw(t, "comps") {
-			if c.Glob.String() != p {
+			if !c.Glob.Match(p) || c.Glob.Literals() < g.Literals() {
 				comps = append(comps, c)
 			}
 		}
 		lvl := rapid.SampledFrom(levels).Draw(t, "lvl")
-		exact := Component{Glob: mustGlob(t, p), Level: lvl}
+		exact := Component{Glob: g, Level: lvl}
 		if _, got := manifestWith("D", append(comps, exact)...).Resolve(p); got != lvl {
 			t.Fatalf("literal component %q at %s lost to a less specific one: got %s", p, lvl, got)
 		}
