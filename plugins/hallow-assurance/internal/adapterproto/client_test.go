@@ -2,10 +2,15 @@ package adapterproto
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
+
+	"pgregory.net/rapid"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
@@ -93,6 +98,98 @@ func TestClassifyRunsInManifestDirAndBatches(t *testing.T) {
 	}
 	if got, _ := filepath.EvalSymlinks(strings.TrimSpace(string(cwd))); got != mustEval(t, dir) {
 		t.Fatalf("adapter cwd %s, want %s", got, dir)
+	}
+}
+
+const batchRecorder = `shift; echo $# >> "$PWD/.batches"; printf '{"protocol":0,"files":['; sep=''; for p in "$@"; do printf '%s{"path":"%s","language":"go","role":"source"}' "$sep" "$p"; sep=','; done; printf ']}'`
+
+type fataler interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}
+
+func pathOfLen(i, n int) string {
+	p := fmt.Sprintf("p%d/", i)
+	return p + strings.Repeat("x", n-len(p))
+}
+
+func argBytes(paths []string) int {
+	n := 0
+	for _, p := range paths {
+		n += len(p) + 1
+	}
+	return n
+}
+
+func classifyBatches(t fataler, dir string, paths []string) []int {
+	t.Helper()
+	files, err := Classify(dir, "go", paths)
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+	got := make([]string, len(files))
+	for i, f := range files {
+		got[i] = f.Path
+	}
+	if !slices.Equal(got, paths) {
+		t.Fatalf("classified %d paths, want each of the %d inputs once and in order", len(got), len(paths))
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".batches"))
+	if err != nil {
+		t.Fatalf("adapter recorded no invocation: %v", err)
+	}
+	var sizes []int
+	for f := range strings.FieldsSeq(string(data)) {
+		n, err := strconv.Atoi(f)
+		if err != nil {
+			t.Fatalf("batch record %q: %v", f, err)
+		}
+		sizes = append(sizes, n)
+	}
+	return sizes
+}
+
+func TestClassifyBatchesAreMaximalRunsWithinTheArgumentLimit(t *testing.T) {
+	fakeAdapter(t, "go", batchRecorder)
+	base := t.TempDir()
+	rapid.Check(t, func(t *rapid.T) {
+		dir, err := os.MkdirTemp(base, "case")
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		lens := rapid.SliceOfN(rapid.OneOf(rapid.IntRange(8, 64), rapid.IntRange(maxArgBytes/4, maxArgBytes-1)), 1, 8).Draw(t, "lengths")
+		paths := make([]string, len(lens))
+		for i, n := range lens {
+			paths[i] = pathOfLen(i, n)
+		}
+		rest := paths
+		for _, n := range classifyBatches(t, dir, paths) {
+			if n < 1 || n > len(rest) {
+				t.Fatalf("batch of %d with %d paths left: every path must be classified exactly once", n, len(rest))
+			}
+			batch := rest[:n]
+			rest = rest[n:]
+			if n > 1 && argBytes(batch) > maxArgBytes {
+				t.Fatalf("batch of %d paths takes %d argument bytes, over the %d limit: the adapter exec fails with E2BIG", n, argBytes(batch), maxArgBytes)
+			}
+			if len(rest) > 0 && argBytes(batch)+len(rest[0])+1 <= maxArgBytes {
+				t.Fatalf("batch of %d paths stopped at %d bytes though the next path fit: each extra batch is another adapter process", n, argBytes(batch))
+			}
+		}
+		if len(rest) > 0 {
+			t.Fatalf("%d paths never reached the adapter", len(rest))
+		}
+	})
+}
+
+func TestClassifyBatchLimitIsInclusive(t *testing.T) {
+	fakeAdapter(t, "go", batchRecorder)
+	half := maxArgBytes/2 - 1
+	for extra, want := range []int{1, 2} {
+		paths := []string{pathOfLen(0, half), pathOfLen(1, half+extra)}
+		if got := classifyBatches(t, t.TempDir(), paths); len(got) != want {
+			t.Fatalf("paths taking %d argument bytes (limit %d) went in %d batches %v, want %d", argBytes(paths), maxArgBytes, len(got), got, want)
+		}
 	}
 }
 

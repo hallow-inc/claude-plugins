@@ -202,3 +202,35 @@ func TestFailOnBaseModuleBelowGitRoot(t *testing.T) {
 		t.Fatalf("got %+v; with go.mod below the git root the base tree must still be extracted, so the regression test fails on base instead of erroring", j)
 	}
 }
+
+func TestFailOnBaseRunFromGitRootOverlaysOnlyModuleTests(t *testing.T) {
+	top := t.TempDir()
+	if real, err := filepath.EvalSymlinks(top); err == nil {
+		top = real
+	}
+	writeFiles(t, top, map[string]string{
+		"sub/go.mod":        "module example.com/m\n\ngo 1.26\n",
+		"sub/a/a.go":        offByOne,
+		"sub/a/a_test.go":   oldTest,
+		"sub/a/dup_test.go": "package a\n\nimport \"testing\"\n\nfunc TestDup(t *testing.T) {}\n",
+	})
+	git(t, top, "init", "-q")
+	git(t, top, "add", "-A")
+	git(t, top, "commit", "-qm", "init")
+	if err := os.Remove(filepath.Join(top, "sub/a/dup_test.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeFiles(t, top, map[string]string{
+		"sub/a/a.go":      strings.Replace(offByOne, "len(xs)-2", "len(xs)-1", 1),
+		"sub/a/a_test.go": oldTest + "\nfunc TestBoundary(t *testing.T) {\n\tif Last([]int{1, 2, 3}) != 3 {\n\t\tt.Fatal(\"off by one\")\n\t}\n}\n",
+		"sub/a/c_test.go": "package a\n\nimport \"testing\"\n\nfunc TestDup(t *testing.T) { t.Fatal(\"moved\") }\n",
+		"a/zz_test.go":    "package a\n\nimport \"testing\"\n\nfunc TestBoundary(t *testing.T) {}\n",
+	})
+	j, _ := baseRun(t, top)
+	failed := func(name string) bool {
+		return slices.ContainsFunc(j.Failing, func(c ev.Failure) bool { return strings.HasSuffix(c.Name, "."+name) || c.Name == name })
+	}
+	if j.Cases != 2 || j.Failures != 2 || j.Errors != 0 || !failed("TestBoundary") || !failed("TestDup") {
+		t.Fatalf("got %+v; run from a git root whose go.mod is in sub/, base must get sub/'s changed test files (TestBoundary added, dup_test.go removed) and none from outside sub/, else a fix test is judged against base without its new test and VER-FAIL-ON-BASE is wrong for repos whose module is below the git root", j)
+	}
+}
