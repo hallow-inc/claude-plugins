@@ -1,7 +1,10 @@
 package evidence
 
 import (
+	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"pgregory.net/rapid"
@@ -80,6 +83,54 @@ func TestLCOVScenarios(t *testing.T) {
 			t.Fatal("want error for a block with no end_of_record")
 		}
 	})
+}
+
+func TestLCOVErrorsNameTheOffendingLine(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		text := strings.TrimSuffix(string(FormatLCOV(rapid.SliceOfN(lcovFileGen(), 0, 3).Draw(t, "files"))), "\n")
+		var lines []string
+		if text != "" {
+			lines = strings.Split(text, "\n")
+		}
+		for range rapid.IntRange(0, 4).Draw(t, "noise") {
+			at := rapid.IntRange(0, len(lines)).Draw(t, "noise at")
+			lines = slices.Insert(lines, at, rapid.SampledFrom([]string{"", "  ", "TN:", "TN:suite"}).Draw(t, "noise line"))
+		}
+		at := rapid.IntRange(0, len(lines)).Draw(t, "bad at")
+		bad := rapid.SampledFrom([]string{"DA:0,1", "DA:1,-1", "DA:1", "FN:x,F", "FNDA:1,no such", "SF:/abs.go"}).Draw(t, "bad")
+		lines = slices.Insert(lines, at, bad)
+		_, err := ParseLCOV([]byte(strings.Join(lines, "\n") + "\n"))
+		if want := fmt.Sprintf("lcov: line %d: ", at+1); err == nil || !strings.HasPrefix(err.Error(), want) {
+			t.Fatalf("%q at line %d: err %v, want prefix %q; the human fixing a rejected coverage report needs the line it was rejected at", bad, at+1, err, want)
+		}
+	})
+}
+
+func TestLCOVDAAcceptsTheOptionalChecksum(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		line, hits := rapid.IntRange(1, 1<<20).Draw(t, "line"), rapid.IntRange(0, 1<<20).Draw(t, "hits")
+		sum := rapid.StringMatching(`[A-Za-z0-9+/=]{0,24}`).Draw(t, "checksum")
+		got, err := ParseLCOV(fmt.Appendf(nil, "SF:a.go\nDA:%d,%d,%s\nend_of_record\n", line, hits, sum))
+		if err != nil || len(got) != 1 || len(got[0].Lines) != 1 || got[0].Lines[line] != hits {
+			t.Fatalf("DA:%d,%d,%s: %+v %v; geninfo writes the checksum field when checksums are on, and rejecting it fails coverage for that whole report", line, hits, sum, got, err)
+		}
+		if _, err := ParseLCOV(fmt.Appendf(nil, "SF:a.go\nDA:%d,%d,%s,extra\nend_of_record\n", line, hits, sum)); err == nil {
+			t.Fatalf("DA with four fields accepted; no LCOV writer emits one, so it is a corrupt record")
+		}
+	})
+}
+
+func TestLCOVAcceptsLinesUpToOneMiB(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		name := strings.Repeat("f", rapid.IntRange(64<<10, 1<<20-64).Draw(t, "name length"))
+		got, err := ParseLCOV([]byte("SF:a.go\nFN:1," + name + "\nend_of_record\n"))
+		if err != nil || len(got) != 1 || len(got[0].Functions) != 1 || got[0].Functions[0].Name != name {
+			t.Fatalf("FN line of %d bytes: %v; long generated symbol names reach well past bufio's 64 KiB default, and coverage must still parse", len(name)+5, err)
+		}
+	})
+	if _, err := ParseLCOV([]byte("SF:a.go\nFN:1," + strings.Repeat("f", 1<<20) + "\nend_of_record\n")); err == nil {
+		t.Fatal("FN line over 1 MiB accepted; the reader must refuse it rather than parse it partially")
+	}
 }
 
 func FuzzParseLCOV(f *testing.F) {
