@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"pgregory.net/rapid"
 
@@ -30,14 +31,13 @@ func fakeAdapter(t *testing.T, lang, script string) string {
 
 func TestDescribeFailureModesNameTheAdapter(t *testing.T) {
 	cases := map[string]struct{ script, want string }{
-		"non-zero exit":      {"echo adapter-broke >&2; exit 1", "stderr: adapter-broke"},
-		"invalid JSON":       {"echo '{not json'", "invalid JSON"},
-		"two documents":      {"echo '" + goodDescribe + goodDescribe + "'", "trailing data"},
-		"schema violation":   {`echo '{"protocol": 1}'`, "violates the protocol"},
-		"wrong language":     {`echo '` + strings.Replace(goodDescribe, `["go"]`, `["rust"]`, 1) + `'`, `does not include "go"`},
-		"foreign reference":  {`echo '` + strings.Replace(goodDescribe, `"objectives":{}`, `"objectives":{},"reference":"typescript"`, 1) + `'`, "/reference"},
-		"timeout":            {"exec sleep 10", "killed after timeout of 2s"},
-		"oversized response": {"exec cat /dev/zero", "response exceeds"},
+		"non-zero exit":     {"echo adapter-broke >&2; exit 1", "stderr: adapter-broke"},
+		"invalid JSON":      {"echo '{not json'", "invalid JSON"},
+		"two documents":     {"echo '" + goodDescribe + goodDescribe + "'", "trailing data"},
+		"schema violation":  {`echo '{"protocol": 1}'`, "violates the protocol"},
+		"wrong language":    {`echo '` + strings.Replace(goodDescribe, `["go"]`, `["rust"]`, 1) + `'`, `does not include "go"`},
+		"foreign reference": {`echo '` + strings.Replace(goodDescribe, `"objectives":{}`, `"objectives":{},"reference":"typescript"`, 1) + `'`, "/reference"},
+		"timeout":           {"exec sleep 10", "killed after timeout of 2s"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -51,6 +51,21 @@ func TestDescribeFailureModesNameTheAdapter(t *testing.T) {
 				t.Fatalf("error %q does not mention %q", err, c.want)
 			}
 		})
+	}
+}
+
+func TestOutputPastTheCapIsOverflowNotTimeout(t *testing.T) {
+	exe := fakeAdapter(t, "go", "exec cat /dev/zero")
+	out, err := invokeCapped(exe, t.TempDir(), "assure-adapter-go", "describe", 30*time.Second, 1<<10)
+	var ae *Error
+	if !errors.As(err, &ae) || ae.Adapter != "assure-adapter-go" || ae.Sub != "describe" {
+		t.Fatalf("want *Error naming assure-adapter-go describe, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "response exceeds 1024 bytes") {
+		t.Fatalf("error %q does not report overflow of the 1024-byte cap", err)
+	}
+	if out != nil {
+		t.Fatalf("overflowed call returned %d bytes of output", len(out))
 	}
 }
 
