@@ -15,6 +15,10 @@ import (
 
 const timeoutCoefficient = 10
 
+// Gremlins' default of one worker per CPU starved test runs past the timeout on a 12-core
+// machine (33 of 47 mutants TIMED OUT, hiding 3 survivors); 2 measured clean.
+const workers = 2
+
 var strykerStatus = map[string]string{
 	"KILLED":      "Killed",
 	"LIVED":       "Survived",
@@ -167,7 +171,7 @@ func unleash(dir, ref, out, seed string) ([]byte, error) {
 	_ = f.Close()
 	defer func() { _ = os.Remove(name) }()
 	cmd := exec.CommandContext(context.Background(), "gremlins", "unleash", "--diff", ref, "--output", name,
-		"--timeout-coefficient", strconv.Itoa(timeoutCoefficient), ".")
+		"--timeout-coefficient", strconv.Itoa(timeoutCoefficient), "--workers", strconv.Itoa(workers), ".")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "RAPID_SEED="+seed,
 		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=diff.relative", "GIT_CONFIG_VALUE_0=true")
