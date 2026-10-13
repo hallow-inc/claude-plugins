@@ -175,6 +175,46 @@ func TestMutationGremlinsMissingIsEnvironment(t *testing.T) {
 	environmentIn(t, resp, out, "gremlins", gremlinsDefaultInstall)
 }
 
+func unleashArgv(t *testing.T) []string {
+	t.Helper()
+	argv := filepath.Join(t.TempDir(), "argv")
+	narrowPath(t, nil, map[string]string{"gremlins": `printf '%s\n' "$@" >| '` + argv + `'
+while [ $# -gt 0 ]; do
+	if [ "$1" = --output ]; then shift; printf '{"files":[]}' >| "$1"; fi
+	shift
+done
+`})
+	if _, err := unleash(t.TempDir(), "HEAD", t.TempDir(), "1"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(argv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+}
+
+func flagValue(args []string, name string) string {
+	v := ""
+	for i, a := range args {
+		if a == name && i+1 < len(args) {
+			v = args[i+1]
+		} else if s, ok := strings.CutPrefix(a, name+"="); ok {
+			v = s
+		}
+	}
+	return v
+}
+
+func TestMutationGivesGremlinsTimeoutHeadroom(t *testing.T) {
+	const minCoefficient = 100
+	args := unleashArgv(t)
+	coef := flagValue(args, "--timeout-coefficient")
+	if n, err := strconv.Atoi(coef); err != nil || n < minCoefficient {
+		t.Fatalf("gremlins argv %q: --timeout-coefficient %q, want an integer >= %d; a mutant whose test run outlasts the coefficient is reported TIMED OUT, and TIMED OUT counts as detected, so a tight coefficient turns real survivors into false kills and VER-MUTATION-CHANGED fails open on packages with slow tests (measured on internal/hookio at --workers 2: coefficient 10 gave 15 timed out / 0 lived, coefficient 100 gave 68 killed / 9 lived / 0 timed out)", args, coef, minCoefficient)
+	}
+}
+
 func TestMutationBoundsGremlinsWorkers(t *testing.T) {
 	const maxWorkers = 2
 	argv := filepath.Join(t.TempDir(), "argv")
