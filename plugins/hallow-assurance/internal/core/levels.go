@@ -65,3 +65,18 @@ func (m *Manifest) Resolve(rel string) (component int, level Level) {
 	}
 	return component, level
 }
+
+func (m *Manifest) winners(rel string) []int {
+	comp, level := m.Resolve(rel)
+	if comp < 0 {
+		return nil
+	}
+	n := m.Components[comp].Glob.Literals()
+	var out []int
+	for i, c := range m.Components {
+		if c.Level == level && c.Glob.Literals() == n && c.Glob.Match(rel) {
+			out = append(out, i)
+		}
+	}
+	return out
+}

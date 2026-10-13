@@ -46,11 +46,13 @@ func (m *Manifest) selection(only []string) (comps map[int]bool, levelsSeen map[
 		levelsSeen[m.DefaultLevel] = true
 	}
 	for _, p := range only {
-		i, l := m.Resolve(p)
+		_, l := m.Resolve(p)
 		levelsSeen[l] = true
-		if i < 0 {
+		w := m.winners(p)
+		if len(w) == 0 {
 			useDefault = true
-		} else {
+		}
+		for _, i := range w {
 			comps[i] = true
 		}
 	}
