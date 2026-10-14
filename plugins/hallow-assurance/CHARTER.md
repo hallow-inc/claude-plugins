@@ -539,7 +539,8 @@ never reassigned, and new work takes a letter suffix.
 **M5 — Qualification**
 - `qualification/go/`: seeded-bug fixtures with expected outcomes (mutants that must be killed,
   known coverage, known lint findings)
-- Adapter must pass qualification in CI before release, from v1. Pre-M5 `v0.x` tags are unqualified.
+- Qualification gates every tag: the adapter must pass it in CI before release. M5 lands before
+  `release-channel` (listed under M4c), so the first published tag is already qualified.
 - ✅ A deliberately broken adapter build fails qualification
 
 **M6 — TypeScript adapter (agnosticism proof)**

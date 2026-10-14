@@ -1,0 +1,75 @@
+CODE-RESOURCE-BOUNDS: Status in p/status.go never closes the http.Response body (bodyclose).
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/status.go --
+package p
+
+import "net/http"
+
+func Status(c *http.Client, req *http.Request) (int, error) {
+	resp, err := c.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	return resp.StatusCode, nil
+}
+-- head/p/status_test.go --
+package p
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer srv.Close()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Status(srv.Client(), req); err != nil || got != http.StatusTeapot {
+		t.Fatalf("Status = %d, %v; want %d", got, err, http.StatusTeapot)
+	}
+	bad, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "nope://x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Status(srv.Client(), bad); err == nil || got != 0 {
+		t.Fatalf("Status(nope://x) = %d, %v; want 0 and an error", got, err)
+	}
+}
+-- head.msg --
+feat(p): add Status
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "CFG-PROTECTED", "status": "pass"},
+    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
+    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
+    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
+    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "fail", "locations": ["p/status.go"]},
+    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}

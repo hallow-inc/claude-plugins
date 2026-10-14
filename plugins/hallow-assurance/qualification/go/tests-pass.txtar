@@ -1,0 +1,44 @@
+VER-TESTS-PASS: TestDoubleWrong expects Double(2) to be 5.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/p_test.go --
+package p
+
+import "testing"
+
+func TestDoubleWrong(t *testing.T) {
+	if got := Double(2); got != 5 {
+		t.Fatalf("Double(2) = %d, want 5", got)
+	}
+}
+-- head.msg --
+test(p): cover Double
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "CFG-PROTECTED", "status": "pass"},
+    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
+    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
+    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
+    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "pass"},
+    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["assure-adapter-go run: exit status 1; stderr: assure-adapter-go: run VER-MUTATION-CHANGED: gremlins unleash in "]},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "fail", "locations": ["failing test: example.com/q/p.TestDoubleWrong"]}
+  ]
+}

@@ -1,0 +1,57 @@
+VER-ROBUST-FUZZ: in the inputs component p, the seed "" makes First index an empty string.
+go test runs fuzz seeds too, so VER-TESTS-PASS fails on the same panic.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+    inputs: true
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/first.go --
+package p
+
+func First(s string) byte {
+	return s[0]
+}
+-- head/p/first_test.go --
+package p
+
+import "testing"
+
+func FuzzFirst(f *testing.F) {
+	f.Add("a")
+	f.Add("")
+	f.Fuzz(func(t *testing.T, s string) {
+		if First(s) != s[0] {
+			t.Fatal("First disagrees with s[0]")
+		}
+	})
+}
+-- head.msg --
+feat(p): add First
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "CFG-PROTECTED", "status": "pass"},
+    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
+    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
+    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
+    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "pass"},
+    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["assure-adapter-go run: exit status 1; stderr: assure-adapter-go: run VER-MUTATION-CHANGED: gremlins unleash in "]},
+    {"objective": "VER-ROBUST-FUZZ", "language": "go", "status": "fail", "locations": ["p/first.go: fuzz target p.FuzzFirst failed"]},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "fail", "locations": ["failing test: example.com/q/p.FuzzFirst"]}
+  ]
+}

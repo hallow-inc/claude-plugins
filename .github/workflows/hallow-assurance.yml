@@ -6,6 +6,7 @@ on:
     types: [submitted, dismissed]
   push:
     branches: [master]
+    tags: ['plugins/hallow-assurance/v*']
     paths:
       - 'plugins/hallow-assurance/**'
       - '.github/workflows/hallow-assurance.yml'
@@ -30,6 +31,7 @@ jobs:
         working-directory: .
     outputs:
       run: ${{ steps.diff.outputs.run }}
+      qualify: ${{ steps.diff.outputs.qualify }}
 
     steps:
       - name: Checkout
@@ -41,17 +43,24 @@ jobs:
         id: diff
         env:
           EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
           if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_review ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
+            case "$REF" in refs/tags/*) qualify=true ;; *) qualify=false ;; esac
+            echo "qualify=$qualify" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           base=$(git merge-base HEAD "origin/$BASE_REF")
           changed=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml)
           if [ -n "$changed" ]; then run=true; else run=false; fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
+          qualifying=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml \
+            ':(exclude)plugins/hallow-assurance/plugin/**' ':(exclude,glob)**/*.md')
+          if [ -n "$qualifying" ]; then qualify=true; else qualify=false; fi
+          echo "qualify=$qualify" >> "$GITHUB_OUTPUT"
 
   go:
     needs: changes
@@ -130,8 +139,49 @@ jobs:
           base=$(git merge-base HEAD "origin/$BASE_REF")
           PATH="$bin:$PATH" assure evaluate --changed-from "$base" --reviews "$RUNNER_TEMP/reviews.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
+  qualification:
+    needs: changes
+    if: needs.changes.outputs.qualify == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: plugins/hallow-assurance/go.mod
+          cache-dependency-path: plugins/hallow-assurance/go.sum
+
+      - name: Setup mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca  # v5.1.1
+        with:
+          version: 2026.8.14
+          install: false
+          cache: false
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9.3.0
+        with:
+          version: v2.13.2
+          install-only: true
+
+      - name: Install Gremlins
+        run: |
+          GOBIN="$RUNNER_TEMP/tools" go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+
+      - name: Qualify
+        env:
+          ASSURE_QUALIFICATION: '1'
+        run: go test -count=1 -v -timeout 28m ./qualification/...
+
   assure-gate:
-    needs: [changes, go]
+    needs: [changes, go, qualification]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -145,10 +195,13 @@ jobs:
           CHANGES: ${{ needs.changes.result }}
           RUN: ${{ needs.changes.outputs.run }}
           GO: ${{ needs.go.result }}
+          QUALIFY: ${{ needs.changes.outputs.qualify }}
+          QUAL: ${{ needs.qualification.result }}
         run: |
           set -euo pipefail
-          if [ "$CHANGES" = success ] && { [ "$GO" = success ] || { [ "$RUN" = false ] && [ "$GO" = skipped ]; }; }; then
+          if [ "$CHANGES" = success ] && { [ "$GO" = success ] || { [ "$RUN" = false ] && [ "$GO" = skipped ]; }; } \
+            && { [ "$QUAL" = success ] || { [ "$QUALIFY" = false ] && [ "$QUAL" = skipped ]; }; }; then
             exit 0
           fi
-          echo "::error::assure-gate: changes=$CHANGES run=$RUN go=$GO"
+          echo "::error::assure-gate: changes=$CHANGES run=$RUN go=$GO qualify=$QUALIFY qualification=$QUAL"
           exit 1

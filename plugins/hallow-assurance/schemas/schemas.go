@@ -42,6 +42,7 @@ const (
 	Resolutions     Kind = "coverage-resolutions"
 	Reviews         Kind = "reviews"
 	Pending         Kind = "pending"
+	QualExpect      Kind = "qualification-expect"
 )
 
 const base = "https://assure.invalid/schemas/v0/"
@@ -80,6 +81,7 @@ var kinds = map[Kind]struct {
 	Resolutions:     {base + "coverage-resolutions.schema.json", yamlDoc},
 	Reviews:         {base + "reviews.schema.json", jsonDoc},
 	Pending:         {base + "pending.schema.json", jsonDoc},
+	QualExpect:      {"https://assure.invalid/schemas/v0/qualification-expect.schema.json", jsonDoc},
 }
 
 type Violation struct {

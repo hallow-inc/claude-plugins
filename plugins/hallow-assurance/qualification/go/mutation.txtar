@@ -1,0 +1,57 @@
+VER-MUTATION-CHANGED: Clamp in p/clamp.go is fully covered by a test that asserts nothing,
+so every mutant on its changed lines survives.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/clamp.go --
+package p
+
+func Clamp(x, lo, hi int) int {
+	if x < lo {
+		return lo
+	}
+	if x > hi {
+		return hi
+	}
+	return x
+}
+-- head/p/clamp_test.go --
+package p
+
+import "testing"
+
+func TestClampRuns(t *testing.T) {
+	for _, x := range []int{-1, 0, 5, 10, 11} {
+		_ = Clamp(x, 0, 10)
+	}
+}
+-- head.msg --
+feat(p): add Clamp
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "CFG-PROTECTED", "status": "pass"},
+    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
+    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
+    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
+    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "pass"},
+    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["level B: 0 of 4 mutants detected", "p/clamp.go:4 ", "p/clamp.go:7 "]},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}
