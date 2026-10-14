@@ -1,0 +1,117 @@
+A fix commit that every Go objective at level B accepts: p is an inputs component, the
+fix test fails on base, the tests kill every mutant on the changed lines, and the fuzz
+target lives in base so the fix test is the only changed test function.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+    inputs: true
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/digits.go --
+package p
+
+import "errors"
+
+var ErrEmpty = errors.New("empty input")
+
+var ErrNotDigit = errors.New("not a digit")
+
+func DigitSum(s string) (int, error) {
+	if s == "" {
+		return 0, ErrEmpty
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '8' {
+			return 0, ErrNotDigit
+		}
+		n += int(r - '0')
+	}
+	return n, nil
+}
+-- base/p/fuzz_test.go --
+package p
+
+import "testing"
+
+func FuzzDigitSum(f *testing.F) {
+	f.Add("")
+	f.Add("123")
+	f.Add("x")
+	f.Fuzz(func(t *testing.T, s string) {
+		n, err := DigitSum(s)
+		if err == nil && (n < 0 || n > 9*len(s)) {
+			t.Fatalf("DigitSum(%q) = %d out of range", s, n)
+		}
+	})
+}
+-- head/p/digits.go --
+package p
+
+import "errors"
+
+var ErrEmpty = errors.New("empty input")
+
+var ErrNotDigit = errors.New("not a digit")
+
+func DigitSum(s string) (int, error) {
+	if s == "" {
+		return 0, ErrEmpty
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, ErrNotDigit
+		}
+		n += int(r - '0')
+	}
+	return n, nil
+}
+-- head/p/digits_test.go --
+package p
+
+import (
+	"errors"
+	"testing"
+)
+
+func TestDigitSum(t *testing.T) {
+	for in, want := range map[string]int{"0": 0, "9": 9, "09": 9, "123": 6} {
+		if got, err := DigitSum(in); err != nil || got != want {
+			t.Errorf("DigitSum(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for in, want := range map[string]error{"": ErrEmpty, "/": ErrNotDigit, ":": ErrNotDigit, "1a": ErrNotDigit} {
+		if _, err := DigitSum(in); !errors.Is(err, want) {
+			t.Errorf("DigitSum(%q) error = %v; want %v", in, err, want)
+		}
+	}
+}
+-- head.msg --
+fix(p): accept the digit 9
+
+Assure-Kind: fix
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "CFG-PROTECTED", "status": "pass"},
+    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
+    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
+    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
+    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "pass"},
+    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-FAIL-ON-BASE", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
+    {"objective": "VER-ROBUST-FUZZ", "language": "go", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}

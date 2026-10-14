@@ -1,0 +1,6 @@
+{
+  "objectives": [
+    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "advisory-fail", "locations": ["lib/x.go:12"]}
+  ]
+}

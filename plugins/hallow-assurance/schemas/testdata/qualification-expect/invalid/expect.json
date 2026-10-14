@@ -1,0 +1,15 @@
+{
+  "fail-without-locations.json": [{"location": "/objectives/0", "keyword": "required"}],
+  "fail-empty-locations.json": [{"location": "/objectives/0/locations", "keyword": "minItems"}],
+  "unknown-status.json": [{"location": "/objectives/0/status", "keyword": "enum"}],
+  "extra-field.json": [{"location": "/objectives/0", "keyword": "additionalProperties"}],
+  "missing-objectives.json": [{"location": "", "keyword": "required"}],
+  "not-object.json": [{"location": "", "keyword": "type"}],
+  "extra-top-field.json": [{"location": "", "keyword": "additionalProperties"}],
+  "objectives-not-array.json": [{"location": "/objectives", "keyword": "type"}],
+  "objective-not-object.json": [{"location": "/objectives/0", "keyword": "type"}],
+  "missing-status.json": [{"location": "/objectives/0", "keyword": "required"}],
+  "missing-objective.json": [{"location": "/objectives/0", "keyword": "required"}],
+  "locations-not-array.json": [{"location": "/objectives/0/locations", "keyword": "type"}],
+  "problems-not-array.json": [{"location": "/problems", "keyword": "type"}]
+}

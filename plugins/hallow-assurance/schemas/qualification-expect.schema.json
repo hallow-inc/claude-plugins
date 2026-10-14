@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/qualification-expect.schema.json",
+  "title": "Qualification case expectation (qualification/<language>/<case>.txtar, expect.json section)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["objectives"],
+  "properties": {
+    "objectives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["objective", "status"],
+        "properties": {
+          "objective": { "$ref": "common.schema.json#/$defs/objectiveId" },
+          "language": { "$ref": "common.schema.json#/$defs/languageId" },
+          "status": { "$ref": "report.schema.json#/properties/objectives/items/properties/status" },
+          "locations": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+          }
+        },
+        "if": {
+          "properties": { "status": { "enum": ["fail", "advisory-fail"] } }
+        },
+        "then": {
+          "required": ["locations"],
+          "properties": { "locations": { "minItems": 1 } }
+        }
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+      "default": []
+    }
+  }
+}

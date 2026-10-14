@@ -1,0 +1,91 @@
+CODE-COMPLEXITY: Code in p/code.go has cyclomatic complexity 16 (fifteen cases), over the
+level B threshold of 15. The test covers every case.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/code.go --
+package p
+
+func Code(s string) string {
+	switch s {
+	case "a":
+		return "A"
+	case "b":
+		return "B"
+	case "c":
+		return "C"
+	case "d":
+		return "D"
+	case "e":
+		return "E"
+	case "f":
+		return "F"
+	case "g":
+		return "G"
+	case "h":
+		return "H"
+	case "i":
+		return "I"
+	case "j":
+		return "J"
+	case "k":
+		return "K"
+	case "l":
+		return "L"
+	case "m":
+		return "M"
+	case "n":
+		return "N"
+	case "o":
+		return "O"
+	}
+	return "?"
+}
+-- head/p/code_test.go --
+package p
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestCode(t *testing.T) {
+	for _, s := range strings.Split("abcdefghijklmno", "") {
+		if got := Code(s); got != strings.ToUpper(s) {
+			t.Errorf("Code(%q) = %q", s, got)
+		}
+	}
+	if got := Code("z"); got != "?" {
+		t.Errorf("Code(z) = %q", got)
+	}
+}
+-- head.msg --
+feat(p): add Code
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "CFG-PROTECTED", "status": "pass"},
+    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
+    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "fail", "locations": ["p/code.go"]},
+    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
+    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "pass"},
+    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}
