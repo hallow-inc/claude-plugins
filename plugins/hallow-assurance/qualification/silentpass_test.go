@@ -94,21 +94,11 @@ func catalogEvidence(t *testing.T) map[string]string {
 	return kinds
 }
 
-func checkEmptyDocsCoverAdapter(t *testing.T, kinds map[string]string) {
+func checkEmptyDocsCoverAdapter(t *testing.T, lang string, kinds map[string]string) {
 	t.Helper()
-	out, err := exec.CommandContext(t.Context(), filepath.Join(binDir, "assure-adapter-go"), "describe").Output()
-	if err != nil {
-		t.Fatalf("assure-adapter-go describe: %v", err)
-	}
-	var d struct {
-		Objectives map[string]json.RawMessage `json:"objectives"`
-	}
-	if err := json.Unmarshal(out, &d); err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range slices.Sorted(maps.Keys(d.Objectives)) {
+	for _, id := range slices.Sorted(maps.Keys(adapterObjectives(t, lang))) {
 		if _, ok := emptyDocs[kinds[id]]; !ok {
-			t.Errorf("the Go adapter implements %s, whose evidence kind %q has no empty document", id, kinds[id])
+			t.Errorf("the %s adapter implements %s, whose evidence kind %q has no empty document", lang, id, kinds[id])
 		}
 	}
 }
@@ -122,40 +112,44 @@ func TestSilentPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	kinds := catalogEvidence(t)
-	checkEmptyDocsCoverAdapter(t, kinds)
-	cases := loadCases(t)
-	for _, name := range slices.Sorted(maps.Keys(cases)) {
-		obj := cases[name].seeds
-		if obj == "" {
-			continue
-		}
-		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join("go", name+".txtar"))
-			if err != nil {
-				t.Fatal(err)
+	for _, lang := range languages() {
+		t.Run(lang, func(t *testing.T) {
+			checkEmptyDocsCoverAdapter(t, lang, kinds)
+			cases := loadCases(t, lang)
+			for _, name := range slices.Sorted(maps.Keys(cases)) {
+				obj := cases[name].seeds
+				if obj == "" {
+					continue
+				}
+				t.Run(name, func(t *testing.T) {
+					data, err := os.ReadFile(filepath.Join(lang, name+".txtar"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					c, err := parseCase(lang, name, data)
+					if err != nil {
+						t.Fatal(err)
+					}
+					logPath := filepath.Join(t.TempDir(), "emptied")
+					ms, log := evaluateCase(t, c, self, []string{
+						"QUAL_REAL_ADAPTER=" + filepath.Join(binDir, adapterName(lang)),
+						"QUAL_EMPTY_OBJECTIVE=" + obj,
+						"QUAL_EMPTY_LOG=" + logPath,
+					})
+					checkSilentPass(t, lang, obj, kinds[obj], logPath, ms, log)
+				})
 			}
-			c, err := parseCase(name, data)
-			if err != nil {
-				t.Fatal(err)
-			}
-			logPath := filepath.Join(t.TempDir(), "emptied")
-			ms, log := evaluateCase(t, c, self, []string{
-				"QUAL_REAL_ADAPTER=" + filepath.Join(binDir, "assure-adapter-go"),
-				"QUAL_EMPTY_OBJECTIVE=" + obj,
-				"QUAL_EMPTY_LOG=" + logPath,
-			})
-			checkSilentPass(t, obj, kinds[obj], logPath, ms, log)
 		})
 	}
 }
 
-func checkSilentPass(t *testing.T, obj, kind, logPath string, ms []string, log string) {
+func checkSilentPass(t *testing.T, lang, obj, kind, logPath string, ms []string, log string) {
 	t.Helper()
 	emptied, err := os.ReadFile(logPath)
 	if err != nil || string(emptied) != kind+"\n" {
 		t.Fatalf("the wrapper emptied %q (err %v), want exactly one %s document\n%s", emptied, err, kind, log)
 	}
-	own := entryKey{obj, "go"}.String() + ": "
+	own := entryKey{obj, lang}.String() + ": "
 	var flipped, other []string
 	for _, m := range ms {
 		if strings.HasPrefix(m, own) {

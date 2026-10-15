@@ -98,7 +98,7 @@ func toolDir(dir string, tools map[string]string) (string, error) {
 }
 
 func TestBuildRepoTwoCommitsWithTrailer(t *testing.T) {
-	c, err := parseCase("trailer", []byte(`-- base/go.mod --
+	c, err := parseCase("go", "trailer", []byte(`-- base/go.mod --
 module example.com/m
 -- base/p/keep.go --
 package p
