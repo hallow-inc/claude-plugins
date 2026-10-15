@@ -25,6 +25,7 @@ var toolGen = rapid.Custom(func(rt *rapid.T) adapterproto.Tool {
 })
 
 func drawToolResponses(rt *rapid.T, bin string, langs ...string) (want []toolLine, installs string) {
+	seen := map[string]bool{}
 	for _, lang := range langs {
 		tools := rapid.SliceOfDistinct(toolGen, func(tool adapterproto.Tool) string { return tool.Name }).Draw(rt, lang)
 		data, err := json.Marshal(map[string]any{"protocol": 1, "tools": tools})
@@ -36,7 +37,10 @@ func drawToolResponses(rt *rapid.T, bin string, langs ...string) (want []toolLin
 		}
 		for _, tool := range tools {
 			want = append(want, toolLine{lang, tool.Name, tool.Version, tool.PinnedBy})
-			installs += tool.Install + "\n"
+			if !seen[tool.Install] {
+				seen[tool.Install] = true
+				installs += tool.Install + "\n"
+			}
 		}
 	}
 	return want, installs
@@ -50,7 +54,7 @@ func TestToolsPrintsAdapterResponsesInManifestOrder(t *testing.T) {
 		script := "#!/bin/sh\nset -eu\n" + installs
 		code, stdout, stderr := assure("tools", "--install-script")
 		if code != 0 || stdout != script || stderr != "" {
-			rt.Fatalf("exit %d stderr %q\nscript %q\nwant   %q\nCI and laptops must run exactly the adapters' install lines, in manifest order, after the strict-mode header", code, stderr, stdout, script)
+			rt.Fatalf("exit %d stderr %q\nscript %q\nwant   %q\nCI and laptops must run exactly the adapters' distinct install lines, each once at its first position in manifest order, after the strict-mode header", code, stderr, stdout, script)
 		}
 		code, stdout, _ = assure("tools")
 		got := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")

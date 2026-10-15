@@ -43,8 +43,13 @@ func ToolList(langs []LangTools) string {
 func InstallScript(langs []LangTools) string {
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -eu\n")
+	seen := map[string]bool{}
 	for _, l := range langs {
 		for _, t := range l.Tools {
+			if seen[t.Install] {
+				continue
+			}
+			seen[t.Install] = true
 			b.WriteString(t.Install + "\n")
 		}
 	}
