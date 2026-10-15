@@ -23,9 +23,9 @@ type loadedCase struct {
 	expect expectation
 }
 
-func loadCases(t *testing.T) map[string]loadedCase {
+func loadCases(t *testing.T, lang string) map[string]loadedCase {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join("go", "*.txtar"))
+	files, err := filepath.Glob(filepath.Join(lang, "*.txtar"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func loadCases(t *testing.T) map[string]loadedCase {
 			t.Fatal(err)
 		}
 		name := strings.TrimSuffix(filepath.Base(f), ".txtar")
-		c, err := parseCase(name, data)
+		c, err := parseCase(lang, name, data)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -49,37 +49,37 @@ func loadCases(t *testing.T) map[string]loadedCase {
 	return out
 }
 
-func statusOf(e expectation, objective string) string {
+func statusOf(e expectation, lang, objective string) string {
 	for _, o := range e.Objectives {
-		if o.Objective == objective && o.Language == "go" {
+		if o.Objective == objective && o.Language == lang {
 			return o.Status
 		}
 	}
 	return ""
 }
 
-func coverageGaps(required []string, cases map[string]loadedCase) []string {
+func coverageGaps(lang string, required []string, cases map[string]loadedCase) []string {
 	var gaps []string
 	for _, id := range required {
 		seeded := false
 		for _, c := range cases {
-			seeded = seeded || c.seeds == id && statusOf(c.expect, id) == "fail"
+			seeded = seeded || c.seeds == id && statusOf(c.expect, lang, id) == "fail"
 		}
 		if !seeded {
 			gaps = append(gaps, id+": no seeded case expects it to fail")
 		}
-		if clean, ok := cases["clean"]; !ok || statusOf(clean.expect, id) != "pass" {
+		if clean, ok := cases["clean"]; !ok || statusOf(clean.expect, lang, id) != "pass" {
 			gaps = append(gaps, id+": clean does not expect it to pass")
 		}
 	}
 	return gaps
 }
 
-func requiredGoObjectives(t *testing.T) []string {
+func adapterObjectives(t *testing.T, lang string) map[string]json.RawMessage {
 	t.Helper()
-	out, err := exec.CommandContext(t.Context(), filepath.Join(binDir, "assure-adapter-go"), "describe").Output()
+	out, err := exec.CommandContext(t.Context(), filepath.Join(binDir, adapterName(lang)), "describe").Output()
 	if err != nil {
-		t.Fatalf("assure-adapter-go describe: %v", err)
+		t.Fatalf("%s describe: %v", adapterName(lang), err)
 	}
 	var d struct {
 		Objectives map[string]json.RawMessage `json:"objectives"`
@@ -87,13 +87,19 @@ func requiredGoObjectives(t *testing.T) []string {
 	if err := json.Unmarshal(out, &d); err != nil {
 		t.Fatal(err)
 	}
+	return d.Objectives
+}
+
+func requiredObjectives(t *testing.T, lang string) []string {
+	t.Helper()
+	implemented := adapterObjectives(t, lang)
 	cat, err := core.LoadCatalog("v0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var req []string
 	for _, o := range cat.Objectives {
-		if _, ok := d.Objectives[o.ID]; ok && o.Levels["B"] == "required" {
+		if _, ok := implemented[o.ID]; ok && o.Levels["B"] == "required" {
 			req = append(req, o.ID)
 		}
 	}
@@ -101,33 +107,37 @@ func requiredGoObjectives(t *testing.T) []string {
 	return req
 }
 
-func TestEveryRequiredGoObjectiveIsQualified(t *testing.T) {
+func TestEveryRequiredObjectiveIsQualified(t *testing.T) {
 	if !gated {
 		t.Skip("set ASSURE_QUALIFICATION=1 without -short to check case coverage against the built adapter")
 	}
-	required := requiredGoObjectives(t)
-	if len(required) == 0 {
-		t.Fatal("the adapter implements no objective the catalog requires at level B")
-	}
-	cases := loadCases(t)
-	if gaps := coverageGaps(required, cases); len(gaps) > 0 {
-		t.Fatalf("qualification does not cover every required Go objective:\n%s", strings.Join(gaps, "\n"))
-	}
-	for _, name := range slices.Sorted(maps.Keys(cases)) {
-		rest := maps.Clone(cases)
-		delete(rest, name)
-		gaps := coverageGaps(required, rest)
-		var want []string
-		for _, id := range required {
-			if name == "clean" {
-				want = append(want, id+": clean does not expect it to pass")
+	for _, lang := range languages() {
+		t.Run(lang, func(t *testing.T) {
+			required := requiredObjectives(t, lang)
+			if len(required) == 0 {
+				t.Fatalf("the %s adapter implements no objective the catalog requires at level B", lang)
 			}
-			if cases[name].seeds == id && !slices.ContainsFunc(slices.Collect(maps.Values(rest)), func(c loadedCase) bool { return c.seeds == id }) {
-				want = append(want, id+": no seeded case expects it to fail")
+			cases := loadCases(t, lang)
+			if gaps := coverageGaps(lang, required, cases); len(gaps) > 0 {
+				t.Fatalf("qualification does not cover every required %s objective:\n%s", lang, strings.Join(gaps, "\n"))
 			}
-		}
-		if !slices.Equal(gaps, want) {
-			t.Errorf("with %s moved aside: gaps %q, want %q", name, gaps, want)
-		}
+			for _, name := range slices.Sorted(maps.Keys(cases)) {
+				rest := maps.Clone(cases)
+				delete(rest, name)
+				gaps := coverageGaps(lang, required, rest)
+				var want []string
+				for _, id := range required {
+					if name == "clean" {
+						want = append(want, id+": clean does not expect it to pass")
+					}
+					if cases[name].seeds == id && !slices.ContainsFunc(slices.Collect(maps.Values(rest)), func(c loadedCase) bool { return c.seeds == id }) {
+						want = append(want, id+": no seeded case expects it to fail")
+					}
+				}
+				if !slices.Equal(gaps, want) {
+					t.Errorf("%s with %s moved aside: gaps %q, want %q", lang, name, gaps, want)
+				}
+			}
+		})
 	}
 }

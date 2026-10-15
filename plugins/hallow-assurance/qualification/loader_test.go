@@ -17,6 +17,7 @@ import (
 )
 
 type qcase struct {
+	lang    string
 	name    string
 	base    map[string][]byte
 	head    map[string][]byte
@@ -38,8 +39,8 @@ type expectedObjective struct {
 	Locations []string `json:"locations,omitempty"`
 }
 
-func parseCase(name string, data []byte) (qcase, error) {
-	c := qcase{name: name, base: map[string][]byte{}, head: map[string][]byte{}}
+func parseCase(lang, name string, data []byte) (qcase, error) {
+	c := qcase{lang: lang, name: name, base: map[string][]byte{}, head: map[string][]byte{}}
 	seen := map[string]bool{}
 	var msg, expect []byte
 	for _, f := range txtar.Parse(data).Files {
@@ -113,8 +114,8 @@ func checkPaths(c qcase) error {
 	}
 	omitted := map[string]bool{}
 	for _, n := range c.omit {
-		if !slices.Contains(caseTools, n) || omitted[n] {
-			return fmt.Errorf("omit-tools %q is not one of %q, or is listed twice", n, caseTools)
+		if !slices.Contains(caseTools[c.lang], n) || omitted[n] {
+			return fmt.Errorf("omit-tools %q is not one of the %s tools %q, or is listed twice", n, c.lang, caseTools[c.lang])
 		}
 		omitted[n] = true
 	}
@@ -160,6 +161,7 @@ func genRelPath(t *rapid.T, label string) string {
 }
 
 type archiveCase struct {
+	lang       string
 	base, head map[string][]byte
 	deletes    []string
 	omit       []string
@@ -185,11 +187,13 @@ func genArchiveCase(t *rapid.T) archiveCase {
 			head[p] = genText(t, "new "+p)
 		}
 	}
+	lang := rapid.SampledFrom(languages()).Draw(t, "language")
 	return archiveCase{
+		lang:    lang,
 		base:    base,
 		head:    head,
 		deletes: deletes,
-		omit:    rapid.SliceOfDistinct(rapid.SampledFrom(caseTools), func(n string) string { return n }).Draw(t, "omit"),
+		omit:    rapid.SliceOfDistinct(rapid.SampledFrom(caseTools[lang]), func(n string) string { return n }).Draw(t, "omit"),
 		msg:     rapid.StringMatching(`[a-z]{1,10}\n(\nAssure-Kind: fix\n)?`).Draw(t, "msg"),
 		expect:  genExpectation(t),
 	}
@@ -231,9 +235,12 @@ func equalFiles(a, b map[string][]byte) bool {
 func TestParseCaseRoundTrip(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		a := genArchiveCase(t)
-		c, err := parseCase("c", a.archive(mustJSON(t, a.expect)))
+		c, err := parseCase(a.lang, "c", a.archive(mustJSON(t, a.expect)))
 		if err != nil {
 			t.Fatalf("parse: %v", err)
+		}
+		if c.lang != a.lang {
+			t.Fatalf("language %q, want %q", c.lang, a.lang)
 		}
 		if !equalFiles(c.base, a.base) || !equalFiles(c.head, a.head) {
 			t.Fatalf("files: got base=%q head=%q, want base=%q head=%q", c.base, c.head, a.base, a.head)
@@ -252,7 +259,7 @@ func TestParseCaseRejectsSchemaInvalidExpectation(t *testing.T) {
 		a := genArchiveCase(t)
 		status := rapid.SampledFrom([]string{"fail", "advisory-fail"}).Draw(t, "status")
 		bad := expectation{Objectives: append(a.expect.Objectives, expectedObjective{Objective: "QUAL-UNLISTED", Language: "go", Status: status})}
-		_, err := parseCase("c", a.archive(mustJSON(t, bad)))
+		_, err := parseCase(a.lang, "c", a.archive(mustJSON(t, bad)))
 		if err == nil || !strings.Contains(err.Error(), "schema violations") {
 			t.Fatalf("a %s entry without locations must fail schema validation, got %v", status, err)
 		}
@@ -270,7 +277,7 @@ func TestParseCaseRejectsDuplicateExpectationEntry(t *testing.T) {
 		dup.Locations = rapid.SliceOfN(rapid.Custom(func(t *rapid.T) string { return genLocation(t, "loc") }), 1, 2).Draw(t, "duplicate locations")
 		bad := expectation{Objectives: append(slices.Clone(a.expect.Objectives), dup), Problems: a.expect.Problems}
 		k := entryKey{dup.Objective, dup.Language}
-		_, err := parseCase("c", a.archive(mustJSON(t, bad)))
+		_, err := parseCase(a.lang, "c", a.archive(mustJSON(t, bad)))
 		if err == nil || !strings.Contains(err.Error(), k.String()+" listed twice") {
 			t.Fatalf("expectation listing %s twice must be rejected by the duplicate check, got %v", k, err)
 		}
@@ -291,11 +298,11 @@ func TestParseCaseRejectsMalformedArchive(t *testing.T) {
 				return a.archive(mustJSON(t, a.expect))
 			},
 			func() []byte {
-				a.omit = append(a.omit, rapid.StringMatching(`[a-z-]{1,12}`).Filter(func(n string) bool { return !slices.Contains(caseTools, n) }).Draw(t, "unknown tool"))
+				a.omit = append(a.omit, rapid.StringMatching(`[a-z-]{1,12}`).Filter(func(n string) bool { return !slices.Contains(caseTools[a.lang], n) }).Draw(t, "unknown tool"))
 				return a.archive(mustJSON(t, a.expect))
 			},
 			func() []byte {
-				a.omit = append(a.omit, caseTools[0], caseTools[0])
+				a.omit = append(a.omit, caseTools[a.lang][0], caseTools[a.lang][0])
 				return a.archive(mustJSON(t, a.expect))
 			},
 			func() []byte {
@@ -314,8 +321,24 @@ func TestParseCaseRejectsMalformedArchive(t *testing.T) {
 				return txtar.Format(ar)
 			},
 		}).Draw(t, "malformation")()
-		if _, err := parseCase("c", bad); err == nil {
+		if _, err := parseCase(a.lang, "c", bad); err == nil {
 			t.Fatalf("malformed archive accepted:\n%s", bad)
+		}
+	})
+}
+
+func TestParseCaseRejectsToolOutsideItsLanguage(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		a := genArchiveCase(t)
+		if len(a.omit) == 0 {
+			t.Skip("no omitted tool")
+		}
+		other := rapid.StringMatching(`[a-z]{1,10}`).Filter(func(l string) bool {
+			return slices.ContainsFunc(a.omit, func(n string) bool { return !slices.Contains(caseTools[l], n) })
+		}).Draw(t, "other language")
+		_, err := parseCase(other, "c", a.archive(mustJSON(t, a.expect)))
+		if err == nil || !strings.Contains(err.Error(), "omit-tools") {
+			t.Fatalf("a %s case omitting %q, read as language %s, must be rejected by the tool check, got %v", a.lang, a.omit, other, err)
 		}
 	})
 }
