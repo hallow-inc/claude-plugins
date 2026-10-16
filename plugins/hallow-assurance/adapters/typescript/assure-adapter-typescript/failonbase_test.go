@@ -223,7 +223,7 @@ type repoState struct{ status, worktrees, index string }
 
 func stateOf(t *testing.T, top string) repoState {
 	status := gitStatus(t, top)
-	wt, err := exec.Command("git", "-C", top, "worktree", "list", "--porcelain").Output()
+	wt, err := exec.CommandContext(t.Context(), "git", "-C", top, "worktree", "list", "--porcelain").Output()
 	if err != nil {
 		t.Fatal(err)
 	}

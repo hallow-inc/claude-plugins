@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"maps"
 	"os"
 	"os/exec"
@@ -26,7 +27,7 @@ func isolateGit(t *testing.T) {
 }
 
 func git(t fataler, dir string, args ...string) {
-	cmd := exec.Command("git", append([]string{
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{
 		"-c", "commit.gpgsign=false", "-c", "core.excludesFile=/dev/null",
 		"-c", "user.name=assure", "-c", "user.email=assure@example.invalid",
 	}, args...)...)

@@ -704,7 +704,7 @@ func TestSeedFromLengthBoundary(t *testing.T) {
 }
 
 func headOf(t *testing.T, dir string) string {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	out, err := exec.CommandContext(t.Context(), "git", "-C", dir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		t.Fatal(err)
 	}

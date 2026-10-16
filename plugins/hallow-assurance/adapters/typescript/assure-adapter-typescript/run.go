@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -161,7 +162,7 @@ func onPath(name string) bool {
 }
 
 func toolOutput(dir, name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	b, err := cmd.Output()
 	if err != nil {
@@ -187,7 +188,7 @@ func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int,
 }
 
 func runToolEnv(dir string, env []string, name string, args ...string) (stdout, stderr []byte, code int, err error) {
-	cmd := exec.Command(name, args...)
+	cmd := exec.CommandContext(context.Background(), name, args...)
 	cmd.Dir = dir
 	if env != nil {
 		cmd.Env = append(os.Environ(), env...)

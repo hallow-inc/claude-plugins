@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -66,7 +67,7 @@ func npmCI() (string, error) {
 			return "", err
 		}
 	}
-	cmd := exec.Command("npm", "ci", "--no-audit", "--no-fund")
+	cmd := exec.CommandContext(context.Background(), "npm", "ci", "--no-audit", "--no-fund")
 	cmd.Dir = tmp
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("%w\n%s", err, out)
@@ -117,7 +118,7 @@ func realUnit(t *testing.T) string {
 }
 
 func nodeVersion(t *testing.T) string {
-	out, err := exec.Command("node", "--version").Output()
+	out, err := exec.CommandContext(t.Context(), "node", "--version").Output()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -183,7 +184,7 @@ func stryker(c runContext, unit string, mutate []string, seed string) ([]byte, e
 	if err := os.WriteFile(cfgPath, cfg, 0o644); err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(c.tools[unit]["@stryker-mutator/core"].bin, "run", cfgPath)
+	cmd := exec.CommandContext(context.Background(), c.tools[unit]["@stryker-mutator/core"].bin, "run", cfgPath)
 	cmd.Dir = unit
 	cmd.Env = append(os.Environ(), "ASSURE_SEED="+seed)
 	if log, err := cmd.CombinedOutput(); err != nil {

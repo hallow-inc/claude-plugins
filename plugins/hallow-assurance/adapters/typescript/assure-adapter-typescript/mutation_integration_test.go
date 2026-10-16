@@ -8,7 +8,7 @@ import (
 )
 
 func gitStatus(t *testing.T, dir string) string {
-	cmd := exec.Command("git", "status", "--porcelain=v1", "--ignored", "--untracked-files=all")
+	cmd := exec.CommandContext(t.Context(), "git", "status", "--porcelain=v1", "--ignored", "--untracked-files=all")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
@@ -14,7 +15,7 @@ func gitPaths(dir string, args ...string) ([]string, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, fmt.Errorf("git not found on PATH")
 	}
-	cmd := exec.Command("git", append([]string{args[0], "-z"}, args[1:]...)...)
+	cmd := exec.CommandContext(context.Background(), "git", append([]string{args[0], "-z"}, args[1:]...)...)
 	cmd.Dir = dir
 	b, err := cmd.Output()
 	if err != nil {

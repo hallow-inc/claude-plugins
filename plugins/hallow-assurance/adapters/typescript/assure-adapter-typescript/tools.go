@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -282,7 +283,7 @@ func gitOutput(dir string, args ...string) (string, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return "", fmt.Errorf("git not found on PATH")
 	}
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = dir
 	b, err := cmd.Output()
 	if err != nil {
