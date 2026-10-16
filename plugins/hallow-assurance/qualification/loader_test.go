@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
 	"path"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -42,7 +45,7 @@ type expectedObjective struct {
 func parseCase(lang, name string, data []byte) (qcase, error) {
 	c := qcase{lang: lang, name: name, base: map[string][]byte{}, head: map[string][]byte{}}
 	seen := map[string]bool{}
-	var msg, expect []byte
+	var msg, expect, deps []byte
 	for _, f := range txtar.Parse(data).Files {
 		if seen[f.Name] {
 			return qcase{}, fmt.Errorf("case %s: duplicate section %q", name, f.Name)
@@ -57,6 +60,8 @@ func parseCase(lang, name string, data []byte) (qcase, error) {
 			c.deletes = nonEmptyLines(f.Data)
 		case f.Name == "omit-tools":
 			c.omit = nonEmptyLines(f.Data)
+		case f.Name == "deps":
+			deps = f.Data
 		case strings.HasPrefix(f.Name, "base/"):
 			c.base[strings.TrimPrefix(f.Name, "base/")] = f.Data
 		case strings.HasPrefix(f.Name, "head/"):
@@ -71,6 +76,9 @@ func parseCase(lang, name string, data []byte) (qcase, error) {
 	if expect == nil {
 		return qcase{}, fmt.Errorf("case %s: missing expect.json section", name)
 	}
+	if err := addDepsSection(&c, deps); err != nil {
+		return qcase{}, fmt.Errorf("case %s: %w", name, err)
+	}
 	if err := checkPaths(c); err != nil {
 		return qcase{}, fmt.Errorf("case %s: %w", name, err)
 	}
@@ -81,6 +89,46 @@ func parseCase(lang, name string, data []byte) (qcase, error) {
 	}
 	c.expect = exp
 	return c, nil
+}
+
+var (
+	depsRoot = filepath.Join("testdata", "deps")
+	depsName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+)
+
+func addDepsSection(c *qcase, section []byte) error {
+	if section == nil {
+		return nil
+	}
+	return addDeps(c, strings.TrimSpace(string(section)))
+}
+
+func addDeps(c *qcase, set string) error {
+	if !depsName.MatchString(set) {
+		return fmt.Errorf("deps %q is not a dependency set name", set)
+	}
+	dir := filepath.Join(depsRoot, c.lang, set)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("deps %q: %w", set, err)
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("deps %q: %s is empty", set, dir)
+	}
+	for _, e := range entries {
+		if !e.Type().IsRegular() {
+			return fmt.Errorf("deps %q: %s is not a regular file", set, e.Name())
+		}
+		if _, ok := c.base[e.Name()]; ok {
+			return fmt.Errorf("deps %q and base/ both supply %s", set, e.Name())
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return err
+		}
+		c.base[e.Name()] = data
+	}
+	return nil
 }
 
 func nonEmptyLines(data []byte) []string {
@@ -165,6 +213,7 @@ type archiveCase struct {
 	base, head map[string][]byte
 	deletes    []string
 	omit       []string
+	deps       string
 	msg        string
 	expect     expectation
 }
@@ -213,6 +262,9 @@ func (a archiveCase) archive(expectJSON []byte) []byte {
 	if len(a.omit) > 0 {
 		ar.Files = append(ar.Files, txtar.File{Name: "omit-tools", Data: []byte(strings.Join(a.omit, "\n") + "\n")})
 	}
+	if a.deps != "" {
+		ar.Files = append(ar.Files, txtar.File{Name: "deps", Data: []byte(a.deps + "\n")})
+	}
 	ar.Files = append(ar.Files,
 		txtar.File{Name: "head.msg", Data: []byte(a.msg)},
 		txtar.File{Name: "expect.json", Data: expectJSON},
@@ -252,6 +304,83 @@ func TestParseCaseRoundTrip(t *testing.T) {
 			t.Fatalf("expectation: got %s, want %s", got, want)
 		}
 	})
+}
+
+func TestParseCaseAddsTheNamedDependencySet(t *testing.T) {
+	dirs, err := filepath.Glob(filepath.Join(depsRoot, "*", "*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dirs) == 0 {
+		t.Fatalf("no dependency sets under %s", depsRoot)
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		dir := rapid.SampledFrom(dirs).Draw(t, "set")
+		lang, set := filepath.Base(filepath.Dir(dir)), filepath.Base(dir)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[string][]byte{}
+		for _, e := range entries {
+			if want[e.Name()], err = os.ReadFile(filepath.Join(dir, e.Name())); err != nil {
+				t.Fatal(err)
+			}
+		}
+		a := genArchiveCase(t)
+		a.lang, a.omit, a.deps = lang, nil, set
+		c, err := parseCase(a.lang, "c", a.archive(mustJSON(t, a.expect)))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		maps.Copy(want, a.base)
+		if !equalFiles(c.base, want) || !equalFiles(c.head, a.head) {
+			t.Fatalf("base %q head %q, want base %q head %q: the set's files join base/ and nothing else changes", slices.Sorted(maps.Keys(c.base)), slices.Sorted(maps.Keys(c.head)), slices.Sorted(maps.Keys(want)), slices.Sorted(maps.Keys(a.head)))
+		}
+		clash := rapid.SampledFrom(entries).Draw(t, "clashing file").Name()
+		a.base[clash] = genText(t, "clash")
+		if _, err := parseCase(a.lang, "c", a.archive(mustJSON(t, a.expect))); err == nil || !strings.Contains(err.Error(), "both supply "+clash) {
+			t.Fatalf("base/%s alongside set %s returned %v; one of the two would silently win", clash, set, err)
+		}
+		delete(a.base, clash)
+		a.deps = rapid.StringMatching(`[a-z0-9-]{1,12}|[A-Z./ ]{1,4}`).Filter(func(s string) bool {
+			_, err := os.Stat(filepath.Join(depsRoot, lang, s))
+			return err != nil
+		}).Draw(t, "unknown set")
+		if _, err := parseCase(a.lang, "c", a.archive(mustJSON(t, a.expect))); err == nil || !strings.Contains(err.Error(), "deps ") {
+			t.Fatalf("unknown set %q accepted (err %v)", a.deps, err)
+		}
+	})
+}
+
+func TestNpmCasesCommitTheirLockfileButNotNodeModules(t *testing.T) {
+	for _, lang := range slices.Sorted(maps.Keys(caseSetup)) {
+		if caseSetup[lang][0] != "npm" {
+			continue
+		}
+		files, err := filepath.Glob(filepath.Join(lang, "*.txtar"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := parseCase(lang, strings.TrimSuffix(filepath.Base(f), ".txtar"), data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"package.json", "package-lock.json"} {
+				if _, ok := c.base[name]; !ok {
+					t.Errorf("%s: base commit has no %s; npm ci needs both, and the adapter refuses an untracked lockfile", f, name)
+				}
+			}
+			if !slices.Contains(nonEmptyLines(c.base[".gitignore"]), "node_modules") {
+				t.Errorf("%s: base .gitignore does not ignore node_modules; the installed tree would show as changed files", f)
+			}
+		}
+	}
 }
 
 func TestParseCaseRejectsSchemaInvalidExpectation(t *testing.T) {

@@ -1,0 +1,63 @@
+CODE-ZERO-WARNINGS: half in src/half.ts declares a string return but returns a number (tsc
+TS2322). vitest strips types, so the test still runs and passes.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [typescript]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+node_modules
+-- base/tsconfig.json --
+{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "target": "es2022", "noEmit": true, "types": [] }, "include": ["src"] }
+-- base/eslint.config.js --
+import tseslint from "typescript-eslint";
+
+export default tseslint.config(tseslint.configs.recommended);
+-- base/vitest.config.ts --
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({ test: { setupFiles: ["./vitest.setup.ts"] } });
+-- base/vitest.setup.ts --
+import fc from "fast-check";
+
+const seed = Number(process.env.ASSURE_SEED);
+if (Number.isInteger(seed)) {
+  fc.configureGlobal({ ...fc.readConfigureGlobal(), seed });
+}
+-- base/src/double.ts --
+export function double(x: number): number {
+  return 2 * x;
+}
+-- head/src/half.ts --
+export function half(x: number): string {
+  return x / 2;
+}
+-- head/src/half.test.ts --
+import { expect, test } from "vitest";
+import { half } from "./half";
+
+test("half halves", () => {
+  expect(half(4)).toBe(2);
+});
+-- head.msg --
+feat(src): add half
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "CFG-PROTECTED", "status": "pass"},
+    {"objective": "CODE-CHECK-RETURNS", "language": "typescript", "status": "pass"},
+    {"objective": "CODE-COMPLEXITY", "language": "typescript", "status": "pass"},
+    {"objective": "CODE-NO-UNSAFE", "language": "typescript", "status": "pass"},
+    {"objective": "CODE-RESOURCE-BOUNDS", "language": "typescript", "status": "pass"},
+    {"objective": "CODE-ZERO-WARNINGS", "language": "typescript", "status": "fail", "locations": ["src/half.ts: TS2322"]},
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "typescript", "status": "pass"}
+  ]
+}

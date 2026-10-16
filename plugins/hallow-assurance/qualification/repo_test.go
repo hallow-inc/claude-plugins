@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 const commitDate = "2026-01-01T00:00:00Z"
@@ -70,6 +74,25 @@ func buildRepo(ctx context.Context, dir string, c qcase) (string, error) {
 		return "", err
 	}
 	return base, nil
+}
+
+func setupCase(ctx context.Context, dir, lang string, tools map[string]string, path string) error {
+	step := caseSetup[lang]
+	if len(step) == 0 {
+		return nil
+	}
+	bin, ok := tools[step[0]]
+	if !ok {
+		return fmt.Errorf("%s cases run %q before evaluating, so %s cannot be omitted", lang, strings.Join(step, " "), step[0])
+	}
+	// The host path, not the tool-dir symlink: mise's npm wrapper finds node relative to the path it was invoked by.
+	cmd := exec.CommandContext(ctx, bin, step[1:]...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PATH="+path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s: %w\n%s", strings.Join(step, " "), err, out)
+	}
+	return nil
 }
 
 func hostTools(names []string) (map[string]string, error) {
@@ -171,6 +194,47 @@ Assure-Kind: fix
 	if h, err := git(t.Context(), again, "", "rev-parse", "HEAD"); err != nil || h != head {
 		t.Fatalf("rebuilding the case at another time gave head %s (err %v), want %s: the adapter seeds fuzz and mutation runs from the head SHA", h, err, head)
 	}
+}
+
+func TestSetupRunsTheLanguageStepInTheCaseRoot(t *testing.T) {
+	scratch := t.TempDir()
+	rapid.Check(t, func(rt *rapid.T) {
+		lang := rapid.SampledFrom(slices.Sorted(maps.Keys(caseSetup))).Draw(rt, "language")
+		step := caseSetup[lang]
+		if !slices.Contains(caseTools[lang], step[0]) {
+			rt.Fatalf("%s setup runs %s, which is not one of its case tools %q", lang, step[0], caseTools[lang])
+		}
+		root, err := os.MkdirTemp(scratch, "case")
+		if err != nil {
+			rt.Fatal(err)
+		}
+		dir, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			rt.Fatal(err)
+		}
+		code := rapid.IntRange(0, 3).Draw(rt, "exit code")
+		logPath := filepath.Join(scratch, filepath.Base(root)+".log")
+		bin := filepath.Join(scratch, filepath.Base(root)+"-"+step[0])
+		script := fmt.Sprintf("#!/bin/sh\n{ pwd -P; printf '%%s\\n' \"$PATH\" \"$*\"; } > '%s'\nexit %d\n", logPath, code)
+		if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+			rt.Fatal(err)
+		}
+		path := rapid.StringMatching(`/[a-z]{1,6}(:/[a-z]{1,6}){0,2}`).Draw(rt, "path") + ":/usr/bin:/bin"
+		err = setupCase(context.Background(), dir, lang, map[string]string{step[0]: bin}, path)
+		if (err != nil) != (code != 0) {
+			rt.Fatalf("setup exiting %d returned error %v; a failed install must stop the case, a clean one must not", code, err)
+		}
+		logged, rerr := os.ReadFile(logPath)
+		if rerr != nil {
+			rt.Fatalf("setup never ran %s: %v", step[0], rerr)
+		}
+		if want := dir + "\n" + path + "\n" + strings.Join(step[1:], " ") + "\n"; string(logged) != want {
+			rt.Fatalf("setup ran with cwd, PATH, args %q, want %q", logged, want)
+		}
+		if err := setupCase(context.Background(), dir, lang, map[string]string{}, path); err == nil || !strings.Contains(err.Error(), "cannot be omitted") {
+			rt.Fatalf("setup without %s returned %v, want a refusal", step[0], err)
+		}
+	})
 }
 
 func TestToolDirExposesExactlyTheGivenTools(t *testing.T) {

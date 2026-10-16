@@ -1,0 +1,1 @@
+src/syntax.ts(1,14): error TS1134: Variable declaration expected.
