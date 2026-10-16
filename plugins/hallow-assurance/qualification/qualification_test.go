@@ -23,7 +23,12 @@ var (
 )
 
 var caseTools = map[string][]string{
-	"go": {"go", "gofmt", "git", "golangci-lint", "gremlins"},
+	"go":         {"go", "gofmt", "git", "golangci-lint", "gremlins"},
+	"typescript": {"node", "npm", "git"},
+}
+
+var caseSetup = map[string][]string{
+	"typescript": {"npm", "ci", "--no-audit", "--no-fund", "--prefer-offline"},
 }
 
 func languages() []string {
@@ -289,6 +294,9 @@ func evaluateCase(t *testing.T, c qcase, adapter string, env []string) ([]string
 	tools[adapterName(c.lang)] = adapter
 	path, err := toolDir(t.TempDir(), tools)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := setupCase(t.Context(), root, c.lang, tools, path); err != nil {
 		t.Fatal(err)
 	}
 	report := filepath.Join(t.TempDir(), "report.json")
