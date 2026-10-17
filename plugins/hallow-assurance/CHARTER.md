@@ -44,13 +44,16 @@ model**, not their paperwork.
    Adding a language must require zero changes to the plugin or the core.
 2. **Pass/fail is deterministic.** No LLM participates in any gate decision. Model judgment may
    produce findings (inspections) but never verdicts.
-3. **CI is the authority.** Hooks are early warning. A hook passing locally is never evidence; CI
-   reruns everything.
+3. **The repo chooses its authority.** With `authority: ci` in the manifest, the CI run is the
+   verdict and hooks are early warning; CI reruns everything. Otherwise (the default) the
+   developer's local `assure evaluate` is the verdict, and every report says it is self-attested.
+   A developer can adopt hallow-assurance alone, without the team or project adopting it.
 4. **Adapters emit evidence; the evaluator decides.** No thresholds live in adapters.
 5. **Fail closed.** Missing or malformed evidence fails the objective unless a valid waiver covers it.
 6. **Agents cannot move the goalposts.** Agents may not edit the catalog, thresholds, manifest
    levels, waivers, baselines, provenance, formal-model challenge files, or gate config. Enforced
-   locally by `assure guard` and the Stop drift check. CI reports every protected-file change; at
+   locally by `assure guard` and the Stop drift check. `assure evaluate` reports every
+   protected-file change; under `authority: ci`, at
    levels the base manifest marks `human_review: required`, it also needs an approving review from
    someone other than the PR author. Review is optional by default: the framework checks the
    software, not the developer.
@@ -294,7 +297,8 @@ CFG-PROTECTED either way. `guard`'s role rules apply whatever the key says.
 
 Threat model: a shortcut-taking agent (edits tests while implementing, edits through Bash), not a
 forging one. Any agent running as the developer's OS user can reach every local secret, so local
-provenance is detective, never preventive; CI is the authority. `guard` sees only file tools, so with
+provenance is detective, never preventive; only `authority: ci` puts the verdict on a machine the
+agent cannot write to. `guard` sees only file tools, so with
 provenance off an edit through Bash goes undetected.
 
 CI check, per changed file in a level A–B component: the records must form an unbroken blob chain
@@ -399,7 +403,8 @@ from stdin, calls the relevant core function, and translates the result into exi
 output.
 
 Claude Code treats a hook timeout, a missing binary (exit 127), and any exit code other than 0 or 2
-as non-blocking. The local guard is therefore best-effort; CI (invariant 3) is the enforcement. To
+as non-blocking. The local guard is therefore best-effort; under `authority: ci`, CI (invariant 3) is the
+enforcement, and under `authority: local` the guard and the Stop drift check are the only barriers. To
 keep local behavior as close to fail-closed as the harness allows:
 
 - The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted) and exits 2 when

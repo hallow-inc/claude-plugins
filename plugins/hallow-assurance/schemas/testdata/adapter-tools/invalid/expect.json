@@ -4,5 +4,6 @@
   "missing-pinned-by.json": [{"location": "/tools/0", "keyword": "required"}],
   "extra-field.json": [{"location": "/tools/0", "keyword": "additionalProperties"}],
   "environment-with-tools.json": [{"location": "/tools", "keyword": "maxItems"}],
-  "old-protocol.json": [{"location": "/protocol", "keyword": "const"}]
+  "old-protocol.json": [{"location": "/protocol", "keyword": "const"}],
+  "empty-version.json": [{"location": "/tools/0/version", "keyword": "minLength"}]
 }

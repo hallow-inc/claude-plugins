@@ -417,12 +417,15 @@ var toolsGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
 	tools := []any{}
 	entry := func() map[string]any {
-		return map[string]any{
+		e := map[string]any{
 			"name":      langGen.Draw(t, "name"),
-			"version":   rapid.StringMatching(`[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}`).Draw(t, "version"),
 			"pinned_by": rapid.SampledFrom([]string{"mise.toml", ".tool-versions", "default"}).Draw(t, "pinned_by"),
 			"install":   rapid.StringMatching(`[a-z][a-z0-9 @./:-]{0,40}`).Draw(t, "install"),
 		}
+		if rapid.Bool().Draw(t, "installed") {
+			e["version"] = rapid.StringMatching(`[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}`).Draw(t, "version")
+		}
+		return e
 	}
 	doc := map[string]any{"protocol": 1}
 	if env := environmentOf(t, r); env != nil {
@@ -433,7 +436,7 @@ var toolsGen = rapid.Custom(func(t *rapid.T) sample {
 			p := "/tools/" + idx(i)
 			tools = append(tools, entry())
 			r.closed(p)
-			r.required(p, "name", "version", "pinned_by", "install")
+			r.required(p, "name", "pinned_by", "install")
 			r.bad(p, "name", badText...)
 			r.bad(p, "version", badText...)
 			r.bad(p, "pinned_by", badText...)

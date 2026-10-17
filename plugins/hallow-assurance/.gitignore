@@ -1,3 +1,4 @@
 .assure/state/
 /assure
+/adapters/*/assure-adapter-*/assure-adapter-*
 **/testdata/rapid/
