@@ -120,8 +120,8 @@ func toolDir(dir string, tools map[string]string) (string, error) {
 	return strings.Join([]string{dir, "/usr/bin", "/bin"}, string(os.PathListSeparator)), nil
 }
 
-func TestBuildRepoTwoCommitsWithTrailer(t *testing.T) {
-	c, err := parseCase("go", "trailer", []byte(`-- base/go.mod --
+func TestBuildRepoTwoCommitsTypedFix(t *testing.T) {
+	c, err := parseCase("go", "typed-fix", []byte(`-- base/go.mod --
 module example.com/m
 -- base/p/keep.go --
 package p
@@ -136,11 +136,9 @@ package p
 -- delete --
 p/gone.go
 -- head.msg --
-fix(p): repair F
+fix(p): double correctly
 
 Body line.
-
-Assure-Kind: fix
 -- expect.json --
 {"objectives": []}
 `))
@@ -166,11 +164,11 @@ Assure-Kind: fix
 	if parent := q("rev-parse", "HEAD~1"); parent != base {
 		t.Fatalf("base sha %s is not the head's parent %s", base, parent)
 	}
-	if kind := q("log", "-1", "--format=%(trailers:key=Assure-Kind,valueonly)"); kind != "fix" {
-		t.Fatalf("head trailer Assure-Kind = %q, want fix", kind)
+	if subject := q("log", "-1", "--format=%s"); subject != "fix(p): double correctly" {
+		t.Fatalf("head subject = %q; the subject's fix type is what makes VER-FAIL-ON-BASE applicable to a case", subject)
 	}
-	if subject := q("log", "-1", "--format=%s"); subject != "fix(p): repair F" {
-		t.Fatalf("head subject = %q", subject)
+	if msg := q("log", "-1", "--format=%B"); msg != "fix(p): double correctly\n\nBody line." {
+		t.Fatalf("head message = %q; the case's head.msg must be committed verbatim", msg)
 	}
 	if files := q("ls-tree", "-r", "--name-only", "HEAD"); files != "go.mod\np/keep.go\np/new.go" {
 		t.Fatalf("head tree:\n%s", files)

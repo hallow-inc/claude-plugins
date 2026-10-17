@@ -73,9 +73,12 @@ func TestSkillFilesDeclareTheirInvocation(t *testing.T) {
 	if !strings.Contains(bodies["assure-testing"], "assure reference") {
 		t.Error("assure-testing does not point to `assure reference`, the only source of language-specific guidance")
 	}
-	for _, s := range []string{"Assure-Kind: fix", "hallow-assurance:verifier", "hallow-assurance:implementer"} {
+	for _, s := range []string{"fix(<scope>):", "hallow-assurance:verifier", "hallow-assurance:implementer"} {
 		if !strings.Contains(bodies["bugfix"], s) {
 			t.Errorf("bugfix does not contain %q", s)
 		}
+	}
+	if strings.Contains(bodies["bugfix"], "Assure-Kind") {
+		t.Error("bugfix tells the human to add the Assure-Kind trailer; assure no longer reads it, so the commit subject typed fix is what makes VER-FAIL-ON-BASE run")
 	}
 }

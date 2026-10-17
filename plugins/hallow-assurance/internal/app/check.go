@@ -305,7 +305,7 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 	case "mutation.report":
 		readMutation(m, data, ev)
 	case "test.fail_on_base":
-		readBaseRun(data, ev)
+		readBaseRun(m, data, ev)
 	case "fuzz.run":
 		readFuzz(data, ev)
 	case "coverage.resolution":
@@ -328,13 +328,13 @@ func readMutation(m *core.Manifest, data []byte, ev *core.Evidence) {
 	}
 }
 
-func readBaseRun(data []byte, ev *core.Evidence) {
+func readBaseRun(m *core.Manifest, data []byte, ev *core.Evidence) {
 	j, err := evidence.ParseJUnit(data)
 	if err != nil {
 		ev.Problems = append(ev.Problems, err.Error())
 		return
 	}
-	ev.Base = &core.BaseRun{Failed: j.Failures, Passed: j.Passed, Skipped: j.Skips}
+	ev.Base = &core.BaseRun{Failed: j.Failures, Passed: j.Passed, Skipped: j.Skips, RequireTest: m.RequireFixTest}
 	for _, f := range j.Failing {
 		if f.Error {
 			ev.Base.Errored = append(ev.Base.Errored, strings.TrimPrefix(failingText(f), "failing test: "))

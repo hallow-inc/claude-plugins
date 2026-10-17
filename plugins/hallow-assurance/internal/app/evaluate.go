@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -254,12 +255,14 @@ func allChanged(m *core.Manifest, changed []string, fix bool) []core.ChangedFile
 	return out
 }
 
+var fixSubject = regexp.MustCompile(`(?i)^fix(\([^()\r\n]+\))?!?: `)
+
 func FixCommit(root, ref string) (bool, error) {
-	values, err := git(root, "log", "--format=%(trailers:key=Assure-Kind,valueonly)", ref+"..HEAD")
+	subjects, err := git(root, "log", "--format=%s", ref+"..HEAD")
 	if err != nil {
 		return false, err
 	}
-	return slices.ContainsFunc(values, func(v string) bool { return strings.TrimSpace(v) == "fix" }), nil
+	return slices.ContainsFunc(subjects, fixSubject.MatchString), nil
 }
 
 func planEvaluate(m *core.Manifest, changed []string, fix bool, rep *EvalReport) (jobs []job, unlisted []core.Objective) {

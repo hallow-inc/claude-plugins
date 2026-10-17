@@ -32,7 +32,7 @@ guard enforces this; the agents' tool lists are a second line.
 |---|---|---|
 | `assure-testing` | by the model, when it writes tests or reads `assure` output | How tests are written here: properties over examples, fail-first bug fixes, coverage resolutions, reading `assure` output, deterministic simulation, formal models. Points to `assure reference <lang>` for the language detail, which ships inside each adapter |
 | `/hallow-assurance:check` | by you | Runs `assure check --fast`, then offers `assure evaluate` against the merge-base |
-| `/hallow-assurance:bugfix <issue\|seed>` | by you | Verifier writes a failing test, implementer fixes it, fast check passes; you commit with `Assure-Kind: fix` |
+| `/hallow-assurance:bugfix <issue\|seed>` | by you | Verifier writes a failing test, implementer fixes it, fast check passes; you commit with a `fix(<scope>):` subject |
 
 ## Provenance and review
 
@@ -79,14 +79,16 @@ show you the same message, because the agent cannot fix the install.
 
 ## Declaring a bug fix
 
-End a fix commit's message with the trailer `Assure-Kind: fix`, in the last paragraph:
+Give a fix commit a subject with the Conventional Commits type `fix`:
 
 ```
-Fix off-by-one in Last
-
-Assure-Kind: fix
+fix(p): off-by-one in Last
 ```
 
 `assure evaluate` then requires every test the change adds or modifies to fail on the base commit
-(`VER-FAIL-ON-BASE`). Only committed messages count, and a squash merge usually turns the trailer
-into body text, so the check happens on the pull request.
+(`VER-FAIL-ON-BASE`). Any commit between the base and `HEAD` counts; after a squash merge, the
+subject is the pull request title.
+
+Pair every fix with a test that reproduces the bug. A fix that changes no test passes
+`VER-FAIL-ON-BASE` with a note recommending one; set `require_fix_test: true` in `assurance.yaml`
+to make it fail instead.

@@ -29,8 +29,6 @@ func TestDoubleTwo(t *testing.T) {
 }
 -- head.msg --
 fix(p): double correctly
-
-Assure-Kind: fix
 -- expect.json --
 {
   "objectives": [

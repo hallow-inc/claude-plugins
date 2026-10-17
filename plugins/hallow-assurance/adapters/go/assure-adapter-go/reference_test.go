@@ -23,9 +23,12 @@ func TestReferencePrintsEmbeddedFileWithoutASourceTree(t *testing.T) {
 	if !bytes.HasPrefix(want, []byte("# ")) || len(want) >= 256<<10 {
 		t.Fatalf("reference.md must be Markdown starting with \"# \" and under 256 KiB, got %d bytes", len(want))
 	}
-	for _, topic := range []string{"pgregory.net/rapid", "testdata/fuzz/", "go test -race -shuffle=on", "Gremlins", "VER-MUTATION-CHANGED", "Assure-Kind: fix"} {
+	for _, topic := range []string{"pgregory.net/rapid", "testdata/fuzz/", "go test -race -shuffle=on", "Gremlins", "VER-MUTATION-CHANGED", "fix:", "require_fix_test"} {
 		if !strings.Contains(string(want), topic) {
 			t.Errorf("reference.md does not cover %q", topic)
 		}
+	}
+	if strings.Contains(string(want), "Assure-Kind") {
+		t.Error("reference.md names the Assure-Kind trailer; assure no longer reads it, so a commit following that advice skips VER-FAIL-ON-BASE")
 	}
 }

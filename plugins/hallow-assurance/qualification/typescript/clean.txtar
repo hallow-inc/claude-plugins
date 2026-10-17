@@ -97,8 +97,6 @@ test("digitSum accepts the digit 9 and rejects everything outside 0-9", () => {
 });
 -- head.msg --
 fix(src): accept the digit 9
-
-Assure-Kind: fix
 -- expect.json --
 {
   "objectives": [

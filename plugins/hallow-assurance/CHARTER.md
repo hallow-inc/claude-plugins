@@ -212,8 +212,8 @@ latter two match, the stricter of their levels applies. Unmatched paths take `de
 
 Optional `applies_to: formal` restricts an objective to components that declare a `formal:` block;
 `applies_to: inputs` restricts it to components that declare `inputs: true`;
-`applies_to: fix` restricts it to changes with a commit, between the ref and `HEAD`, carrying the
-git trailer `Assure-Kind: fix`.
+`applies_to: fix` restricts it to changes with a commit, between the ref and `HEAD`, whose subject
+has the Conventional Commits type `fix` (`fix:`, `fix(<scope>):`, either with `!`; case-insensitive).
 
 **Waiver** — `.assure/waivers.yaml` (human-only):
 
@@ -498,7 +498,7 @@ never reassigned, and new work takes a letter suffix.
 **M3b-1 — Mutation, fail-on-base**
 - Parser: Stryker mutation report
 - Go adapter `run` for mutation (Gremlins, changed lines, converted to Stryker) and fail-on-base
-- `applies_to: fix`, from the `Assure-Kind: fix` commit trailer
+- `applies_to: fix`, from a commit subject typed `fix`
 - ✅ Three `evaluate` runs on one commit agree on `VER-MUTATION-CHANGED`
 
 **M3b-2 — Remaining evidence, required check**
