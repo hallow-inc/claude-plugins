@@ -243,7 +243,7 @@ func genArchiveCase(t *rapid.T) archiveCase {
 		head:    head,
 		deletes: deletes,
 		omit:    rapid.SliceOfDistinct(rapid.SampledFrom(caseTools[lang]), func(n string) string { return n }).Draw(t, "omit"),
-		msg:     rapid.StringMatching(`[a-z]{1,10}\n(\nAssure-Kind: fix\n)?`).Draw(t, "msg"),
+		msg:     rapid.StringMatching(`((fix|feat)(\([a-z]{1,5}\))?: )?[a-z]{1,10}\n(\n[a-z]{1,10}\n)?`).Draw(t, "msg"),
 		expect:  genExpectation(t),
 	}
 }

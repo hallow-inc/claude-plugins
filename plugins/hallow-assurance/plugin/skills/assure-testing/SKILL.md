@@ -35,8 +35,11 @@ A bug fix starts **red**:
 2. Run it on the unfixed code. It fails, for the reason the report gives. A compile error is not
    red.
 3. The implementer fixes the code. The test goes green.
-4. The human commits with the trailer `Assure-Kind: fix`. `VER-FAIL-ON-BASE` then reruns the test
-   on the base commit and requires it to fail there.
+4. The human commits with a subject typed `fix` (`fix:` or `fix(<scope>):`). `VER-FAIL-ON-BASE`
+   then reruns the test on the base commit and requires it to fail there.
+
+Every fix gets a reproducing test. A fix that changes no test passes `VER-FAIL-ON-BASE` with only a
+note, unless the manifest sets `require_fix_test: true`.
 
 Agents do not commit.
 

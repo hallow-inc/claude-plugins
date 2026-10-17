@@ -34,10 +34,18 @@ func TestFailOnBaseBaseDoesNotCompile(t *testing.T) {
 	}
 }
 
-func TestFailOnBaseFixWithoutATest(t *testing.T) {
+func TestFailOnBaseFixWithoutATestPassesWithARecommendation(t *testing.T) {
 	got := decideBase(BaseRun{})
-	if got.Status != Fail || !strings.Contains(strings.Join(got.Details, "\n"), "changes no test") {
-		t.Fatalf("got %+v; a fix must start with a failing test", got)
+	d := strings.Join(got.Details, "\n")
+	if got.Status != Pass || !strings.Contains(d, "changes no test") || !strings.Contains(d, "require_fix_test") {
+		t.Fatalf("got %+v; a fix that changes no test (a raised timeout) passes, but the detail must still recommend a reproducing test and name require_fix_test as the way to enforce one", got)
+	}
+}
+
+func TestFailOnBaseMissingEvidenceStillFails(t *testing.T) {
+	missing := DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Problems: []string{"no test.fail_on_base evidence"}}, nil, nil, "2026-10-01")
+	if missing.Status != Fail {
+		t.Fatalf("got %+v; an adapter that reported nothing must fail closed, unlike one that reported zero cases", missing)
 	}
 }
 
@@ -58,12 +66,12 @@ func TestFailOnBasePassesExactlyWhenAllCasesFailed(t *testing.T) {
 		}
 		b := BaseRun{Failed: rapid.IntRange(0, 3).Draw(t, "failed"), Passed: names("passed"), Skipped: names("skipped"), Errored: names("errored")}
 		cases := b.Failed + len(b.Passed) + len(b.Skipped) + len(b.Errored)
-		if got, want := decideBase(b).Status == Pass, cases > 0 && b.Failed == cases; got != want {
-			t.Fatalf("pass = %v, want %v for %+v", got, want, b)
+		if got, want := decideBase(b).Status == Pass, b.Failed == cases; got != want {
+			t.Fatalf("pass = %v, want %v for %+v; every case must fail on base, and a fix with no case passes", got, want, b)
 		}
 		ws := mustWaivers(t, waiverYAML("VER-FAIL-ON-BASE", "**", "2026-12-31"))
 		waived := DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Base: &b}, ws, nil, "2026-10-01")
-		if want := map[bool]Status{true: Pass, false: Waived}[cases > 0 && b.Failed == cases]; waived.Status != want {
+		if want := map[bool]Status{true: Pass, false: Waived}[b.Failed == cases]; waived.Status != want {
 			t.Fatalf("with a covering waiver got %v, want %v", waived.Status, want)
 		}
 	})

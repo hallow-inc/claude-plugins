@@ -280,6 +280,49 @@ func runCase(t *testing.T, c qcase) {
 
 func evaluateCase(t *testing.T, c qcase, adapter string, env []string) ([]string, string) {
 	t.Helper()
+	rep, log := evaluateReport(t, c, adapter, env)
+	return match(c.expect, rep), log
+}
+
+var fixedSource = map[string]string{"go": "p/p.go", "typescript": "src/double.ts"}
+
+func TestFixChangingNoTestPassesFailOnBase(t *testing.T) {
+	for _, lang := range languages() {
+		t.Run(lang, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(lang, "fail-on-base.txtar"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := parseCase(lang, "fix-no-test", data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			src, ok := c.base[fixedSource[lang]]
+			if !ok {
+				t.Fatalf("%s/fail-on-base.txtar has no base %s to change", lang, fixedSource[lang])
+			}
+			if !gated {
+				t.Skip("set ASSURE_QUALIFICATION=1 without -short to run assure evaluate")
+			}
+			maps.Copy(c.base, c.head)
+			c.head = map[string][]byte{fixedSource[lang]: append(slices.Clone(src), "\n// Kept cheap on purpose.\n"...)}
+			c.msg = "fix(p): keep double cheap\n"
+			rep, log := evaluateReport(t, c, filepath.Join(binDir, adapterName(lang)), nil)
+			var got []reportObjective
+			for _, o := range rep.Objectives {
+				if o.Objective == "VER-FAIL-ON-BASE" {
+					got = append(got, o)
+				}
+			}
+			if len(got) != 1 || got[0].Language != lang || got[0].Status != "pass" || !slices.ContainsFunc(got[0].Details, func(d string) bool { return strings.Contains(d, "require_fix_test") }) {
+				t.Fatalf("VER-FAIL-ON-BASE entries %+v, want one %s pass with a detail naming require_fix_test: a fix: commit that changes no test must reach the adapter, which reports zero cases, not no evidence\n%s", got, lang, log)
+			}
+		})
+	}
+}
+
+func evaluateReport(t *testing.T, c qcase, adapter string, env []string) (report, string) {
+	t.Helper()
 	root := realTempDir(t)
 	base, err := buildRepo(t.Context(), root, c)
 	if err != nil {
@@ -319,7 +362,7 @@ func evaluateCase(t *testing.T, c qcase, adapter string, env []string) ([]string
 	if err != nil {
 		t.Fatal(err)
 	}
-	return match(c.expect, rep), fmt.Sprintf("assure evaluate output:\n%s\nreport:\n%s", out.String(), data)
+	return rep, fmt.Sprintf("assure evaluate output:\n%s\nreport:\n%s", out.String(), data)
 }
 
 func TestCaseFilesAreNotHostFiles(t *testing.T) {

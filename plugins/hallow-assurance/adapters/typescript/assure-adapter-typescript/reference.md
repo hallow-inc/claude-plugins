@@ -115,11 +115,14 @@ the level's threshold; `CompileError`, `RuntimeError`, and `Ignored` mutants do 
 
 ## Fail-on-base (`VER-FAIL-ON-BASE`)
 
-For a commit with the trailer `Assure-Kind: fix`, the adapter extracts the repository at the base
-commit, copies in the change's test files, and runs the tests whose name is new: a test is selected
-when its file and full name (describe blocks included) do not exist at the base. Each must fail
-there. Follow the fail-first loop in `assure-testing`, with these TypeScript rules:
+For a change with a commit whose subject is typed `fix` (`fix:` or `fix(<scope>):`), the adapter
+extracts the repository at the base commit, copies in the change's test files, and runs the tests
+whose name is new: a test is selected when its file and full name (describe blocks included) do
+not exist at the base. Each must fail there. Follow the fail-first loop in `assure-testing`, with
+these TypeScript rules:
 
 - Give the regression test a new name. An edited test keeps its old name and is not selected.
 - Reproduce the bug through the exports that existed at the base. A test that imports something the
   fix added fails to load there, and counts as an error, not as a failure.
+- Pair every fix with a reproducing test under a new name. A fix that selects no test passes with a
+  note, unless the manifest sets `require_fix_test: true`.

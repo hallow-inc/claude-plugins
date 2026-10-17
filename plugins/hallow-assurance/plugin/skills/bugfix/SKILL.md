@@ -21,6 +21,6 @@ fail, such as a fuzz crasher).
    name, and ask for the smallest source change that makes the test pass. The implementer must not
    change tests.
 5. **Confirm green.** Run `assure check --fast`. Every objective passes, including the new test.
-6. **Hand off.** Report the test, the fix, and the check result. Tell the human to commit with the
-   trailer `Assure-Kind: fix` in the message's last paragraph, so `VER-FAIL-ON-BASE` checks that
-   the test fails on the base commit. Leave the commit to the human.
+6. **Hand off.** Report the test, the fix, and the check result. Tell the human to commit with a
+   subject typed `fix` (`fix:` or `fix(<scope>):`), so `VER-FAIL-ON-BASE` checks that the test
+   fails on the base commit. Leave the commit to the human.

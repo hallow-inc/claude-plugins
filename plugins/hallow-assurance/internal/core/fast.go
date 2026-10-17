@@ -238,7 +238,11 @@ func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waive
 	d := &decision{}
 	pending := pendingMutants(ev.Mutants)
 	if ev.Base != nil {
-		unlocated = append(unlocated, baseRunFailures(*ev.Base)...)
+		fs, note := baseRunFailures(*ev.Base)
+		unlocated = append(unlocated, fs...)
+		if note != "" {
+			d.notes = append(d.notes, note)
+		}
 	}
 	if req || adv {
 		d.unlocated(slices.Concat(unlocated, pending), req, cover, covered)

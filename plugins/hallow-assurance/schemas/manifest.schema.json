@@ -33,7 +33,8 @@
         "D": { "$ref": "#/$defs/review" }
       }
     },
-    "provenance": { "type": "boolean" }
+    "provenance": { "type": "boolean" },
+    "require_fix_test": { "type": "boolean" }
   },
   "$defs": {
     "review": { "enum": ["required", "optional"] },
