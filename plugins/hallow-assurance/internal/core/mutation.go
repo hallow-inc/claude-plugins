@@ -15,10 +15,11 @@ type Mutant struct {
 }
 
 type BaseRun struct {
-	Failed  int
-	Passed  []string
-	Skipped []string
-	Errored []string
+	Failed      int
+	Passed      []string
+	Skipped     []string
+	Errored     []string
+	RequireTest bool
 }
 
 func (m Mutant) text() string {
@@ -139,10 +140,12 @@ func scoreLine(l Level, s levelScore, th float64, hasTh bool) string {
 	return line + ", no threshold: every mutant must be detected"
 }
 
-func baseRunFailures(b BaseRun) []string {
-	var out []string
+func baseRunFailures(b BaseRun) (out []string, note string) {
 	if b.Failed+len(b.Passed)+len(b.Skipped)+len(b.Errored) == 0 {
-		return []string{"the fix changes no test, so nothing shows the bug on the base commit"}
+		if b.RequireTest {
+			return []string{"the fix changes no test, so nothing shows the bug on the base commit; require_fix_test is set"}, ""
+		}
+		return nil, "the fix changes no test, so nothing ran on base; add a test that reproduces the bug and fails on base, or set require_fix_test: true to enforce one"
 	}
 	for _, n := range b.Passed {
 		out = append(out, "passes on base: "+n)
@@ -153,5 +156,5 @@ func baseRunFailures(b BaseRun) []string {
 	for _, e := range b.Errored {
 		out = append(out, "error on base: "+e)
 	}
-	return out
+	return out, ""
 }

@@ -74,14 +74,17 @@ Gremlins mutates only lines changed since `--changed-from`. The score is
 
 ## Fail-on-base (`VER-FAIL-ON-BASE`)
 
-For a commit with the trailer `Assure-Kind: fix`, the adapter extracts the module at the base
-commit, copies in the change's `_test.go` files, and runs the top-level `Test*` and `Fuzz*`
-functions the change added or edited. Each must fail there.
+For a change with a commit whose subject is typed `fix` (`fix:` or `fix(<scope>):`), the adapter
+extracts the module at the base commit, copies in the change's `_test.go` files, and runs the
+top-level `Test*` and `Fuzz*` functions the change added or edited. Each must fail there.
 
 1. Write the test first and run it on the unfixed code. It must fail for the reason the bug report
    gives, not because it does not compile.
 2. Fix the code. The test passes.
-3. The human commits with `Assure-Kind: fix` in the message trailer. Agents do not commit.
+3. The human commits with a `fix:` subject. Agents do not commit.
+
+Pair every fix with a reproducing test. A fix that changes no test function passes with a note,
+unless the manifest sets `require_fix_test: true`.
 
 A test that calls a function the fix added does not compile on the base, and counts as an error, not
 as a failure. Reproduce the bug through the API that already existed.

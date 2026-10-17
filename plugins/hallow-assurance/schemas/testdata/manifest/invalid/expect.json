@@ -19,5 +19,6 @@
   "formal-code-empty.yaml": [{"location": "/components/0/formal/code", "keyword": "minItems"}],
   "formal-code-absolute.yaml": [{"location": "/components/0/formal/code/0", "keyword": "pattern"}],
   "formal-code-string.yaml": [{"location": "/components/0/formal/code", "keyword": "type"}],
-  "provenance-not-boolean.yaml": [{"location": "/provenance", "keyword": "type"}]
+  "provenance-not-boolean.yaml": [{"location": "/provenance", "keyword": "type"}],
+  "require-fix-test-not-boolean.yaml": [{"location": "/require_fix_test", "keyword": "type"}]
 }

@@ -97,8 +97,6 @@ func TestDigitSum(t *testing.T) {
 }
 -- head.msg --
 fix(p): accept the digit 9
-
-Assure-Kind: fix
 -- expect.json --
 {
   "objectives": [

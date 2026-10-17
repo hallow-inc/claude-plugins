@@ -1,0 +1,6 @@
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components: []
+require_fix_test: "yes"

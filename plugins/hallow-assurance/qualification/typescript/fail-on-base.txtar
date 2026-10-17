@@ -43,8 +43,6 @@ test("double of 2 is 4", () => {
 });
 -- head.msg --
 fix(src): double correctly
-
-Assure-Kind: fix
 -- expect.json --
 {
   "objectives": [

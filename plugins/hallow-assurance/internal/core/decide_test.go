@@ -379,7 +379,7 @@ func TestFixObjectivesNeedAFixCommit(t *testing.T) {
 	})
 }
 
-func TestContextListsFixObjectivesWithTheTrailer(t *testing.T) {
+func TestContextListsFixObjectivesAsCommitsTypedFix(t *testing.T) {
 	c, err := LoadCatalog("v0")
 	if err != nil {
 		t.Fatal(err)
@@ -391,8 +391,8 @@ func TestContextListsFixObjectivesWithTheTrailer(t *testing.T) {
 			line = l
 		}
 	}
-	if !strings.Contains(line, "required") || !strings.Contains(line, "Assure-Kind: fix") {
-		t.Fatalf("context line for VER-FAIL-ON-BASE = %q; an agent that never sees the trailer cannot know a fix needs a failing-on-base test\n%s", line, out)
+	if !strings.Contains(line, "required") || !strings.Contains(line, "(commits typed fix)") || strings.Contains(line, "Assure-Kind") {
+		t.Fatalf("context line for VER-FAIL-ON-BASE = %q; it must name the trigger, commits typed fix, and not the retired trailer, or an agent cannot tell which commits need a failing-on-base test\n%s", line, out)
 	}
 }
 
