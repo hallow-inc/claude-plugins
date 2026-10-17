@@ -12,7 +12,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "version", "pinned_by", "install"],
+        "required": ["name", "pinned_by", "install"],
         "properties": {
           "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
           "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },

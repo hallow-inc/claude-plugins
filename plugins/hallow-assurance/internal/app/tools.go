@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -34,7 +35,7 @@ func ToolList(langs []LangTools) string {
 	var b strings.Builder
 	for _, l := range langs {
 		for _, t := range l.Tools {
-			fmt.Fprintf(&b, "%s\t%s\t%s\tpinned by %s\n", l.Lang, t.Name, t.Version, t.PinnedBy)
+			fmt.Fprintf(&b, "%s\t%s\t%s\tpinned by %s\n", l.Lang, t.Name, cmp.Or(t.Version, "not installed"), t.PinnedBy)
 		}
 	}
 	return b.String()

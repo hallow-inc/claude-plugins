@@ -488,14 +488,7 @@ func TestToolsForNpmRepository(t *testing.T) {
 
 func TestToolsDependenciesNotInstalled(t *testing.T) {
 	top := gitRepo(t, map[string]string{"package.json": "{}", "package-lock.json": "{}"}, "package-lock.json")
-	resp := toolsResponseOf(t, top)
-	if resp.Environment == nil || len(resp.Tools) != 0 {
-		t.Fatalf("got %+v; with no node_modules the op must report environment and list no tools", resp)
-	}
-	mustMention(t, resp.Environment.Message, top, "npm ci")
-	if got := namedTools(resp.Environment.Message); len(got) != len(specToolNames) {
-		t.Fatalf("message %q names %v; it must name every one of the eight tools", resp.Environment.Message, slices.Sorted(maps.Keys(got)))
-	}
+	checkListing(t, toolsReplyOf(t, top), "package-lock.json", nil)
 }
 
 func TestToolsLockfileAboveRoot(t *testing.T) {

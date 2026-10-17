@@ -195,20 +195,29 @@ func installedVersion(p string) (string, error) {
 	return pkg.Version, nil
 }
 
-func resolveTool(top, unit string, lock lockfile, t tsTool) (resolved, string) {
-	fail := func(format string, args ...any) (resolved, string) {
+type resolution int
+
+const (
+	toolResolved resolution = iota
+	toolNotInstalled
+	toolFailed
+)
+
+func resolveTool(top, unit string, lock lockfile, t tsTool) (resolved, resolution, string) {
+	fail := func(format string, args ...any) (resolved, resolution, string) {
 		msg := t.name + ": " + fmt.Sprintf(format, args...)
 		if lock.problem != "" {
-			return resolved{}, msg
+			return resolved{}, toolFailed, msg
 		}
-		return resolved{}, fmt.Sprintf("%s; install with: %s (in %s)", msg, lock.install, relSlash(top, lock.dir))
+		return resolved{}, toolFailed, fmt.Sprintf("%s; install with: %s (in %s)", msg, lock.install, relSlash(top, lock.dir))
 	}
 	if lock.problem != "" {
 		return fail("%s", lock.problem)
 	}
 	pkgJSON, ok := findUp(top, unit, filepath.Join("node_modules", filepath.FromSlash(t.name), "package.json"))
 	if !ok {
-		return fail("not installed in node_modules of %s or any parent up to the git top-level", relSlash(top, unit))
+		r, _, problem := fail("not installed in node_modules of %s or any parent up to the git top-level", relSlash(top, unit))
+		return r, toolNotInstalled, problem
 	}
 	v, err := installedVersion(pkgJSON)
 	if err != nil {
@@ -228,7 +237,7 @@ func resolveTool(top, unit string, lock lockfile, t tsTool) (resolved, string) {
 		}
 		r.bin = bin
 	}
-	return r, ""
+	return r, toolResolved, ""
 }
 
 func resolveTools(top, unit string, names []string) ([]resolved, string, error) {
@@ -242,7 +251,7 @@ func resolveTools(top, unit string, names []string) ([]resolved, string, error) 
 		if !slices.Contains(names, t.name) {
 			continue
 		}
-		r, problem := resolveTool(top, unit, lock, t)
+		r, _, problem := resolveTool(top, unit, lock, t)
 		if problem != "" {
 			problems = append(problems, problem)
 			continue
@@ -261,7 +270,7 @@ type environmentMessage struct {
 
 type toolEntry struct {
 	Name     string `json:"name"`
-	Version  string `json:"version"`
+	Version  string `json:"version,omitempty"`
 	PinnedBy string `json:"pinned_by"`
 	Install  string `json:"install"`
 }
@@ -321,20 +330,21 @@ func listTools(root string) (toolsResponse, error) {
 	if lock.problem == "" && lock.dir != root {
 		return toolsEnvironment(fmt.Sprintf("the lockfile is %s, outside %s; run assure tools from %s so its install line runs where the lockfile is", lock.rel, relSlash(top, root), relSlash(top, lock.dir))), nil
 	}
-	names := make([]string, 0, len(tsTools))
-	for _, t := range tsTools {
-		names = append(names, t.name)
-	}
-	rs, env, err := resolveTools(top, unit, names)
-	if err != nil {
-		return toolsResponse{}, err
-	}
-	if env != "" {
-		return toolsEnvironment(env), nil
-	}
 	resp := toolsResponse{Protocol: 1, Tools: []toolEntry{}}
-	for _, r := range rs {
-		resp.Tools = append(resp.Tools, toolEntry{Name: r.name, Version: r.version, PinnedBy: r.pinnedBy, Install: r.install})
+	var problems []string
+	for _, t := range tsTools {
+		r, res, problem := resolveTool(top, unit, lock, t)
+		switch res {
+		case toolResolved:
+			resp.Tools = append(resp.Tools, toolEntry{Name: r.name, Version: r.version, PinnedBy: r.pinnedBy, Install: r.install})
+		case toolNotInstalled:
+			resp.Tools = append(resp.Tools, toolEntry{Name: t.name, PinnedBy: lock.rel, Install: lock.install})
+		case toolFailed:
+			problems = append(problems, problem)
+		}
+	}
+	if len(problems) > 0 {
+		return toolsEnvironment(strings.Join(problems, "\n")), nil
 	}
 	slices.SortFunc(resp.Tools, func(a, b toolEntry) int { return strings.Compare(a.Name, b.Name) })
 	return resp, nil
