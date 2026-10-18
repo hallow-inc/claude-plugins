@@ -258,22 +258,6 @@ func TestHoistedInstallResolves(t *testing.T) {
 	}
 }
 
-func TestUntrackedLockfileFails(t *testing.T) {
-	top := gitRepo(t, map[string]string{
-		"packages/api/package.json":      "{}",
-		"packages/api/package-lock.json": "{}",
-	})
-	unit := filepath.Join(top, "packages/api")
-	installTool(t, unit, "vitest", "5.0.4")
-	installBin(t, unit, toolNamed(t, "vitest"))
-
-	rs, env, err := resolveTools(top, unit, []string{"vitest"})
-	if err != nil || rs != nil || env == "" {
-		t.Fatalf("got %+v %q %v; an untracked lockfile means CI installs something else, so resolution must fail", rs, env, err)
-	}
-	mustMention(t, env, top, "packages/api/package-lock.json", "CI would not see it")
-}
-
 func TestTwoLockfilesInOneDirectoryFail(t *testing.T) {
 	top := gitRepo(t, map[string]string{
 		"package-lock.json":              "{}",
@@ -470,6 +454,7 @@ func toolsResponseOf(t fataler, dir string) toolsResponse {
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		t.Fatalf("%v", err)
 	}
+	protocolIs(t, "tools", resp.Protocol, raw)
 	return resp
 }
 
@@ -488,7 +473,7 @@ func TestToolsForNpmRepository(t *testing.T) {
 
 func TestToolsDependenciesNotInstalled(t *testing.T) {
 	top := gitRepo(t, map[string]string{"package.json": "{}", "package-lock.json": "{}"}, "package-lock.json")
-	checkListing(t, toolsReplyOf(t, top), "package-lock.json", nil)
+	checkListing(t, toolsReplyOf(t, top), "package-lock.json", nil, false)
 }
 
 func TestToolsLockfileAboveRoot(t *testing.T) {
@@ -618,14 +603,8 @@ func TestToolsInstallLineFollowsLockfile(t *testing.T) {
 			git(t, top, "add", "--", lock)
 		}
 
-		resp := toolsResponseOf(t, dir)
-		if !tracked {
-			if resp.Environment == nil || len(resp.Tools) != 0 {
-				t.Fatalf("untracked %s: got %+v; CI could not reproduce the install", lock, resp)
-			}
-			mustMention(t, resp.Environment.Message, top, lock, "CI would not see it")
-			return
-		}
+		r := toolsReplyOf(t, dir)
+		resp := r.resp
 		want := specInstall(name, content)
 		var names []string
 		for _, e := range resp.Tools {
@@ -635,8 +614,9 @@ func TestToolsInstallLineFollowsLockfile(t *testing.T) {
 			}
 		}
 		if resp.Environment != nil || !slices.Equal(names, specToolNames) {
-			t.Fatalf("%s: got %+v; all eight tools, sorted by name", lock, resp)
+			t.Fatalf("%s (tracked %v): got %+v; all eight tools, sorted by name, whether or not git tracks the lockfile", lock, tracked, resp)
 		}
+		checkUntracked(t, r, !tracked)
 	})
 }
 

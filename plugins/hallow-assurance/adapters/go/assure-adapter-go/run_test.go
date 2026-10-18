@@ -165,11 +165,17 @@ func TestChangedPackageSelection(t *testing.T) {
 
 func runIn(t *testing.T, dir string, args ...string) (runResponse, string, int) {
 	t.Helper()
+	resp, _, stderr, code := runRawIn(t, dir, args...)
+	return resp, stderr, code
+}
+
+func runRawIn(t *testing.T, dir string, args ...string) (runResponse, []byte, string, int) {
+	t.Helper()
 	t.Chdir(dir)
 	var out, errb bytes.Buffer
 	code := run(args, &out, &errb)
 	if code != 0 {
-		return runResponse{}, errb.String(), code
+		return runResponse{}, nil, errb.String(), code
 	}
 	if vs, err := schemas.Validate(schemas.AdapterRun, out.Bytes()); err != nil || len(vs) > 0 {
 		t.Fatalf("run response invalid: %v %v\n%s", err, vs, out.Bytes())
@@ -178,7 +184,27 @@ func runIn(t *testing.T, dir string, args ...string) (runResponse, string, int) 
 	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	return resp, errb.String(), code
+	if resp.Protocol != 2 {
+		t.Errorf("run response protocol %d, want 2; run gained the optional untracked list, and an assure that predates it must refuse the response as a protocol mismatch\n%s", resp.Protocol, out.Bytes())
+	}
+	return resp, out.Bytes(), errb.String(), code
+}
+
+func runUntracked(t *testing.T, raw []byte) ([]string, bool) {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	f, ok := fields["untracked"]
+	if !ok {
+		return nil, false
+	}
+	var names []string
+	if err := json.Unmarshal(f, &names); err != nil {
+		t.Fatalf("untracked %s is not a list of tool names: %v", f, err)
+	}
+	return names, true
 }
 
 const failingTest = "package a\n\nimport \"testing\"\n\nfunc TestNo(t *testing.T) { t.Fatal(\"no\") }\n"

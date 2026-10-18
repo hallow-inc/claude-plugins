@@ -1,0 +1,12 @@
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: internal/core/**
+    level: B
+    formal:
+      model: formal/Model.lean
+      challenge: formal/Challenge.lean
+      link: drt
+      prover: lean

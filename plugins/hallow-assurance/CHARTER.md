@@ -44,7 +44,8 @@ model**, not their paperwork.
    Adding a language must require zero changes to the plugin or the core.
 2. **Pass/fail is deterministic.** No LLM participates in any gate decision. Model judgment may
    produce findings (inspections) but never verdicts.
-3. **The repo chooses its authority.** With `authority: ci` in the manifest, the CI run is the
+3. **The repo chooses its authority.** With `authority: ci` in the manifest, or a `human_review`
+   key and no `authority`, the CI run is the
    verdict and hooks are early warning; CI reruns everything. Otherwise (the default) the
    developer's local `assure evaluate` is the verdict, and every report says it is self-attested.
    A developer can adopt hallow-assurance alone, without the team or project adopting it.

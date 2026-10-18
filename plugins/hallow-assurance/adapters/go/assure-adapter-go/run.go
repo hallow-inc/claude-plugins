@@ -26,6 +26,7 @@ type runResponse struct {
 	Evidence     []evidence          `json:"evidence"`
 	ToolVersions map[string]string   `json:"tool_versions"`
 	PinnedBy     map[string]string   `json:"pinned_by"`
+	Untracked    []string            `json:"untracked,omitempty"`
 	Environment  *environmentMessage `json:"environment,omitempty"`
 }
 
@@ -94,7 +95,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if err != nil {
 		return runResponse{}, err
 	}
-	versions, pinnedBy, env, err := toolsFor(root, obj)
+	versions, pinnedBy, untracked, env, err := toolsFor(root, obj)
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -113,11 +114,11 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if err != nil {
 		return runResponse{}, err
 	}
-	return runResponse{Protocol: 1, Evidence: ev, ToolVersions: versions, PinnedBy: pinnedBy}, nil
+	return runResponse{Protocol: 2, Evidence: ev, ToolVersions: versions, PinnedBy: pinnedBy, Untracked: untracked}, nil
 }
 
 func environment(msg string) runResponse {
-	return runResponse{Protocol: 1, Evidence: []evidence{}, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}, Environment: &environmentMessage{Message: msg}}
+	return runResponse{Protocol: 2, Evidence: []evidence{}, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}, Environment: &environmentMessage{Message: msg}}
 }
 
 func toolOutput(dir, name string, args ...string) (string, error) {

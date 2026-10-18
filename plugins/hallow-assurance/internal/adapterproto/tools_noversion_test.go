@@ -1,8 +1,6 @@
 package adapterproto
 
 import (
-	"encoding/json"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -18,41 +16,41 @@ const (
 	versionEmpty
 )
 
+func drawVersionedEntry(rt *rapid.T, name string) (entry map[string]any, want Tool, emptyVersion bool) {
+	want = toolGen.Draw(rt, "tool")
+	want.Name = name
+	entry = toolEntry(want)
+	switch rapid.SampledFrom([]versionForm{versionPresent, versionAbsent, versionEmpty}).Draw(rt, "version form") {
+	case versionPresent:
+		entry["version"] = want.Version
+	case versionAbsent:
+		want.Version = ""
+	case versionEmpty:
+		entry["version"] = ""
+		want.Version = ""
+		emptyVersion = true
+	}
+	return entry, want, emptyVersion
+}
+
 func TestRunToolsReadsAbsentVersionAsNotInstalled(t *testing.T) {
 	resp := respondingAdapter(t, "")
 	dir := t.TempDir()
 	rapid.Check(t, func(rt *rapid.T) {
 		n := rapid.IntRange(1, 4).Draw(rt, "n")
 		names := []string{"vitest", "eslint", "typescript", "gremlins"}[:n]
-		var entries []map[string]string
+		var entries []map[string]any
 		var want []Tool
 		emptyAt := -1
 		for i, name := range names {
-			tool := toolGen.Draw(rt, "tool")
-			tool.Name = name
-			e := map[string]string{"name": tool.Name, "pinned_by": tool.PinnedBy, "install": tool.Install}
-			switch rapid.SampledFrom([]versionForm{versionPresent, versionAbsent, versionEmpty}).Draw(rt, "version form") {
-			case versionPresent:
-				e["version"] = tool.Version
-			case versionAbsent:
-				tool.Version = ""
-			case versionEmpty:
-				e["version"] = ""
-				tool.Version = ""
-				if emptyAt < 0 {
-					emptyAt = i
-				}
+			e, tool, empty := drawVersionedEntry(rt, name)
+			if empty && emptyAt < 0 {
+				emptyAt = i
 			}
 			entries = append(entries, e)
 			want = append(want, tool)
 		}
-		data, err := json.Marshal(map[string]any{"protocol": 1, "tools": entries})
-		if err != nil {
-			rt.Fatal(err)
-		}
-		if err := os.WriteFile(resp, data, 0o644); err != nil {
-			rt.Fatal(err)
-		}
+		data := writeResponse(rt, resp, map[string]any{"protocol": 2, "tools": entries})
 		got, err := RunTools(dir, "go")
 		if emptyAt >= 0 {
 			if err == nil || !strings.Contains(err.Error(), "violates the protocol") || !strings.Contains(err.Error(), "version") {

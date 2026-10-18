@@ -1,0 +1,1 @@
+{"protocol":2,"tools":[{"name":"golangci-lint","version":"2.13.2","pinned_by":"mise.toml","install":"mise install","untracked":false}]}

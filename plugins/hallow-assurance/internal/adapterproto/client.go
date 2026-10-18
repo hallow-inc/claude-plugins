@@ -50,6 +50,7 @@ type Run struct {
 	Evidence     []Evidence        `json:"evidence"`
 	ToolVersions map[string]string `json:"tool_versions"`
 	PinnedBy     map[string]string `json:"pinned_by"`
+	Untracked    []string          `json:"untracked,omitempty"`
 	Environment  *Environment      `json:"environment"`
 }
 
@@ -58,10 +59,11 @@ type Environment struct {
 }
 
 type Tool struct {
-	Name     string `json:"name"`
-	Version  string `json:"version"`
-	PinnedBy string `json:"pinned_by"`
-	Install  string `json:"install"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	PinnedBy  string `json:"pinned_by"`
+	Install   string `json:"install"`
+	Untracked bool   `json:"untracked,omitempty"`
 }
 
 type Tools struct {
@@ -158,8 +160,8 @@ func invokeCapped(exe, dir, name, sub string, timeout time.Duration, limit int, 
 var protocols = map[schemas.Kind]int{
 	schemas.AdapterDescribe: 1,
 	schemas.AdapterClassify: 0,
-	schemas.AdapterRun:      1,
-	schemas.AdapterTools:    1,
+	schemas.AdapterRun:      2,
+	schemas.AdapterTools:    2,
 }
 
 func protocolOf(out []byte) (int64, bool) {
@@ -268,6 +270,11 @@ func RunObjective(dir, lang, objective, ref, out string, timeout time.Duration) 
 	for _, tool := range slices.Sorted(maps.Keys(r.PinnedBy)) {
 		if _, ok := r.ToolVersions[tool]; !ok {
 			return Run{}, &Error{Adapter: name, Sub: "run", Err: fmt.Errorf("response violates the protocol: /pinned_by: %q has no tool_versions entry", tool)}
+		}
+	}
+	for _, tool := range r.Untracked {
+		if _, ok := r.PinnedBy[tool]; !ok {
+			return Run{}, &Error{Adapter: name, Sub: "run", Err: fmt.Errorf("response violates the protocol: /untracked: %q has no pinned_by entry", tool)}
 		}
 	}
 	return r, nil

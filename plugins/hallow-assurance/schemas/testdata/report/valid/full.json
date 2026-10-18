@@ -4,6 +4,8 @@
   "changed_from": {"ref": "origin/master", "sha": "2a1c38cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
   "date": "2026-09-27",
   "catalog": "v0",
+  "authority": "ci",
+  "untracked_pins": {},
   "changed_files": 3,
   "tool_versions": {"go": {"go": "go1.27.1", "golangci-lint": "2.13.2"}},
   "pinned_by": {"go": {"golangci-lint": "mise.toml"}},

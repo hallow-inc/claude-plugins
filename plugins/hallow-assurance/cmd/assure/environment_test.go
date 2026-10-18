@@ -49,21 +49,30 @@ var envWaivers = func() string {
 	return b.String()
 }()
 
-func envRepo(t *testing.T, envObjective string) repo {
-	t.Helper()
-	r := newRepo(t, xxManifest)
+func passingXXResponses() map[string]string {
 	sarif := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"golangci-lint"}},"results":[]}]}`
 	junit := `<testsuite name="p" tests="1"><testcase classname="p" name="TestFine"/></testsuite>`
-	xx := map[string]string{
+	return map[string]string{
 		"describe.json":             `{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true},"CODE-ZERO-WARNINGS":{"tool":"golangci-lint","fast":true},"VER-MUTATION-CHANGED":{"tool":"gremlins","fast":false}}}`,
-		"VER-TESTS-PASS.json":       `{"protocol":1,"evidence":[{"type":"test.junit","path":"ev"}],"tool_versions":{"go":"go1.26.7","gotestsum":"1.12.0"},"pinned_by":{"gotestsum":"default"}}`,
+		"VER-TESTS-PASS.json":       `{"protocol":2,"evidence":[{"type":"test.junit","path":"ev"}],"tool_versions":{"go":"go1.26.7","gotestsum":"1.12.0"},"pinned_by":{"gotestsum":"default"}}`,
 		"VER-TESTS-PASS.ev":         junit,
-		"CODE-ZERO-WARNINGS.json":   `{"protocol":1,"evidence":[{"type":"lint.sarif","path":"ev"}],"tool_versions":{"go":"go1.26.7","golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.toml"}}`,
+		"CODE-ZERO-WARNINGS.json":   `{"protocol":2,"evidence":[{"type":"lint.sarif","path":"ev"}],"tool_versions":{"go":"go1.26.7","golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.toml"}}`,
 		"CODE-ZERO-WARNINGS.ev":     sarif,
-		"VER-MUTATION-CHANGED.json": `{"protocol":1,"evidence":[],"tool_versions":{"go":"go1.26.7","gremlins":"0.6.0"},"pinned_by":{"gremlins":"default"}}`,
+		"VER-MUTATION-CHANGED.json": `{"protocol":2,"evidence":[],"tool_versions":{"go":"go1.26.7","gremlins":"0.6.0"},"pinned_by":{"gremlins":"default"}}`,
 	}
-	xx[envObjective+".json"] = `{"protocol":1,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"` + envMessage + `"}}`
+}
+
+func envRepo(t *testing.T, envObjective string) repo {
+	t.Helper()
+	xx := passingXXResponses()
+	xx[envObjective+".json"] = `{"protocol":2,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"` + envMessage + `"}}`
 	delete(xx, envObjective+".ev")
+	return cannedXXRepo(t, xxManifest, xx)
+}
+
+func cannedXXRepo(t *testing.T, manifest string, xx map[string]string) repo {
+	t.Helper()
+	r := newRepo(t, manifest)
 	cannedAdapters(t, map[string]map[string]string{"xx": xx})
 	r.write(".gitignore", ".assure/state/\n")
 	r.write(".assure/waivers.yaml", envWaivers)

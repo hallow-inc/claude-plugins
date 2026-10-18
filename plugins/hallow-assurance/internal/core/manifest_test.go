@@ -82,6 +82,41 @@ func TestSchemaValidManifestWithWellFormedGlobsLoads(t *testing.T) {
 	})
 }
 
+func TestAuthorityIsExplicitOrInferredFromHumanReview(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		key := rapid.SampledFrom([]string{"", "local", "ci"}).Draw(t, "authority")
+		review := rapid.SampledFrom([]string{"", "human_review: {}\n", "human_review: {B: optional}\n", "human_review: {A: required, C: optional}\n"}).Draw(t, "human_review")
+		src := manifestYAML()
+		if key != "" {
+			src += "authority: " + key + "\n"
+		}
+		src += review
+		if rapid.Bool().Draw(t, "provenance") {
+			src += "provenance: true\n"
+		}
+		m, err := parseManifest("m.yaml", []byte(src))
+		if key == "local" && review != "" {
+			if !problemAt(err, "/human_review") {
+				t.Fatalf("authority: local with human_review loaded (err %v); review has no meaning under local authority and the schema rejects it\n%s", err, src)
+			}
+			return
+		}
+		if err != nil {
+			t.Fatalf("%v\n%s", err, src)
+		}
+		want := Authority(key)
+		if key == "" {
+			want = AuthorityLocal
+			if review != "" {
+				want = AuthorityCI
+			}
+		}
+		if m.Authority != want {
+			t.Fatalf("Authority = %q, want %q; explicit authority must win, else human_review implies ci so pre-authority manifests keep their review gate, and nothing else may make a repo CI-gated\n%s", m.Authority, want, src)
+		}
+	})
+}
+
 func TestMalformedComponentGlobIsLocated(t *testing.T) {
 	_, err := parseManifest("m.yaml", []byte(manifestYAML("{path: 'internal/[billing/**', level: A}")))
 	if !problemAt(err, "/components/0/path") {

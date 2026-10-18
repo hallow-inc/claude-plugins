@@ -25,8 +25,8 @@ const (
 )
 
 const (
-	provManifestOptional = provManifest + "human_review: {B: optional}\n"
-	provManifestRequired = provManifest + "human_review: {B: required}\n"
+	provManifestOptional = provManifest + "authority: ci\nhuman_review: {B: optional}\n"
+	provManifestRequired = provManifest + "authority: ci\nhuman_review: {B: required}\n"
 )
 
 func xxOnPath(t *testing.T) {
@@ -371,9 +371,10 @@ func TestProtectedEvidenceKeepsOnlyReviewableProtectedFiles(t *testing.T) {
 	noBase := newProvRepo(t, provManifest, nil)
 	gitIn(t, noBase.root, "rm", "-q", "--cached", "assurance.yaml")
 	gitIn(t, noBase.root, "commit", "-qm", "no manifest at base")
+	gitIn(t, noBase.root, "add", "assurance.yaml")
 	brokenBase := newProvRepo(t, provManifestRequired+"human_review: [\n", nil)
 	putFile(t, brokenBase.root, "assurance.yaml", provManifestRequired)
-	offBase := newProvRepo(t, provManifestOff+"human_review: {B: required}\n", nil)
+	offBase := newProvRepo(t, provManifestOff+"authority: ci\nhuman_review: {B: required}\n", nil)
 	putFile(t, offBase.root, "assurance.yaml", provManifestRequired)
 	bases := []struct {
 		name                         string
@@ -422,6 +423,81 @@ func TestProtectedEvidenceKeepsOnlyReviewableProtectedFiles(t *testing.T) {
 		}
 		if ev.Protected.Reviewed != reviewed || ev.Protected.Required[core.Level("B")] != b.wantRequired {
 			t.Fatalf("%s: reviewed/required not carried from the base manifest: %+v", b.name, ev.Protected)
+		}
+	})
+}
+
+type baseScenario struct {
+	name     string
+	root     string
+	worktree bool
+}
+
+func untrackedManifestRepo(t *testing.T, name string, atRef, staged bool) baseScenario {
+	t.Helper()
+	pr := newProvRepo(t, provManifestOff, nil)
+	gitIn(t, pr.root, "rm", "-q", "--cached", "assurance.yaml")
+	if !atRef {
+		gitIn(t, pr.root, "-c", "commit.gpgsign=false", "commit", "-qm", "no manifest at the ref")
+	}
+	if staged {
+		gitIn(t, pr.root, "add", "-f", "assurance.yaml")
+	} else {
+		putFile(t, pr.root, ".git/info/exclude", "/assurance.yaml\n")
+	}
+	return baseScenario{name: name, root: pr.root, worktree: !staged}
+}
+
+func TestUntrackedManifestStandsInForTheBase(t *testing.T) {
+	gitChecks(t, "30")
+	scenarios := []baseScenario{
+		untrackedManifestRepo(t, "excluded, absent at the ref", false, false),
+		untrackedManifestRepo(t, "excluded, provenance off at the ref", true, false),
+		untrackedManifestRepo(t, "staged first adoption, absent at the ref", false, true),
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		s := rapid.SampledFrom(scenarios).Draw(t, "scenario")
+		prov := rapid.Bool().Draw(t, "provenance")
+		req := rapid.Bool().Draw(t, "B required")
+		src := provManifestOff
+		if prov {
+			src += "provenance: true\n"
+		}
+		if req {
+			src += "authority: ci\nhuman_review: {B: required}\n"
+		}
+		putFile(t, s.root, "assurance.yaml", src)
+		m, err := ManifestFor(s.root)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		in := newBuiltinInputs(s.root, "main", []core.ChangedFile{{Path: "p/x.xx", Level: "B"}}, false)
+		wantProv, wantReq := s.worktree && prov, s.worktree && req
+		if in.provenance != wantProv || in.required[core.Level("B")] != wantReq {
+			t.Fatalf("%s: provenance %v required %v, want %v and %v; a manifest kept out of git has no earlier version, so the working-tree manifest is the base, while a staged manifest absent at the ref is a first adoption",
+				s.name, in.provenance, in.required, wantProv, wantReq)
+		}
+		decidesProvenanceOnlyWhenOn(t, m, in, wantProv)
+	})
+}
+
+func TestExcludedProvenanceHasNoAppendOnlyBase(t *testing.T) {
+	gitChecks(t, "20")
+	const file = core.ProvenanceDir + "/s0.jsonl"
+	pr := newProvRepo(t, provManifest, nil)
+	putFile(t, pr.root, ".git/info/exclude", "/.assure/\n")
+	gitIn(t, pr.root, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "ref")
+	putFile(t, pr.root, file, provLine("s0", "", "", hexA))
+	rapid.Check(t, func(t *rapid.T) {
+		post := rapid.SampledFrom([]string{hexA, hexB}).Draw(t, "first post")
+		body := provLine("s0", "", "", post)
+		for range rapid.IntRange(0, 2).Draw(t, "appended") {
+			body += provLine("s0", "", "", hexA)
+		}
+		putFile(t, pr.root, file, body)
+		ev := provenanceEvidenceFor(newBuiltinInputs(pr.root, "main", []core.ChangedFile{{Path: "p/x.xx"}}, false))
+		if len(ev.Problems) > 0 {
+			t.Fatalf("problems %q: with .assure/ excluded no session file exists at the ref, so the append-only rule has nothing to compare", ev.Problems)
 		}
 	})
 }

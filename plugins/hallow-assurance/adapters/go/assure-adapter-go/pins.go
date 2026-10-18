@@ -102,6 +102,7 @@ type probe struct {
 
 type resolved struct {
 	name, version, pinnedBy, key, install string
+	untracked                             bool
 }
 
 type resolution struct {
@@ -134,7 +135,7 @@ func resolveTool(p probe, t pinnedTool) resolution {
 		return resolution{tool: t, problem: t.name + ": " + fmt.Sprintf(format, args...)}
 	}
 	if p.miseAbsent && len(p.trackedConfigs) > 0 {
-		return fail("%s is a tracked mise config, but mise is not on PATH; install mise (https://mise.jdx.dev) so the adapter reads the same pins CI does", p.trackedConfigs[0])
+		return fail("%s is a mise config in the repository, but mise is not on PATH; install mise (https://mise.jdx.dev) so the adapter reads the pins it sets", p.trackedConfigs[0])
 	}
 	if p.miseErr != "" {
 		return fail("%s", p.miseErr)
@@ -148,9 +149,6 @@ func resolveTool(p probe, t pinnedTool) resolution {
 			rel, inside := relToTop(p.top, e.Source.Path)
 			if !inside {
 				continue
-			}
-			if !p.tracked[rel] {
-				return fail("%s pins %s but is not tracked by git, so CI would not see it; commit the pin or remove it", rel, key)
 			}
 			c := candidate{key: key, pin: e.RequestedVersion, file: rel}
 			if !slices.Contains(found, c) {
@@ -177,7 +175,7 @@ func resolveTool(p probe, t pinnedTool) resolution {
 	if !t.inRange(v) {
 		return fail("%s pins %s, outside the supported range %s", c.file, v, t.rangeText())
 	}
-	return resolution{tool: t, res: resolved{name: t.name, version: v, pinnedBy: c.file, key: c.key, install: "mise install " + c.key + "@" + v}}
+	return resolution{tool: t, res: resolved{name: t.name, version: v, pinnedBy: c.file, key: c.key, install: "mise install " + c.key + "@" + v, untracked: !p.tracked[c.file]}}
 }
 
 func resolve(p probe) []resolution {

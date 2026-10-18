@@ -16,13 +16,13 @@ func retryAdapter(t *testing.T, mode string) {
 	t.Helper()
 	bin := t.TempDir()
 	run := `mkdir -p "$6"; printf '%s' '<testsuite name="p" tests="1"><testcase classname="p" name="TestFine"/></testsuite>' > "$6/junit.xml"
-     printf '%s' '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"t":"1"},"pinned_by":{}}'`
+     printf '%s' '{"protocol":2,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"t":"1"},"pinned_by":{}}'`
 	switch mode {
 	case "fail":
 		run = `mkdir -p "$6"; printf '%s' '<testsuite name="p" tests="1" failures="1"><testcase classname="p" name="TestBrokenWidget"><failure message="boom">boom</failure></testcase></testsuite>' > "$6/junit.xml"
-     printf '%s' '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"t":"1"},"pinned_by":{}}'`
+     printf '%s' '{"protocol":2,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"t":"1"},"pinned_by":{}}'`
 	case "environment":
-		run = `printf '%s' '{"protocol":1,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"` + retryToolMissing + `"}}'`
+		run = `printf '%s' '{"protocol":2,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"` + retryToolMissing + `"}}'`
 	}
 	script := `#!/bin/sh
 case "$1" in

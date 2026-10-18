@@ -168,6 +168,11 @@ func runRaw(obj, out string) (int, []byte, string) {
 }
 
 func runIn(t fataler, obj, out string) runResponse {
+	resp, _ := runInRaw(t, obj, out)
+	return resp
+}
+
+func runInRaw(t fataler, obj, out string) (runResponse, []byte) {
 	code, raw, stderr := runRaw(obj, out)
 	if code != 0 {
 		t.Fatalf("run %s exited %d: %s; a run that reaches a verdict or an environment problem exits 0", obj, code, stderr)
@@ -179,7 +184,38 @@ func runIn(t fataler, obj, out string) runResponse {
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		t.Fatalf("%v", err)
 	}
-	return resp
+	protocolIs(t, "run", resp.Protocol, raw)
+	return resp, raw
+}
+
+// protocolIs reports a wrong protocol without stopping the test, so a test
+// that is red for its own reason as well shows both.
+func protocolIs(t fataler, op string, got int, raw []byte) {
+	if got == 2 {
+		return
+	}
+	msg := fmt.Sprintf("%s response protocol %d, want 2; %s gained the optional untracked marks, and an assure that predates them must refuse the response as a protocol mismatch\n%s", op, got, op, raw)
+	if e, ok := t.(interface{ Errorf(string, ...any) }); ok {
+		e.Errorf("%s", msg)
+		return
+	}
+	t.Fatalf("%s", msg)
+}
+
+func runUntracked(t fataler, raw []byte) ([]string, bool) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatalf("%v", err)
+	}
+	f, ok := fields["untracked"]
+	if !ok {
+		return nil, false
+	}
+	var names []string
+	if err := json.Unmarshal(f, &names); err != nil {
+		t.Fatalf("untracked %s is not a list of tool names: %v", f, err)
+	}
+	return names, true
 }
 
 func junitIn(t fataler, out string, resp runResponse) ev.JUnit {
@@ -240,9 +276,12 @@ func TestRunTestsReplaysRecordedVitest(t *testing.T) {
 	replay(t, r.data, "vitest", replayed{report: recorded(t, "vitest-report.json", r.unreal), stdout: "JSON report written\n", code: 1})
 	out := filepath.Join(t.TempDir(), "nested", "out")
 
-	resp := runIn(t, "VER-TESTS-PASS", out)
+	resp, raw := runInRaw(t, "VER-TESTS-PASS", out)
 	if resp.Environment != nil {
 		t.Fatalf("environment %q; eslint, typescript and Stryker are not installed but VER-TESTS-PASS uses only vitest, and an unused tool must not block it", resp.Environment.Message)
+	}
+	if u, ok := runUntracked(t, raw); ok {
+		t.Fatalf("untracked %v with a tracked lockfile; absent means every pin is tracked, and a spurious mark fails the objective under authority: ci", u)
 	}
 	if want := map[string]string{"node": fakeNodeVersion, "vitest": "5.0.4"}; !maps.Equal(resp.ToolVersions, want) {
 		t.Fatalf("tool_versions %v, want %v; they record node and exactly the tools this objective ran", resp.ToolVersions, want)
@@ -319,6 +358,43 @@ func TestRunRecordsEveryUnitsTools(t *testing.T) {
 		if !c.invoked || c.cwd != dir || !slices.Equal(c.files(), []string{filepath.Join(dir, "src", "x.ts")}) {
 			t.Fatalf("unit %s: vitest call %+v; each unit runs its own vitest, in its directory, on its own files", unit, c)
 		}
+	}
+}
+
+func TestRunUntrackedLockfilesResolveMarkedOnce(t *testing.T) {
+	units := []string{"packages/a", "packages/b"}
+	files := map[string]string{".gitignore": "node_modules\n"}
+	tools := map[string]map[string]string{}
+	for _, unit := range units {
+		files[unit+"/package.json"] = "{}"
+		files[unit+"/package-lock.json"] = "{}"
+		files[unit+"/src/x.ts"] = ""
+		tools[unit] = map[string]string{"vitest": "5.0.4"}
+	}
+	isolateGit(t)
+	fakeNodeOnPath(t)
+	top, data := realTempDir(t), t.TempDir()
+	buildRepo(t, top, data, files, tools)
+	git(t, top, "rm", "-q", "--cached", "--", "packages/a/package-lock.json", "packages/b/package-lock.json")
+	git(t, top, "commit", "-q", "-m", "keep lockfiles local")
+	t.Chdir(top)
+	for _, unit := range units {
+		writeTree(t, top, map[string]string{unit + "/src/x.ts": "changed"})
+		replay(t, filepath.Join(data, unit), "vitest", replayed{report: `{"testResults":[]}`})
+	}
+	out := t.TempDir()
+	resp, raw := runInRaw(t, "VER-TESTS-PASS", out)
+	if resp.Environment != nil {
+		t.Fatalf("environment %q; without authority: ci an untracked lockfile is reported, not refused", resp.Environment.Message)
+	}
+	if j := junitIn(t, out, resp); j.Cases != 0 {
+		t.Fatalf("%d cases from empty reports", j.Cases)
+	}
+	if resp.ToolVersions["vitest"] != "5.0.4" || resp.PinnedBy["vitest"] != "packages/a/package-lock.json, packages/b/package-lock.json" {
+		t.Fatalf("tool_versions %v pinned_by %v; the untracked lockfiles still pin vitest and are recorded", resp.ToolVersions, resp.PinnedBy)
+	}
+	if u, ok := runUntracked(t, raw); !ok || !slices.Equal(u, []string{"vitest"}) {
+		t.Fatalf("untracked = %v (present %v), want [vitest] once; the evaluator fails each listed tool under authority: ci, and the protocol requires unique names even when several units pin the tool\n%s", u, ok, raw)
 	}
 }
 

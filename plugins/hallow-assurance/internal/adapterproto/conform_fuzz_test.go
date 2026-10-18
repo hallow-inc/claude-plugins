@@ -43,7 +43,9 @@ func FuzzConform(f *testing.F) {
 			}
 		}
 	}
-	f.Add(append([]byte{2}, `{"protocol":1,"evidence":[{"type":"junit","path":"junit.xml"}],"tool_versions":{"go":"go1.26.5"},"tool_versions":{"golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.toml"}}`...))
+	f.Add(append([]byte{2}, `{"protocol":2,"evidence":[{"type":"junit","path":"junit.xml"}],"tool_versions":{"go":"go1.26.5"},"tool_versions":{"golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.toml"}}`...))
+	f.Add(append([]byte{2}, `{"protocol":2,"evidence":[],"tool_versions":{"golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.local.toml"},"untracked":["golangci-lint","golangci-lint"]}`...))
+	f.Add(append([]byte{3}, `{"protocol":2,"tools":[{"name":"vitest","pinned_by":"package-lock.json","install":"npm ci","untracked":true}]}`...))
 	const name = "assure-adapter-fuzz"
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) == 0 {

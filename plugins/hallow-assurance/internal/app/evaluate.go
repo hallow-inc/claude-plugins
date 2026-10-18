@@ -47,9 +47,11 @@ type EvalReport struct {
 	ChangedFrom          ChangedFrom                  `json:"changed_from"`
 	Date                 string                       `json:"date"`
 	Catalog              string                       `json:"catalog"`
+	Authority            core.Authority               `json:"authority"`
 	ChangedFiles         int                          `json:"changed_files"`
 	ToolVersions         map[string]map[string]string `json:"tool_versions"`
 	PinnedBy             map[string]map[string]string `json:"pinned_by"`
+	UntrackedPins        map[string][]string          `json:"untracked_pins"`
 	Problems             []string                     `json:"problems"`
 	ExpiredWaivers       []core.Waiver                `json:"expired_waivers"`
 	RemovableBaseline    []RemovableEntry             `json:"removable_baseline"`
@@ -85,6 +87,9 @@ func (r EvalReport) Marshal() ([]byte, error) {
 	if r.PinnedBy == nil {
 		r.PinnedBy = map[string]map[string]string{}
 	}
+	if r.UntrackedPins == nil {
+		r.UntrackedPins = map[string][]string{}
+	}
 	data, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return nil, err
@@ -108,6 +113,14 @@ func revParse(root, ref string) (string, error) {
 	out, err := git(root, "rev-parse", "--verify", ref+"^{}")
 	if err != nil {
 		return "", err
+	}
+	return out[0], nil
+}
+
+func MergeBase(root, ref string) (string, error) {
+	out, err := git(root, "merge-base", "HEAD", ref)
+	if err != nil || len(out) == 0 {
+		return "", fmt.Errorf("no merge base of HEAD and %s; git fetch %s first, or check out with fetch-depth: 0 in CI", ref, ref)
 	}
 	return out[0], nil
 }
@@ -145,8 +158,10 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 		ChangedFrom:    ChangedFrom{Ref: ref, SHA: base},
 		Date:           date,
 		Catalog:        m.Catalog.Version,
+		Authority:      m.Authority,
 		ToolVersions:   map[string]map[string]string{},
 		PinnedBy:       map[string]map[string]string{},
+		UntrackedPins:  map[string][]string{},
 		ExpiredWaivers: core.Expired(ws, date),
 	}
 	slices.SortFunc(rep.ExpiredWaivers, func(a, b core.Waiver) int {
@@ -174,7 +189,9 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 	for i, j := range jobs {
 		wg.Go(func() {
 			ev, run := collect(m, j, ref, EvaluateTimeout)
-			out := core.DecideObjective(j.obj, j.files, ev, ws, bl.For(j.obj.ID), date)
+			decided := ev
+			decided.Problems = slices.Concat(ev.Problems, core.UntrackedPinProblems(m.Authority, run.Untracked, run.PinnedBy))
+			out := core.DecideObjective(j.obj, j.files, decided, ws, bl.For(j.obj.ID), date)
 			results[i] = evalResult{entry: entryOf(j.lang, out), ev: ev, run: run, used: out.BaselineUsed}
 		})
 	}
@@ -216,6 +233,10 @@ func (rep *EvalReport) fold(jobs []job, results []evalResult) (used map[core.Fin
 		rep.Objectives = append(rep.Objectives, res.entry)
 		mergeInto(rep.ToolVersions, jobs[i].lang, res.run.ToolVersions)
 		mergeInto(rep.PinnedBy, jobs[i].lang, res.run.PinnedBy)
+		if len(res.run.Untracked) > 0 {
+			lang := jobs[i].lang
+			rep.UntrackedPins[lang] = slices.Compact(slices.Sorted(slices.Values(slices.Concat(rep.UntrackedPins[lang], res.run.Untracked))))
+		}
 		for fp, n := range res.used {
 			used[fp] += n
 		}

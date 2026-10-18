@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
@@ -54,14 +55,9 @@ func gatherProbe(root string) (probe, error) {
 	if !inside && path.Clean(abs) != path.Clean(top) {
 		return probe{}, fmt.Errorf("%s is not inside the git repository %s", root, top)
 	}
-	configs := configCandidates(rootRel)
-	listed, err := trackedAmong(top, configs)
-	if err != nil {
-		return probe{}, err
-	}
 	p := probe{top: top, tracked: map[string]bool{}}
-	for _, c := range configs {
-		if listed[c] {
+	for _, c := range configCandidates(rootRel) {
+		if _, err := os.Stat(filepath.Join(top, filepath.FromSlash(c))); err == nil {
 			p.trackedConfigs = append(p.trackedConfigs, c)
 		}
 	}
@@ -140,15 +136,15 @@ func checkFound(r resolved) string {
 	return ""
 }
 
-func toolsFor(root, obj string) (versions, pinnedBy map[string]string, environment string, err error) {
+func toolsFor(root, obj string) (versions, pinnedBy map[string]string, untracked []string, environment string, err error) {
 	versions, pinnedBy = map[string]string{}, map[string]string{}
 	names := objectiveTools[obj]
 	if len(names) == 0 {
-		return versions, pinnedBy, "", nil
+		return versions, pinnedBy, nil, "", nil
 	}
 	p, err := gatherProbe(root)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 	var problems []string
 	for _, r := range resolve(p) {
@@ -165,18 +161,31 @@ func toolsFor(root, obj string) (versions, pinnedBy map[string]string, environme
 		}
 		versions[r.res.name] = r.res.version
 		pinnedBy[r.res.name] = r.res.pinnedBy
+		if r.res.untracked {
+			untracked = append(untracked, r.res.name)
+		}
 	}
 	if len(problems) > 0 {
-		return nil, nil, strings.Join(problems, "\n"), nil
+		return nil, nil, nil, strings.Join(problems, "\n"), nil
 	}
-	return versions, pinnedBy, "", nil
+	slices.Sort(untracked)
+	return versions, pinnedBy, untracked, "", nil
 }
 
 type toolEntry struct {
-	Name     string `json:"name"`
-	Version  string `json:"version"`
-	PinnedBy string `json:"pinned_by"`
-	Install  string `json:"install"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	PinnedBy  string `json:"pinned_by"`
+	Install   string `json:"install"`
+	untracked bool
+}
+
+func (e toolEntry) MarshalJSON() ([]byte, error) {
+	type plain toolEntry
+	return json.Marshal(struct {
+		plain
+		Untracked bool `json:"untracked,omitempty"`
+	}{plain(e), e.untracked})
 }
 
 type toolsResponse struct {
@@ -190,14 +199,14 @@ func listTools(root string) (toolsResponse, error) {
 	if err != nil {
 		return toolsResponse{}, err
 	}
-	resp := toolsResponse{Protocol: 1, Tools: []toolEntry{}}
+	resp := toolsResponse{Protocol: 2, Tools: []toolEntry{}}
 	var problems []string
 	for _, r := range resolve(p) {
 		if r.problem != "" {
 			problems = append(problems, r.problem)
 			continue
 		}
-		resp.Tools = append(resp.Tools, toolEntry{Name: r.res.name, Version: r.res.version, PinnedBy: r.res.pinnedBy, Install: r.res.install})
+		resp.Tools = append(resp.Tools, toolEntry{Name: r.res.name, Version: r.res.version, PinnedBy: r.res.pinnedBy, Install: r.res.install, untracked: r.res.untracked})
 	}
 	if len(problems) > 0 {
 		resp.Tools = []toolEntry{}

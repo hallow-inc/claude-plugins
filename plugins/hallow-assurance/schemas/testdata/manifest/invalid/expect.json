@@ -20,5 +20,8 @@
   "formal-code-absolute.yaml": [{"location": "/components/0/formal/code/0", "keyword": "pattern"}],
   "formal-code-string.yaml": [{"location": "/components/0/formal/code", "keyword": "type"}],
   "provenance-not-boolean.yaml": [{"location": "/provenance", "keyword": "type"}],
-  "require-fix-test-not-boolean.yaml": [{"location": "/require_fix_test", "keyword": "type"}]
+  "require-fix-test-not-boolean.yaml": [{"location": "/require_fix_test", "keyword": "type"}],
+  "formal-extra-key.yaml": [{"location": "/components/0/formal", "keyword": "additionalProperties"}],
+  "authority-unknown.yaml": [{"location": "/authority", "keyword": "enum"}],
+  "human-review-local.yaml": [{"location": "/human_review", "keyword": ""}]
 }

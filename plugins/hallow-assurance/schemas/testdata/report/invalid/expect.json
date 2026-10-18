@@ -5,5 +5,8 @@
   "short-sha.json": [{"location": "/commit", "keyword": "pattern"}],
   "zero-count-removable.json": [{"location": "/removable_baseline/0/unused", "keyword": "minimum"}],
   "resolutions-not-array.json": [{"location": "/objectives/0/resolutions", "keyword": "type"}],
-  "removable-resolutions-not-array.json": [{"location": "/removable_resolutions", "keyword": "type"}]
+  "removable-resolutions-not-array.json": [{"location": "/removable_resolutions", "keyword": "type"}],
+  "unknown-authority.json": [{"location": "/authority", "keyword": "enum"}],
+  "missing-untracked-pins.json": [{"location": "", "keyword": "required"}],
+  "untracked-pins-empty-list.json": [{"location": "/untracked_pins/go", "keyword": "minItems"}]
 }

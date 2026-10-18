@@ -26,6 +26,7 @@ func goldenReport() EvalReport {
 	w := core.Waiver{Objective: "IND-VERIFIER-DISTINCT", Scope: "**", Rationale: "provenance arrives in milestone M4", Approver: "owner", Expires: "2026-12-31"}
 	return EvalReport{
 		Commit: sha, ChangedFrom: ChangedFrom{Ref: "origin/master", SHA: sha}, Date: "2026-09-28", Catalog: "v0", ChangedFiles: 3,
+		Authority:         core.AuthorityCI,
 		ToolVersions:      map[string]map[string]string{"go": {"go": "go1.27.1"}},
 		ExpiredWaivers:    []core.Waiver{{Objective: "VER-FAIL-ON-BASE", Scope: "**", Rationale: "fail-on-base runner arrives in M3b", Approver: "owner", Expires: "2026-09-01"}},
 		RemovableBaseline: []RemovableEntry{{Entry: core.BaselineEntry{Objective: "CODE-RESOURCE-BOUNDS", Rule: "noctx", Path: "internal/app/check.go", Message: "use CommandContext", Count: 2}, Unused: 1}},
@@ -141,6 +142,90 @@ func TestMarshalRefusesReportsThatViolateTheSchema(t *testing.T) {
 		data, err := rep.Marshal()
 		if err == nil || !strings.Contains(err.Error(), "report violates report.schema.json") || data != nil {
 			t.Fatalf("Marshal with broken %s = %q, %v: a report consumers cannot validate must never be written", name, data, err)
+		}
+	})
+}
+
+var untrackedToolNames = []string{"golangci-lint", "gremlins", "vitest", "@stryker-mutator/core"}
+
+func drawUntrackedPins(t *rapid.T) map[string][]string {
+	if rapid.Bool().Draw(t, "pins nil") {
+		return nil
+	}
+	pins := map[string][]string{}
+	for _, lang := range rapid.SliceOfDistinct(rapid.SampledFrom([]string{"go", "typescript"}), rapid.ID[string]).Draw(t, "langs") {
+		tools := rapid.SliceOfNDistinct(rapid.SampledFrom(untrackedToolNames), 1, len(untrackedToolNames), rapid.ID[string]).Draw(t, "tools "+lang)
+		slices.Sort(tools)
+		pins[lang] = tools
+	}
+	return pins
+}
+
+func TestSummaryLabelsALocalVerdictSelfAttested(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		rep := goldenReport()
+		rep.Authority = rapid.SampledFrom([]core.Authority{core.AuthorityLocal, core.AuthorityCI}).Draw(t, "authority")
+		rep.UntrackedPins = drawUntrackedPins(t)
+		got := rep.Summary()
+		first, _, _ := strings.Cut(got, "\n")
+		local := rep.Authority == core.AuthorityLocal
+		if strings.Contains(first, "self-attested") != local {
+			t.Fatalf("authority %s, first line %q: a local verdict must say so on its first line, since no CI rerun stands behind it", rep.Authority, first)
+		}
+		if !local && strings.Contains(got, "self-attested") {
+			t.Fatalf("authority ci, summary says self-attested:\n%s", got)
+		}
+	})
+}
+
+func TestSummaryListsUntrackedPins(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		rep := goldenReport()
+		rep.Authority = rapid.SampledFrom([]core.Authority{core.AuthorityLocal, core.AuthorityCI}).Draw(t, "authority")
+		rep.UntrackedPins = drawUntrackedPins(t)
+		got := rep.Summary()
+		lower := strings.ToLower(got)
+		at := strings.Index(lower, "untracked")
+		if (at >= 0) != (len(rep.UntrackedPins) > 0) {
+			t.Fatalf("untracked pins %v, summary mentions untracked at %d:\n%s", rep.UntrackedPins, at, got)
+		}
+		for lang, tools := range rep.UntrackedPins {
+			for _, tool := range tools {
+				if !strings.Contains(got[at:], tool) {
+					t.Fatalf("untracked %s pin %s not listed after the untracked heading; a reader of a local verdict must see which pins CI could not reproduce:\n%s", lang, tool, got)
+				}
+			}
+		}
+	})
+}
+
+func TestMarshalKeepsAuthorityAndUntrackedPins(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		rep := goldenReport()
+		rep.Authority = rapid.SampledFrom([]core.Authority{core.AuthorityLocal, core.AuthorityCI}).Draw(t, "authority")
+		rep.UntrackedPins = drawUntrackedPins(t)
+		data, err := rep.Marshal()
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatal(err)
+		}
+		var authority string
+		var pins map[string][]string
+		if err := json.Unmarshal(raw["authority"], &authority); err != nil || authority != string(rep.Authority) {
+			t.Fatalf("authority stored as %s (%v), want %q", raw["authority"], err, rep.Authority)
+		}
+		if err := json.Unmarshal(raw["untracked_pins"], &pins); err != nil || pins == nil {
+			t.Fatalf("untracked_pins stored as %s (%v); the key must always be an object so a consumer can tell none from not recorded", raw["untracked_pins"], err)
+		}
+		want := rep.UntrackedPins
+		if want == nil {
+			want = map[string][]string{}
+		}
+		if !maps.EqualFunc(pins, want, slices.Equal) {
+			t.Fatalf("untracked_pins stored as %v, want %v", pins, want)
 		}
 	})
 }

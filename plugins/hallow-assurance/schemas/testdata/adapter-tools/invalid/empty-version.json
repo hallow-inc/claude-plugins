@@ -1,1 +1,1 @@
-{"protocol":1,"tools":[{"name":"vitest","version":"","pinned_by":"package-lock.json","install":"npm ci"}]}
+{"protocol":2,"tools":[{"name":"vitest","version":"","pinned_by":"package-lock.json","install":"npm ci"}]}

@@ -3,5 +3,6 @@ catalog: v0
 languages: [go]
 default_level: B
 components: []
+authority: ci
 human_review:
   E: required
