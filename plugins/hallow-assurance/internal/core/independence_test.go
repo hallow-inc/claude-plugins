@@ -628,7 +628,7 @@ func TestHumanReviewIsReadFromTheManifest(t *testing.T) {
 		t.Fatalf("absent human_review must mean optional at every level; got required at %v", m.ReviewRequired)
 	}
 	rapid.Check(t, func(t *rapid.T) {
-		indSrc := manifestYAML() + "human_review:\n"
+		indSrc := manifestYAML() + "authority: ci\nhuman_review:\n"
 		want := map[Level]bool{}
 		some := false
 		for _, l := range ruleLevels {

@@ -301,7 +301,19 @@ func baseBlobs(root, base string, rels []string) (map[string]string, error) {
 	return out, nil
 }
 
+func ManifestTracked(root string) bool {
+	_, err := git(root, "ls-files", "--error-unmatch", "--", core.ManifestName)
+	return err == nil
+}
+
 func baseManifest(root, base string) *core.Manifest {
+	if !ManifestTracked(root) {
+		m, err := core.LoadManifest(filepath.Join(root, core.ManifestName))
+		if err != nil {
+			return nil
+		}
+		return m
+	}
 	data, err := gitBytes(root, "show", base+":./"+core.ManifestName)
 	if err != nil {
 		return nil

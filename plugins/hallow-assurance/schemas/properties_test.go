@@ -117,15 +117,20 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "components", "x", []any{"x"})
 	r.bad("", "protected", "x")
 	r.bad("", "human_review", "x", map[string]any{"E": "required"}, map[string]any{"a": "optional"})
-	if rapid.Bool().Draw(t, "review") {
-		hr := map[string]any{}
-		for _, l := range levelKeys {
-			if rapid.Bool().Draw(t, "hr"+l) {
-				hr[l] = rapid.SampledFrom([]string{"required", "optional"}).Draw(t, "hrv")
-				r.bad("/human_review", l, "off", true, 1)
-			}
+	r.bad("", "authority", "team", "CI", "", 1, true)
+	authority := authorityGen.Draw(t, "authority")
+	if authority != "" {
+		doc["authority"] = authority
+	}
+	if authority != "local" && rapid.Bool().Draw(t, "review") {
+		hr := reviewMap(t)
+		for l := range hr {
+			r.bad("/human_review", l, "off", true, 1)
 		}
 		doc["human_review"] = hr
+		r.add("human_review with authority local", "/human_review", op{key: "authority", val: "local"})
+	} else if authority == "local" {
+		r.add("human_review under local authority", "/human_review", op{key: "human_review", val: reviewMap(t)})
 	}
 	r.bad("", "provenance", "yes", 1)
 	if rapid.Bool().Draw(t, "has provenance") {
@@ -164,6 +169,51 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 	doc["components"] = comps
 	return sample{doc, r.cs}
 })
+
+var authorityGen = rapid.SampledFrom([]string{"", "local", "ci"})
+
+func reviewMap(t *rapid.T) map[string]any {
+	hr := map[string]any{}
+	for _, l := range levelKeys {
+		if rapid.Bool().Draw(t, "hr"+l) {
+			hr[l] = rapid.SampledFrom([]string{"required", "optional"}).Draw(t, "hrv")
+		}
+	}
+	return hr
+}
+
+func TestHumanReviewRejectedExactlyUnderLocalAuthority(t *testing.T) {
+	v, err := compiled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		doc := deepCopy(manifestGen.Draw(t, "manifest").doc).(map[string]any)
+		delete(doc, "authority")
+		delete(doc, "human_review")
+		authority := authorityGen.Draw(t, "authority")
+		if authority != "" {
+			doc["authority"] = authority
+		}
+		hasReview := rapid.Bool().Draw(t, "has human_review")
+		if hasReview {
+			doc["human_review"] = reviewMap(t)
+		}
+		vs, err := v.validate(Manifest, serialize(Manifest, doc))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := hasReview && authority == "local"
+		if got := caughtAt(vs, "/human_review"); got != want {
+			t.Fatalf("authority=%q human_review present=%v: rejected at /human_review = %v, want %v; only explicit local contradicts review, an absent key must keep pre-authority manifests loading (violations %v)", authority, hasReview, got, want, vs)
+		}
+		for _, x := range vs {
+			if x.Location != "/human_review" {
+				t.Fatalf("authority=%q: unexpected violation %v; only /human_review may fail", authority, x)
+			}
+		}
+	})
+}
 
 var catalogGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
@@ -361,7 +411,7 @@ var runGen = rapid.Custom(func(t *rapid.T) sample {
 	for range rapid.IntRange(1, 3).Draw(t, "ntv") {
 		tv[langGen.Draw(t, "tool")] = textGen.Draw(t, "ver")
 	}
-	doc := map[string]any{"protocol": 1, "evidence": []any{}, "tool_versions": tv, "pinned_by": pinsOf(t, tv)}
+	doc := map[string]any{"protocol": 2, "evidence": []any{}, "tool_versions": tv, "pinned_by": pinsOf(t, tv)}
 	if env := environmentOf(t, r); env != nil {
 		doc["environment"] = env
 		r.bad("", "evidence", []any{map[string]any{"type": "test.junit", "path": "junit.xml"}})
@@ -381,17 +431,40 @@ var runGen = rapid.Custom(func(t *rapid.T) sample {
 		doc["evidence"] = ev
 		r.bad("", "tool_versions", map[string]any{})
 	}
+	if u := untrackedOf(t, doc["pinned_by"].(map[string]any)); u != nil {
+		doc["untracked"] = u
+	}
+	r.bad("", "untracked", "x", []any{}, []any{"golangci-lint", "golangci-lint"}, []any{7}, []any{""})
 	r.root("x", []any{})
 	r.closed("")
 	r.required("", "protocol", "evidence", "tool_versions", "pinned_by")
-	r.bad("", "protocol", badProtocolV1...)
+	r.bad("", "protocol", badProtocolV2...)
 	r.bad("", "evidence", "x", []any{"x"})
 	r.bad("", "tool_versions", "x", map[string]any{"go": ""}, map[string]any{"go": 7})
 	r.bad("", "pinned_by", "x", map[string]any{"go": ""}, map[string]any{"go": 7})
 	return sample{doc, r.cs}
 })
 
-var badProtocolV1 = []any{0, 2, "1"}
+var (
+	badProtocolV1 = []any{0, 2, "1"}
+	badProtocolV2 = []any{0, 1, 3, "2"}
+)
+
+func untrackedOf(t *rapid.T, pins map[string]any) []any {
+	if len(pins) == 0 || !rapid.Bool().Draw(t, "has untracked") {
+		return nil
+	}
+	var out []any
+	for _, tool := range slices.Sorted(maps.Keys(pins)) {
+		if rapid.Bool().Draw(t, "untracked "+tool) {
+			out = append(out, tool)
+		}
+	}
+	if out == nil {
+		out = []any{slices.Sorted(maps.Keys(pins))[0]}
+	}
+	return out
+}
 
 func pinsOf(t *rapid.T, tv map[string]any) map[string]any {
 	pins := map[string]any{}
@@ -425,9 +498,12 @@ var toolsGen = rapid.Custom(func(t *rapid.T) sample {
 		if rapid.Bool().Draw(t, "installed") {
 			e["version"] = rapid.StringMatching(`[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}`).Draw(t, "version")
 		}
+		if rapid.Bool().Draw(t, "untracked") {
+			e["untracked"] = true
+		}
 		return e
 	}
-	doc := map[string]any{"protocol": 1}
+	doc := map[string]any{"protocol": 2}
 	if env := environmentOf(t, r); env != nil {
 		doc["environment"] = env
 		r.bad("", "tools", []any{entry()})
@@ -441,6 +517,7 @@ var toolsGen = rapid.Custom(func(t *rapid.T) sample {
 			r.bad(p, "version", badText...)
 			r.bad(p, "pinned_by", badText...)
 			r.bad(p, "install", "", "go install x\nrm -rf /", "a\rb", 7)
+			r.bad(p, "untracked", false, "true", 1)
 			r.bad("/tools", idx(i), "x")
 		}
 	}
@@ -448,7 +525,7 @@ var toolsGen = rapid.Custom(func(t *rapid.T) sample {
 	r.root("x", []any{})
 	r.closed("")
 	r.required("", "protocol", "tools")
-	r.bad("", "protocol", badProtocolV1...)
+	r.bad("", "protocol", badProtocolV2...)
 	r.bad("", "tools", "x", map[string]any{})
 	return sample{doc, r.cs}
 })
@@ -587,12 +664,17 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
 	tv := map[string]any{}
 	pins := map[string]any{}
+	untracked := map[string]any{}
 	for _, lang := range rapid.SliceOfNDistinct(langGen, 0, 2, func(s string) string { return s }).Draw(t, "langs") {
 		tv[lang] = map[string]any{textGen.Draw(t, "tool"): textGen.Draw(t, "ver")}
 		pins[lang] = pinsOf(t, tv[lang].(map[string]any))
+		if u := untrackedOf(t, pins[lang].(map[string]any)); u != nil {
+			untracked[lang] = u
+		}
 		r.bad("/tool_versions", lang, "x", map[string]any{"go": ""}, map[string]any{"go": 7})
 		r.bad("/pinned_by", lang, "x", map[string]any{"go": ""}, map[string]any{"go": 7})
 	}
+	r.bad("/untracked_pins", "go", "x", []any{}, []any{7}, []any{""}, []any{"gremlins", "gremlins"})
 	probs := []any{}
 	for i := range rapid.IntRange(0, 2).Draw(t, "np") {
 		probs = append(probs, textGen.Draw(t, "problem"))
@@ -645,6 +727,8 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 		"changed_from":       map[string]any{"ref": textGen.Draw(t, "ref"), "sha": shaGen.Draw(t, "base")},
 		"date":               "2026-09-27",
 		"catalog":            "v" + strconv.Itoa(rapid.IntRange(0, 9).Draw(t, "cat")),
+		"authority":          rapid.SampledFrom([]string{"local", "ci"}).Draw(t, "authority"),
+		"untracked_pins":     untracked,
 		"changed_files":      rapid.IntRange(0, 50).Draw(t, "changed"),
 		"tool_versions":      tv,
 		"pinned_by":          pins,
@@ -655,7 +739,9 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	}
 	r.root("x", []any{})
 	r.closed("")
-	r.required("", "version", "commit", "changed_from", "date", "catalog", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "removable_baseline", "objectives")
+	r.required("", "version", "commit", "changed_from", "date", "catalog", "authority", "untracked_pins", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "removable_baseline", "objectives")
+	r.bad("", "authority", "team", "", 1)
+	r.bad("", "untracked_pins", "x", []any{})
 	r.bad("", "version", 1, "0")
 	r.bad("", "commit", badSHA...)
 	r.closed("/changed_from")

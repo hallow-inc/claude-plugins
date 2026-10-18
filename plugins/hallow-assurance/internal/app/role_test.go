@@ -22,7 +22,7 @@ run)
   while [ $# -gt 0 ]; do [ "$1" = "--out" ] && out="$2"; shift; done
   mkdir -p "$out"
   printf '%%s' '%s' > "$out/junit.xml"
-  printf '%%s' '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"xx":"1"},"pinned_by":{}}' ;;
+  printf '%%s' '{"protocol":2,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"xx":"1"},"pinned_by":{}}' ;;
 *) exit 1 ;;
 esac
 `

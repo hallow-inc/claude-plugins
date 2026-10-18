@@ -18,10 +18,10 @@ import (
 func TestRunObjectiveFailureModesNameTheAdapter(t *testing.T) {
 	cases := map[string]struct{ script, want string }{
 		"timeout":           {"exec sleep 10", "killed after timeout of 1s"},
-		"invalid response":  {`echo '{"protocol":1,"evidence":[]}'`, "violates the protocol"},
+		"invalid response":  {`echo '{"protocol":2,"evidence":[]}'`, "violates the protocol"},
 		"unknown objective": {`echo "objective \"$2\" is not implemented" >&2; exit 2`, `objective "VER-X" is not implemented`},
-		"escaping path":     {`echo '{"protocol":1,"evidence":[{"type":"test.junit","path":"../x"}],"tool_versions":{"go":"1"},"pinned_by":{}}'`, "violates the protocol"},
-		"unversioned pin":   {`echo '{"protocol":1,"evidence":[],"tool_versions":{"go":"go1.26.7"},"pinned_by":{"gremlins":"default"}}'`, `"gremlins" has no tool_versions entry`},
+		"escaping path":     {`echo '{"protocol":2,"evidence":[{"type":"test.junit","path":"../x"}],"tool_versions":{"go":"1"},"pinned_by":{}}'`, "violates the protocol"},
+		"unversioned pin":   {`echo '{"protocol":2,"evidence":[],"tool_versions":{"go":"go1.26.7"},"pinned_by":{"gremlins":"default"}}'`, `"gremlins" has no tool_versions entry`},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestRunObjectiveFailureModesNameTheAdapter(t *testing.T) {
 }
 
 func TestRunEnvironmentIsAResultNotAnError(t *testing.T) {
-	fakeAdapter(t, "go", `echo '{"protocol":1,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"golangci-lint is not on PATH"}}'`)
+	fakeAdapter(t, "go", `echo '{"protocol":2,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"golangci-lint is not on PATH"}}'`)
 	r, err := RunObjective(t.TempDir(), "go", "CODE-ZERO-WARNINGS", "main", "ev", 5*time.Second)
 	if err != nil {
 		t.Fatalf("environment must reach check and evaluate as a typed result so they can classify it outside the agent's reach; got error %v", err)
@@ -69,11 +69,11 @@ func TestProtocolMismatchNamesBothNumbersBeforeSchema(t *testing.T) {
 	}{
 		"describe": {1, func() error { _, _, err := RunDescribe(exe, dir, "go"); return err }},
 		"classify": {0, func() error { _, err := Classify(dir, "go", []string{"a.go"}); return err }},
-		"run": {1, func() error {
+		"run": {2, func() error {
 			_, err := RunObjective(dir, "go", "VER-TESTS-PASS", "main", "ev", time.Minute)
 			return err
 		}},
-		"tools": {1, func() error { _, err := RunTools(dir, "go"); return err }},
+		"tools": {2, func() error { _, err := RunTools(dir, "go"); return err }},
 	}
 	rapid.Check(t, func(rt *rapid.T) {
 		sub := rapid.SampledFrom(slices.Sorted(maps.Keys(subs))).Draw(rt, "sub")
@@ -95,10 +95,11 @@ func TestProtocolMismatchNamesBothNumbersBeforeSchema(t *testing.T) {
 
 var toolGen = rapid.Custom(func(rt *rapid.T) Tool {
 	return Tool{
-		Name:     rapid.SampledFrom([]string{"golangci-lint", "gremlins", "go", "x"}).Draw(rt, "name"),
-		Version:  rapid.StringMatching(`[0-9]\.[0-9]{1,2}\.[0-9]`).Draw(rt, "version"),
-		PinnedBy: rapid.SampledFrom([]string{"default", "mise.toml", ".tool-versions"}).Draw(rt, "pinned_by"),
-		Install:  rapid.StringMatching(`[a-z@./ -]{1,30}`).Draw(rt, "install"),
+		Name:      rapid.SampledFrom([]string{"golangci-lint", "gremlins", "go", "x"}).Draw(rt, "name"),
+		Version:   rapid.StringMatching(`[0-9]\.[0-9]{1,2}\.[0-9]`).Draw(rt, "version"),
+		PinnedBy:  rapid.SampledFrom([]string{"default", "mise.toml", ".tool-versions"}).Draw(rt, "pinned_by"),
+		Install:   rapid.StringMatching(`[a-z@./ -]{1,30}`).Draw(rt, "install"),
+		Untracked: rapid.Bool().Draw(rt, "untracked"),
 	}
 })
 
@@ -113,23 +114,41 @@ func firstDuplicate(tools []Tool) string {
 	return ""
 }
 
+func toolEntry(tool Tool) map[string]any {
+	e := map[string]any{"name": tool.Name, "pinned_by": tool.PinnedBy, "install": tool.Install}
+	if tool.Untracked {
+		e["untracked"] = true
+	}
+	return e
+}
+
+func writeResponse(rt *rapid.T, resp string, body map[string]any) []byte {
+	data, err := json.Marshal(body)
+	if err != nil {
+		rt.Fatal(err)
+	}
+	if err := os.WriteFile(resp, data, 0o644); err != nil {
+		rt.Fatal(err)
+	}
+	return data
+}
+
 func TestRunToolsKeepsOrderAndRejectsDuplicateNames(t *testing.T) {
 	resp := respondingAdapter(t, `[ "$1 $2 $3" = "tools --root $PWD" ] || { echo "args: $*" >&2; exit 1; }`)
 	dir := t.TempDir()
 	rapid.Check(t, func(rt *rapid.T) {
 		tools := rapid.SliceOf(toolGen).Draw(rt, "tools")
 		env := len(tools) == 0 && rapid.Bool().Draw(rt, "environment")
-		body := map[string]any{"protocol": 1, "tools": tools}
+		entries := make([]map[string]any, len(tools))
+		for i, tool := range tools {
+			entries[i] = toolEntry(tool)
+			entries[i]["version"] = tool.Version
+		}
+		body := map[string]any{"protocol": 2, "tools": entries}
 		if env {
 			body["environment"] = map[string]any{"message": "loose pin"}
 		}
-		data, err := json.Marshal(body)
-		if err != nil {
-			rt.Fatal(err)
-		}
-		if err := os.WriteFile(resp, data, 0o644); err != nil {
-			rt.Fatal(err)
-		}
+		writeResponse(rt, resp, body)
 		dup := firstDuplicate(tools)
 		got, err := RunTools(dir, "go")
 		switch {
@@ -142,14 +161,14 @@ func TestRunToolsKeepsOrderAndRejectsDuplicateNames(t *testing.T) {
 		case env != (got.Environment != nil) || (env && got.Environment.Message != "loose pin"):
 			rt.Fatalf("environment %v not surfaced as a result: %+v", env, got)
 		case !slices.Equal(got.Tools, tools):
-			rt.Fatalf("tools reordered or altered: got %+v want %+v", got.Tools, tools)
+			rt.Fatalf("tools reordered or altered: got %+v want %+v; an entry marked untracked: true must reach assure tools as untracked, or under authority: ci a pin CI cannot see is listed as if it were tracked", got.Tools, tools)
 		}
 	})
 }
 
 func TestRunObjectivePassesProtocolArguments(t *testing.T) {
 	fakeAdapter(t, "go", `[ "$1 $2 $3 $4 $5 $6" = "run VER-TESTS-PASS --changed-from main --out ev" ] || { echo "args: $*" >&2; exit 1; }
-echo '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"go":"go1.26"},"pinned_by":{"go":"go.mod"}}'`)
+echo '{"protocol":2,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"go":"go1.26"},"pinned_by":{"go":"go.mod"}}'`)
 	r, err := RunObjective(t.TempDir(), "go", "VER-TESTS-PASS", "main", "ev", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)

@@ -219,20 +219,16 @@ var probeGen = rapid.Custom(func(t *rapid.T) probe {
 type expectation struct {
 	res     resolved
 	mention []string
-	anyOf   []string
 }
 
 type cand struct{ key, pin, rel string }
 
-func inRepoPins(p probe, keys []string) (cands []cand, untracked []string) {
+func inRepoPins(p probe, keys []string) []cand {
+	var cands []cand
 	for _, k := range keys {
 		for _, e := range p.mise[k] {
 			rel, inside := strings.CutPrefix(e.Source.Path, probeTop+"/")
 			if e.Source.Path == "" || !inside {
-				continue
-			}
-			if !p.tracked[rel] {
-				untracked = append(untracked, rel)
 				continue
 			}
 			if c := (cand{k, e.RequestedVersion, rel}); !slices.Contains(cands, c) {
@@ -240,24 +236,26 @@ func inRepoPins(p probe, keys []string) (cands []cand, untracked []string) {
 			}
 		}
 	}
-	return cands, untracked
+	return cands
+}
+
+func resolvedValue(r resolved) resolved {
+	return resolved{name: r.name, version: r.version, pinnedBy: r.pinnedBy, key: r.key, install: r.install}
 }
 
 func expect(p probe, name string) expectation {
 	s := specTools[name]
-	fail := func(mention []string, anyOf []string) expectation {
-		return expectation{mention: append([]string{name}, mention...), anyOf: anyOf}
+	fail := func(mention []string) expectation {
+		return expectation{mention: append([]string{name}, mention...)}
 	}
 	if p.miseAbsent && len(p.trackedConfigs) > 0 {
-		return fail([]string{"install mise"}, nil)
+		return fail([]string{"install mise"})
 	}
 	if p.miseErr != "" {
-		return fail([]string{p.miseErr}, nil)
+		return fail([]string{p.miseErr})
 	}
-	cands, untracked := inRepoPins(p, s.keys)
+	cands := inRepoPins(p, s.keys)
 	switch {
-	case len(untracked) > 0:
-		return fail([]string{"CI would not see it"}, untracked)
 	case len(cands) == 0:
 		return expectation{res: resolved{name: name, version: s.def, pinnedBy: "default", install: map[string]string{
 			"golangci-lint": `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.13.2`,
@@ -268,15 +266,15 @@ func expect(p probe, name string) expectation {
 		for _, c := range cands {
 			m = append(m, c.key, c.rel)
 		}
-		return fail(m, nil)
+		return fail(m)
 	}
 	c := cands[0]
 	if !exactModel(c.pin) {
-		return fail([]string{c.rel, s.def}, nil)
+		return fail([]string{c.rel, s.def})
 	}
 	v := strings.TrimPrefix(c.pin, "v")
 	if modelCompare(v, s.lo) < 0 || modelCompare(v, s.hi) >= 0 {
-		return fail([]string{c.rel, v, s.lo, s.hi}, nil)
+		return fail([]string{c.rel, v, s.lo, s.hi})
 	}
 	return expectation{res: resolved{name: name, version: v, pinnedBy: c.rel, key: c.key, install: "mise install " + c.key + "@" + v}}
 }
@@ -291,8 +289,8 @@ func TestResolveFollowsPinPrecedence(t *testing.T) {
 		for _, r := range rs {
 			want := expect(p, r.tool.name)
 			if want.res.name != "" {
-				if r.problem != "" || r.res != want.res {
-					t.Fatalf("%s: got %+v problem %q, want %+v; a tracked in-repo pin wins, otherwise the compiled default", r.tool.name, r.res, r.problem, want.res)
+				if r.problem != "" || resolvedValue(r.res) != want.res {
+					t.Fatalf("%s: got %+v problem %q, want %+v; an in-repo pin wins whether or not git tracks it, otherwise the compiled default", r.tool.name, r.res, r.problem, want.res)
 				}
 				continue
 			}
@@ -303,9 +301,6 @@ func TestResolveFollowsPinPrecedence(t *testing.T) {
 				if !strings.Contains(r.problem, m) {
 					t.Fatalf("%s: problem %q does not mention %q", r.tool.name, r.problem, m)
 				}
-			}
-			if len(want.anyOf) > 0 && !slices.ContainsFunc(want.anyOf, func(f string) bool { return strings.Contains(r.problem, f) }) {
-				t.Fatalf("%s: problem %q names none of the untracked files %v", r.tool.name, r.problem, want.anyOf)
 			}
 		}
 	})

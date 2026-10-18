@@ -373,7 +373,7 @@ func TestNpmCasesCommitTheirLockfileButNotNodeModules(t *testing.T) {
 			}
 			for _, name := range []string{"package.json", "package-lock.json"} {
 				if _, ok := c.base[name]; !ok {
-					t.Errorf("%s: base commit has no %s; npm ci needs both, and the adapter refuses an untracked lockfile", f, name)
+					t.Errorf("%s: base commit has no %s; npm ci needs both, and an uncommitted lockfile would mark every pin untracked, which no CI-gated repository produces", f, name)
 				}
 			}
 			if !slices.Contains(nonEmptyLines(c.base[".gitignore"]), "node_modules") {

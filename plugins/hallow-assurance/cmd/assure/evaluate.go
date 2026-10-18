@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"io"
@@ -15,12 +16,13 @@ import (
 func runEvaluate(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("evaluate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	ref := fs.String("changed-from", "", "git ref whose diff to the working tree, plus untracked files, is the changed set (required)")
+	ref := fs.String("changed-from", "", "git ref whose diff to the working tree, plus untracked files, is the changed set")
+	mergeWith := fs.String("merge-base-with", "", "git ref whose merge base with HEAD is the changed-from point")
 	report := fs.String("report", "", "report path (default <root>/"+app.ReportFile+")")
 	date := fs.String("date", time.Now().UTC().Format(time.DateOnly), "evaluation date, YYYY-MM-DD, for waiver expiry")
 	reviewsFile := fs.String("reviews", "", "JSON file of the PR author, head commit, and reviews; a non-author approval on head excuses gaps and protected-file changes")
-	const use = "usage: assure evaluate --changed-from <ref> [--report <path>] [--date YYYY-MM-DD] [--reviews <file>]"
-	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *ref == "" {
+	const use = "usage: assure evaluate (--changed-from <ref> | --merge-base-with <ref>) [--report <path>] [--date YYYY-MM-DD] [--reviews <file>]"
+	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || (*ref == "") == (*mergeWith == "") {
 		_, _ = fmt.Fprintln(stderr, use)
 		return 2
 	}
@@ -32,6 +34,11 @@ func runEvaluate(args []string, stdout, stderr io.Writer) int {
 	if m == nil {
 		return 2
 	}
+	from, err := changedFrom(m, *ref, *mergeWith)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
+		return 2
+	}
 	var reviews *core.Reviews
 	if *reviewsFile != "" {
 		r, err := app.LoadReviews(m, *reviewsFile)
@@ -41,25 +48,12 @@ func runEvaluate(args []string, stdout, stderr io.Writer) int {
 		}
 		reviews = r
 	}
-	rep, err := app.EvaluateWith(m, *ref, *date, reviews)
+	rep, err := app.EvaluateWith(m, from, *date, reviews)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
 		return 2
 	}
-	data, err := rep.Marshal()
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
-		return 2
-	}
-	path := *report
-	if path == "" {
-		path = filepath.Join(m.Root, app.ReportFile)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
-		return 2
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeReport(rep, cmp.Or(*report, filepath.Join(m.Root, app.ReportFile))); err != nil {
 		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
 		return 2
 	}
@@ -71,4 +65,25 @@ func runEvaluate(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func changedFrom(m *core.Manifest, ref, mergeWith string) (string, error) {
+	if m.Authority == core.AuthorityCI && !app.ManifestTracked(m.Root) {
+		return "", fmt.Errorf("authority is ci, but git does not track %s, so CI could not read the manifest; commit it or remove authority: ci", core.ManifestName)
+	}
+	if mergeWith == "" {
+		return ref, nil
+	}
+	return app.MergeBase(m.Root, mergeWith)
+}
+
+func writeReport(rep app.EvalReport, path string) error {
+	data, err := rep.Marshal()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }

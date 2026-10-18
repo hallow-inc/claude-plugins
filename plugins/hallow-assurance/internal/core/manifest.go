@@ -29,6 +29,7 @@ type Manifest struct {
 	ReviewRequired map[Level]bool
 	Provenance     bool
 	RequireFixTest bool
+	Authority      Authority
 	Catalog        Catalog
 	Warnings       []schemas.Violation
 }
@@ -117,6 +118,13 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 	}
 	m.Provenance, _ = v["provenance"].(bool)
 	m.RequireFixTest, _ = v["require_fix_test"].(bool)
+	m.Authority = AuthorityLocal
+	if _, ok := v["human_review"]; ok {
+		m.Authority = AuthorityCI
+	}
+	if a, ok := v["authority"].(string); ok {
+		m.Authority = Authority(a)
+	}
 	cat, err := LoadCatalog(v["catalog"].(string))
 	if err != nil {
 		p.add("/catalog", "catalog", "%v", err)

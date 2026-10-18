@@ -115,6 +115,7 @@ func installFor(name string, r io.Reader) (string, error) {
 
 type lockfile struct {
 	dir, rel, install, problem string
+	untracked                  bool
 }
 
 func relSlash(top, p string) string {
@@ -150,9 +151,6 @@ func lockfileIn(top, dir, name string) (lockfile, error) {
 	if err != nil {
 		return lockfile{}, err
 	}
-	if !slices.Contains(tracked, name) {
-		return lockfile{problem: fmt.Sprintf("%s is not tracked by git, so CI would not see it; commit it", rel)}, nil
-	}
 	f, err := os.Open(filepath.Join(dir, name))
 	if err != nil {
 		return lockfile{}, err
@@ -162,11 +160,12 @@ func lockfileIn(top, dir, name string) (lockfile, error) {
 	if err != nil {
 		return lockfile{}, fmt.Errorf("%s: %w", rel, err)
 	}
-	return lockfile{dir: dir, rel: rel, install: install}, nil
+	return lockfile{dir: dir, rel: rel, install: install, untracked: !slices.Contains(tracked, name)}, nil
 }
 
 type resolved struct {
 	name, version, pinnedBy, install, bin string
+	untracked                             bool
 }
 
 func findUp(top, unit, rel string) (string, bool) {
@@ -229,7 +228,7 @@ func resolveTool(top, unit string, lock lockfile, t tsTool) (resolved, resolutio
 	if !t.inRange(v) {
 		return fail("installed version %s is outside the supported range %s", v, t.rangeText())
 	}
-	r := resolved{name: t.name, version: v, pinnedBy: lock.rel, install: lock.install}
+	r := resolved{name: t.name, version: v, pinnedBy: lock.rel, install: lock.install, untracked: lock.untracked}
 	if t.bin != "" {
 		bin, ok := findUp(top, unit, filepath.Join("node_modules", ".bin", t.bin))
 		if !ok {
@@ -269,10 +268,19 @@ type environmentMessage struct {
 }
 
 type toolEntry struct {
-	Name     string `json:"name"`
-	Version  string `json:"version,omitempty"`
-	PinnedBy string `json:"pinned_by"`
-	Install  string `json:"install"`
+	Name      string `json:"name"`
+	Version   string `json:"version,omitempty"`
+	PinnedBy  string `json:"pinned_by"`
+	Install   string `json:"install"`
+	untracked bool
+}
+
+func (e toolEntry) MarshalJSON() ([]byte, error) {
+	type plain toolEntry
+	return json.Marshal(struct {
+		plain
+		Untracked bool `json:"untracked,omitempty"`
+	}{plain(e), e.untracked})
 }
 
 type toolsResponse struct {
@@ -302,7 +310,7 @@ func gitOutput(dir string, args ...string) (string, error) {
 }
 
 func toolsEnvironment(msg string) toolsResponse {
-	return toolsResponse{Protocol: 1, Tools: []toolEntry{}, Environment: &environmentMessage{Message: msg}}
+	return toolsResponse{Protocol: 2, Tools: []toolEntry{}, Environment: &environmentMessage{Message: msg}}
 }
 
 func listTools(root string) (toolsResponse, error) {
@@ -330,15 +338,15 @@ func listTools(root string) (toolsResponse, error) {
 	if lock.problem == "" && lock.dir != root {
 		return toolsEnvironment(fmt.Sprintf("the lockfile is %s, outside %s; run assure tools from %s so its install line runs where the lockfile is", lock.rel, relSlash(top, root), relSlash(top, lock.dir))), nil
 	}
-	resp := toolsResponse{Protocol: 1, Tools: []toolEntry{}}
+	resp := toolsResponse{Protocol: 2, Tools: []toolEntry{}}
 	var problems []string
 	for _, t := range tsTools {
 		r, res, problem := resolveTool(top, unit, lock, t)
 		switch res {
 		case toolResolved:
-			resp.Tools = append(resp.Tools, toolEntry{Name: r.name, Version: r.version, PinnedBy: r.pinnedBy, Install: r.install})
+			resp.Tools = append(resp.Tools, toolEntry{Name: r.name, Version: r.version, PinnedBy: r.pinnedBy, Install: r.install, untracked: r.untracked})
 		case toolNotInstalled:
-			resp.Tools = append(resp.Tools, toolEntry{Name: t.name, PinnedBy: lock.rel, Install: lock.install})
+			resp.Tools = append(resp.Tools, toolEntry{Name: t.name, PinnedBy: lock.rel, Install: lock.install, untracked: lock.untracked})
 		case toolFailed:
 			problems = append(problems, problem)
 		}

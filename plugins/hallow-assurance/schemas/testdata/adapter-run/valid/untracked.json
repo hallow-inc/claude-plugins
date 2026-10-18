@@ -1,0 +1,1 @@
+{"protocol":2,"evidence":[{"type":"junit","path":"junit.xml"}],"tool_versions":{"golangci-lint":"2.13.2","go":"go1.26.5"},"pinned_by":{"golangci-lint":"mise.local.toml"},"untracked":["golangci-lint"]}

@@ -34,7 +34,15 @@
       }
     },
     "provenance": { "type": "boolean" },
-    "require_fix_test": { "type": "boolean" }
+    "require_fix_test": { "type": "boolean" },
+    "authority": { "enum": ["local", "ci"] }
+  },
+  "if": {
+    "required": ["authority"],
+    "properties": { "authority": { "const": "local" } }
+  },
+  "then": {
+    "properties": { "human_review": false }
   },
   "$defs": {
     "review": { "enum": ["required", "optional"] },

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/decode"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
@@ -115,6 +116,13 @@ func TestDogfoodManifestIsLevelB(t *testing.T) {
 	}
 	if !slices.Contains(m["languages"].([]any), any("go")) {
 		t.Fatalf("languages = %v; without go, no adapter classifies this repo's own code", m["languages"])
+	}
+	loaded, err := core.LoadManifest("assurance.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Authority != core.AuthorityCI {
+		t.Fatalf("authority = %v; this repo's CI runs assure evaluate as a required check, so CI is the verdict", loaded.Authority)
 	}
 }
 

@@ -34,13 +34,26 @@ func toolsReplyOf(t fataler, dir string) toolsReply {
 		t.Fatalf("%v", err)
 	}
 	r.entries = keys.Tools
+	protocolIs(t, "tools", r.resp.Protocol, raw)
 	return r
+}
+
+// checkUntracked asserts every entry carries untracked: true when the
+// lockfile is untracked, and no untracked key at all when it is tracked.
+func checkUntracked(t fataler, r toolsReply, untracked bool) {
+	for _, e := range r.entries {
+		u, has := e["untracked"]
+		if has != untracked || (has && string(u) != "true") {
+			t.Fatalf("entry %s has untracked %s (present %v), want present %v; every tool is pinned by the one lockfile, so all carry untracked: true or none does, and the evaluator fails exactly the marked pins under authority: ci", e["name"], u, has, untracked)
+		}
+	}
 }
 
 // checkListing asserts the response lists all eight tools sorted by name,
 // each pinned by lock with npm ci, carrying exactly the versions in installed
-// and no version key at all for the rest.
-func checkListing(t fataler, r toolsReply, lock string, installed map[string]string) {
+// and no version key at all for the rest, each marked untracked exactly when
+// the lockfile is.
+func checkListing(t fataler, r toolsReply, lock string, installed map[string]string, untracked bool) {
 	if r.resp.Environment != nil {
 		t.Fatalf("environment %q; a tool missing from node_modules is fixed by the install line, so the tools op must list it rather than fail, or assure tools --install-script cannot bootstrap a fresh checkout", r.resp.Environment.Message)
 	}
@@ -57,6 +70,7 @@ func checkListing(t fataler, r toolsReply, lock string, installed map[string]str
 			t.Fatalf("entry %d (%s) has version key = %v; the protocol marks a tool not installed by omitting version, and rejects an empty one", i, name, has)
 		}
 	}
+	checkUntracked(t, r, untracked)
 }
 
 func npmRepo(t *testing.T) string {
@@ -67,7 +81,7 @@ func TestToolsPartlyInstalled(t *testing.T) {
 	top := npmRepo(t)
 	installTool(t, top, "vitest", "5.0.4")
 	installBin(t, top, toolNamed(t, "vitest"))
-	checkListing(t, toolsReplyOf(t, top), "package-lock.json", map[string]string{"vitest": "5.0.4"})
+	checkListing(t, toolsReplyOf(t, top), "package-lock.json", map[string]string{"vitest": "5.0.4"}, false)
 }
 
 func TestToolsInstalledOutOfRangeStillFails(t *testing.T) {
@@ -86,11 +100,7 @@ func TestToolsInstalledOutOfRangeStillFails(t *testing.T) {
 
 func TestToolsUntrackedLockfileWithoutDependencies(t *testing.T) {
 	top := gitRepo(t, map[string]string{"package.json": "{}", "package-lock.json": "{}"})
-	r := toolsReplyOf(t, top)
-	if r.resp.Environment == nil || len(r.resp.Tools) != 0 {
-		t.Fatalf("got %+v; installing from an untracked lockfile would not make CI see it, so the op must report environment", r.resp)
-	}
-	mustMention(t, r.resp.Environment.Message, top, "package-lock.json")
+	checkListing(t, toolsReplyOf(t, top), "package-lock.json", nil, true)
 }
 
 type installState int
@@ -104,8 +114,10 @@ const (
 )
 
 // TestToolsInstallStates draws, per tool, whether it is absent, installed in
-// range, or installed in a way npm ci would not fix, and checks the tools op
-// lists the first two and reports environment naming exactly the third.
+// range, or installed in a way npm ci would not fix, and whether the lockfile
+// is tracked, and checks the tools op lists the first two, marked untracked
+// exactly when the lockfile is, and reports environment naming exactly the
+// third.
 func TestToolsInstallStates(t *testing.T) {
 	top := gitRepo(t, nil)
 	rapid.Check(t, func(t *rapid.T) {
@@ -114,7 +126,10 @@ func TestToolsInstallStates(t *testing.T) {
 			t.Fatalf("%v", err)
 		}
 		writeTree(t, dir, map[string]string{"package.json": "{}", "package-lock.json": "{}"})
-		git(t, top, "add", "--", filepath.Base(dir)+"/package-lock.json")
+		tracked := rapid.Bool().Draw(t, "tracked")
+		if tracked {
+			git(t, top, "add", "--", filepath.Base(dir)+"/package-lock.json")
+		}
 
 		installed := map[string]string{}
 		failing := map[string]bool{}
@@ -146,7 +161,7 @@ func TestToolsInstallStates(t *testing.T) {
 
 		r := toolsReplyOf(t, dir)
 		if len(failing) == 0 {
-			checkListing(t, r, filepath.Base(dir)+"/package-lock.json", installed)
+			checkListing(t, r, filepath.Base(dir)+"/package-lock.json", installed, !tracked)
 			return
 		}
 		if r.resp.Environment == nil || len(r.resp.Tools) != 0 {

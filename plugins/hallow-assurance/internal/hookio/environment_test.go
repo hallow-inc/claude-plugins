@@ -17,9 +17,9 @@ case "$1" in
 describe) printf '%s' '{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true},"CODE-ZERO-WARNINGS":{"tool":"golangci-lint","fast":true}}}' ;;
 run)
   case "$2" in
-  CODE-ZERO-WARNINGS) printf '%s' '{"protocol":1,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"` + toolMissing + `"}}' ;;
+  CODE-ZERO-WARNINGS) printf '%s' '{"protocol":2,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"` + toolMissing + `"}}' ;;
   *) mkdir -p "$6"; printf '%s' '` + junit + `' > "$6/junit.xml"
-     printf '%s' '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"go":"1"},"pinned_by":{}}' ;;
+     printf '%s' '{"protocol":2,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"go":"1"},"pinned_by":{}}' ;;
   esac ;;
 *) echo "assure-adapter-xx: unexpected $*" >&2; exit 1 ;;
 esac

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["protocol", "tools"],
   "properties": {
-    "protocol": { "$ref": "common.schema.json#/$defs/protocolV1" },
+    "protocol": { "$ref": "common.schema.json#/$defs/protocolV2" },
     "tools": {
       "type": "array",
       "items": {
@@ -17,7 +17,8 @@
           "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
           "version": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
           "pinned_by": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-          "install": { "type": "string", "pattern": "^[^\\n\\r]+$" }
+          "install": { "type": "string", "pattern": "^[^\\n\\r]+$" },
+          "untracked": { "const": true }
         }
       }
     },

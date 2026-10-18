@@ -167,8 +167,8 @@ func (f provFixture) copySession(from, to string) {
 }
 
 const (
-	optionalManifest = xxManifest + "human_review: {B: optional}\n"
-	requiredManifest = xxManifest + "human_review: {B: required}\n"
+	optionalManifest = xxManifest + "authority: ci\nhuman_review: {B: optional}\n"
+	requiredManifest = xxManifest + "authority: ci\nhuman_review: {B: required}\n"
 	absent           = "absent"
 )
 

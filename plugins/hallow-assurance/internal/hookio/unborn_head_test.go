@@ -77,7 +77,7 @@ run)
   echo "$4" >> '` + log + `'
   mkdir -p "$6"
   printf '%s' '<testsuites><testsuite name="xx" tests="1"><testcase name="TestXX" classname="xx"/></testsuite></testsuites>' > "$6/junit.xml"
-  printf '%s' '{"protocol":1,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"fake":"1"},"pinned_by":{}}' ;;
+  printf '%s' '{"protocol":2,"evidence":[{"type":"test.junit","path":"junit.xml"}],"tool_versions":{"fake":"1"},"pinned_by":{}}' ;;
 *) echo "assure-adapter-xx: unexpected $*" >&2; exit 1 ;;
 esac
 `

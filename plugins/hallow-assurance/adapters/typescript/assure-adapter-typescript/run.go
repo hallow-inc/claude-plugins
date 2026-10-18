@@ -27,6 +27,7 @@ type runResponse struct {
 	Evidence     []evidence          `json:"evidence"`
 	ToolVersions map[string]string   `json:"tool_versions"`
 	PinnedBy     map[string]string   `json:"pinned_by"`
+	Untracked    []string            `json:"untracked,omitempty"`
 	Environment  *environmentMessage `json:"environment,omitempty"`
 }
 
@@ -84,7 +85,7 @@ func runObjective(args []string, stdout, stderr io.Writer) int {
 }
 
 func environment(msg string) runResponse {
-	return runResponse{Protocol: 1, Evidence: []evidence{}, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}, Environment: &environmentMessage{Message: msg}}
+	return runResponse{Protocol: 2, Evidence: []evidence{}, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}, Environment: &environmentMessage{Message: msg}}
 }
 
 func record(m map[string]string, k, v string) {
@@ -126,34 +127,46 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return environment(msg), nil
 	}
 	c.sel = sel
-	versions, pinnedBy := map[string]string{}, map[string]string{}
-	for _, unit := range slices.Sorted(maps.Keys(sel)) {
-		rs, env, err := resolveTools(c.top, unit, objectiveTools[obj])
-		if err != nil {
-			return runResponse{}, err
-		}
-		if env != "" {
-			return environment(env), nil
-		}
-		c.tools[unit] = map[string]resolved{}
-		for _, r := range rs {
-			c.tools[unit][r.name] = r
-			record(versions, r.name, r.version)
-			record(pinnedBy, r.name, r.pinnedBy)
-		}
-	}
-	versions["node"] = nodeVersion
-	if err := os.MkdirAll(out, 0o755); err != nil {
-		return runResponse{}, err
-	}
-	ev, env, err := fn(c)
+	resp, env, err := c.resolveUnits(obj)
 	if err != nil {
 		return runResponse{}, err
 	}
 	if env != "" {
 		return environment(env), nil
 	}
-	return runResponse{Protocol: 1, Evidence: ev, ToolVersions: versions, PinnedBy: pinnedBy}, nil
+	resp.ToolVersions["node"] = nodeVersion
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return runResponse{}, err
+	}
+	resp.Evidence, env, err = fn(c)
+	if err != nil {
+		return runResponse{}, err
+	}
+	if env != "" {
+		return environment(env), nil
+	}
+	return resp, nil
+}
+
+func (c *runContext) resolveUnits(obj string) (runResponse, string, error) {
+	resp := runResponse{Protocol: 2, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}}
+	for _, unit := range slices.Sorted(maps.Keys(c.sel)) {
+		rs, env, err := resolveTools(c.top, unit, objectiveTools[obj])
+		if err != nil || env != "" {
+			return runResponse{}, env, err
+		}
+		c.tools[unit] = map[string]resolved{}
+		for _, r := range rs {
+			c.tools[unit][r.name] = r
+			record(resp.ToolVersions, r.name, r.version)
+			record(resp.PinnedBy, r.name, r.pinnedBy)
+			if r.untracked && !slices.Contains(resp.Untracked, r.name) {
+				resp.Untracked = append(resp.Untracked, r.name)
+			}
+		}
+	}
+	slices.Sort(resp.Untracked)
+	return resp, "", nil
 }
 
 func onPath(name string) bool {

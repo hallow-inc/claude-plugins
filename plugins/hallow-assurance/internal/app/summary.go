@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
@@ -15,7 +17,11 @@ func cell(s string) string {
 
 func (r EvalReport) Summary() string {
 	var b strings.Builder
-	b.WriteString("## assure evaluate\n\n")
+	b.WriteString("## assure evaluate")
+	if r.Authority != core.AuthorityCI {
+		b.WriteString(" (verdict self-attested: authority is local)")
+	}
+	b.WriteString("\n\n")
 	fmt.Fprintf(&b, "Commit `%s`, %d changed files since `%s` (`%s`), catalog %s, date %s.\n",
 		shortSHA(r.Commit), r.ChangedFiles, cell(r.ChangedFrom.Ref), shortSHA(r.ChangedFrom.SHA), r.Catalog, r.Date)
 	if len(r.Objectives) > 0 {
@@ -51,6 +57,14 @@ func (r EvalReport) Summary() string {
 		}
 	}
 	r.resolutionSummary(&b)
+	if len(r.UntrackedPins) > 0 {
+		b.WriteString("\n### Untracked pins\n\n")
+		for _, lang := range slices.Sorted(maps.Keys(r.UntrackedPins)) {
+			for _, tool := range r.UntrackedPins[lang] {
+				fmt.Fprintf(&b, "- %s `%s`: untracked pin in `%s`\n", lang, tool, r.PinnedBy[lang][tool])
+			}
+		}
+	}
 	return b.String()
 }
 

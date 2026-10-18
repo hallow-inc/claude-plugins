@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ const unbuiltWaivers = `- {objective: IND-VERIFIER-DISTINCT, scope: '**', ration
 - {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in milestone M3b, approver: owner, expires: 2099-01-01}
 `
 
-const levelBReviewed = levelB + "human_review: {B: required}\nprovenance: true\n"
+const levelBReviewed = levelB + "authority: ci\nhuman_review: {B: required}\nprovenance: true\n"
 
 func reviewedGoRepo(t *testing.T) repo {
 	t.Helper()
@@ -75,10 +76,117 @@ func TestEvaluateWithoutRefExitsTwo(t *testing.T) {
 	r.git("init", "-q")
 	r.git("add", "-A")
 	r.git("commit", "-qm", "init")
-	if code, _, stderr := assure("evaluate"); code != 2 || !strings.Contains(stderr, "--changed-from") {
-		t.Fatalf("got %d %q", code, stderr)
+	if code, _, stderr := assure("evaluate"); code != 2 || !strings.Contains(stderr, "--changed-from") || !strings.Contains(stderr, "--merge-base-with") {
+		t.Fatalf("got %d %q; want exit 2 and a usage line naming both ways to give the changed-from point", code, stderr)
 	}
 	noReport(t, r)
+}
+
+func TestEvaluateBothRefFlagsExitTwo(t *testing.T) {
+	f := provBase(t, xxManifestOff, nil)
+	handEdit(f)
+	f.commit()
+	if code, _, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01"); code == 2 {
+		t.Fatalf("--changed-from main alone must evaluate, so the refusal below is about the pair: %s", stderr)
+	}
+	if err := os.Remove(filepath.Join(f.root, app.ReportFile)); err != nil {
+		t.Fatal(err)
+	}
+	code, _, stderr := assure("evaluate", "--changed-from", "main", "--merge-base-with", "main", "--date", "2026-10-01")
+	if code != 2 || !strings.Contains(stderr, "--merge-base-with") {
+		t.Fatalf("got %d %q; two changed-from points are ambiguous and must be a usage error naming --merge-base-with", code, stderr)
+	}
+	noReport(t, f.repo)
+}
+
+func revParse(t *testing.T, root, rev string) string {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "git", "-C", root, "rev-parse", rev).Output()
+	if err != nil {
+		t.Fatalf("rev-parse %s: %v", rev, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestEvaluateMergeBaseIsTheChangedFromPoint(t *testing.T) {
+	f := provBase(t, xxManifestOff, nil)
+	fork := f.head()
+	f.git("checkout", "-qb", "moved-on", "main")
+	f.write("q/a.xx", "upstream a\n")
+	f.write("q/b.xx", "upstream b\n")
+	f.git("add", "-A")
+	f.git("commit", "-qm", "upstream one")
+	f.write("q/c.xx", "upstream c\n")
+	f.write("p/x_test.xx", "upstream test\n")
+	f.git("add", "-A")
+	f.git("commit", "-qm", "upstream two")
+	f.git("update-ref", "refs/remotes/upstream/main", "HEAD")
+	f.git("checkout", "-q", "pr")
+	f.git("branch", "-qD", "moved-on")
+	handEdit(f)
+	f.commit()
+	f.write("p/new.xx", "untracked\n")
+	if revParse(t, f.root, "upstream/main") == fork {
+		t.Fatal("fixture: upstream/main did not move past the fork point")
+	}
+
+	code, stdout, stderr := assure("evaluate", "--merge-base-with", "upstream/main", "--date", "2026-10-01")
+	if code == 2 {
+		t.Fatalf("exit 2:\n%s\n%s", stdout, stderr)
+	}
+	rep, _ := readReport(t, f.repo)
+	if rep.ChangedFrom.Ref != fork || rep.ChangedFrom.SHA != fork {
+		t.Errorf("changed_from %+v; want ref and sha both the merge-base SHA %s, so the report never names a moving branch", rep.ChangedFrom, fork)
+	}
+	if rep.ChangedFiles != 2 {
+		t.Errorf("changed_files %d; want 2 (p/x.xx committed on the branch, p/new.xx untracked): upstream's own commits are not this branch's change", rep.ChangedFiles)
+	}
+}
+
+func TestEvaluateUnresolvableMergeBaseExitsTwoWithHint(t *testing.T) {
+	cases := map[string]func(f provFixture){
+		"absent ref": func(provFixture) {},
+		"unrelated history": func(f provFixture) {
+			f.git("checkout", "-q", "--orphan", "elsewhere")
+			f.git("commit", "-qm", "unrelated")
+			f.git("update-ref", "refs/remotes/upstream/main", "HEAD")
+			f.git("checkout", "-qf", "pr")
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := provBase(t, xxManifestOff, nil)
+			handEdit(f)
+			f.commit()
+			setup(f)
+			code, _, stderr := assure("evaluate", "--merge-base-with", "upstream/main", "--date", "2026-10-01")
+			for _, want := range []string{"upstream/main", "git fetch", "fetch-depth: 0"} {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("stderr lacks %q: %q", want, stderr)
+				}
+			}
+			if code != 2 {
+				t.Errorf("exit %d, want 2", code)
+			}
+			noReport(t, f.repo)
+		})
+	}
+}
+
+func TestEvaluateRefusesExcludedManifestUnderCentralAuthority(t *testing.T) {
+	f := provBase(t, xxManifest+"authority: ci\n", func(f provFixture) {
+		f.write(".git/info/exclude", "assurance.yaml\n")
+	})
+	handEdit(f)
+	f.commit()
+	if out, err := exec.CommandContext(t.Context(), "git", "-C", f.root, "ls-files", "assurance.yaml").Output(); err != nil || len(out) != 0 {
+		t.Fatalf("fixture: assurance.yaml is tracked (%q, %v)", out, err)
+	}
+	code, _, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01")
+	if code != 2 || !strings.Contains(stderr, "CI could not read") || !strings.Contains(stderr, "assurance.yaml") {
+		t.Fatalf("got %d %q; under authority: ci a manifest kept out of git is one CI never sees, so evaluate must refuse", code, stderr)
+	}
+	noReport(t, f.repo)
 }
 
 func TestEvaluateInvalidWaiversExitTwoNamingLocation(t *testing.T) {
@@ -109,7 +217,7 @@ func TestEvaluateUnproducedObjectiveFailsWithoutWaiver(t *testing.T) {
 	r := goRepo(t)
 	r.write("assurance.yaml", "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents:\n"+
 		"  - {path: 'p/**', level: B, formal: {model: formal/P, challenge: formal/P/C.lean, link: drt}}\n"+
-		"human_review: {B: required}\nprovenance: true\n")
+		"authority: ci\nhuman_review: {B: required}\nprovenance: true\n")
 	r.git("commit", "-qam", "formal component, require review")
 	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
 	if code, _, _ := assure("evaluate", "--changed-from", "HEAD"); code != 1 {
