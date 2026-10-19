@@ -10,6 +10,7 @@ on:
     paths:
       - 'plugins/hallow-assurance/**'
       - '.github/workflows/hallow-assurance.yml'
+      - '.github/workflows/assure-evaluate.yml'
 
 permissions:
   contents: read
@@ -54,10 +55,10 @@ jobs:
             exit 0
           fi
           base=$(git merge-base HEAD "origin/$BASE_REF")
-          changed=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml)
+          changed=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml .github/workflows/assure-evaluate.yml)
           if [ -n "$changed" ]; then run=true; else run=false; fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
-          qualifying=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml \
+          qualifying=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml .github/workflows/assure-evaluate.yml \
             ':(exclude)plugins/hallow-assurance/plugin/**' ':(exclude,glob)**/*.md')
           if [ -n "$qualifying" ]; then qualify=true; else qualify=false; fi
           echo "qualify=$qualify" >> "$GITHUB_OUTPUT"
@@ -67,9 +68,6 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      pull-requests: read
 
     steps:
       - name: Checkout
@@ -111,33 +109,55 @@ jobs:
       - name: Test
         run: go test -race -shuffle=on ./...
 
-      - name: Fetch reviews
-        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          gh api --paginate "repos/$REPO/pulls/$PR/reviews" \
-            --jq '.[] | select(.user != null and .commit_id != null) | {login: .user.login, state: .state, commit: .commit_id}' \
-            | jq -s --arg author "$AUTHOR" --arg head "$HEAD_SHA" '{author: $author, head: $head, reviews: .}' \
-            > "$RUNNER_TEMP/reviews.json"
+  evaluate:
+    needs: changes
+    if: needs.changes.outputs.run == 'true' && github.event.pull_request
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/assure-evaluate.yml
+    with:
+      working-directory: plugins/hallow-assurance
 
-      - name: Evaluate
-        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
+  evaluate-typescript:
+    needs: changes
+    if: needs.changes.outputs.run == 'true' && github.event.pull_request
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/assure-evaluate.yml
+    with:
+      working-directory: plugins/hallow-assurance/testdata/smoke-ts
+
+  release:
+    needs: changes
+    if: startsWith(github.ref, 'refs/tags/plugins/hallow-assurance/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Check tag and plugin version
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          command -v golangci-lint || { echo "::warning::golangci-lint is not on PATH; CODE-ZERO-WARNINGS will fail"; }
-          bin="$RUNNER_TEMP/assure-bin"
-          go build -o "$bin/assure" ./cmd/assure
-          go build -o "$bin/assure-adapter-go" ./adapters/go/assure-adapter-go
-          base=$(git merge-base HEAD "origin/$BASE_REF")
-          PATH="$bin:$PATH" assure evaluate --changed-from "$base" --reviews "$RUNNER_TEMP/reviews.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          tag=${REF#refs/tags/plugins/hallow-assurance/v}
+          if ! printf '%s\n' "$tag" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::tag ${REF#refs/tags/} is not plugins/hallow-assurance/vX.Y.Z"
+            exit 1
+          fi
+          plugin=$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' plugin/.claude-plugin/plugin.json)
+          if [ "$plugin" != "$tag" ]; then
+            echo "::error::tag is v$tag but plugin/.claude-plugin/plugin.json version is '$plugin'"
+            exit 1
+          fi
+          if ! jq -e '.plugins[] | select(.name == "hallow-assurance") | has("version") | not' ../../.claude-plugin/marketplace.json >/dev/null; then
+            echo "::error::the hallow-assurance marketplace entry carries a version; plugin.json would override it silently"
+            exit 1
+          fi
 
   qualification:
     needs: changes
@@ -186,7 +206,7 @@ jobs:
         run: go test -count=1 -v -timeout 28m ./qualification/...
 
   assure-gate:
-    needs: [changes, go, qualification]
+    needs: [changes, go, evaluate, evaluate-typescript, release, qualification]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -199,14 +219,22 @@ jobs:
         env:
           CHANGES: ${{ needs.changes.result }}
           RUN: ${{ needs.changes.outputs.run }}
+          PR: ${{ github.event.pull_request.number }}
+          REF: ${{ github.ref }}
           GO: ${{ needs.go.result }}
+          EVAL: ${{ needs.evaluate.result }}
+          EVAL_TS: ${{ needs.evaluate-typescript.result }}
+          RELEASE: ${{ needs.release.result }}
           QUALIFY: ${{ needs.changes.outputs.qualify }}
           QUAL: ${{ needs.qualification.result }}
         run: |
           set -euo pipefail
-          if [ "$CHANGES" = success ] && { [ "$GO" = success ] || { [ "$RUN" = false ] && [ "$GO" = skipped ]; }; } \
-            && { [ "$QUAL" = success ] || { [ "$QUALIFY" = false ] && [ "$QUAL" = skipped ]; }; }; then
+          ran() { [ "$1" = success ] || { [ "$2" = false ] && [ "$1" = skipped ]; }; }
+          if [ "$RUN" = true ] && [ -n "$PR" ]; then pr_run=true; else pr_run=false; fi
+          case "$REF" in refs/tags/plugins/hallow-assurance/v*) tagged=true ;; *) tagged=false ;; esac
+          if [ "$CHANGES" = success ] && ran "$GO" "$RUN" && ran "$EVAL" "$pr_run" && ran "$EVAL_TS" "$pr_run" \
+            && ran "$RELEASE" "$tagged" && ran "$QUAL" "$QUALIFY"; then
             exit 0
           fi
-          echo "::error::assure-gate: changes=$CHANGES run=$RUN go=$GO qualify=$QUALIFY qualification=$QUAL"
+          echo "::error::assure-gate: changes=$CHANGES run=$RUN pr=${PR:-none} go=$GO evaluate=$EVAL evaluate-typescript=$EVAL_TS release=$RELEASE qualify=$QUALIFY qualification=$QUAL"
           exit 1

@@ -1,0 +1,106 @@
+name: assure-evaluate
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory holding the caller's assurance.yaml
+        type: string
+        default: .
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: auto
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Require a pull request
+        working-directory: .
+        env:
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PR" ]; then
+            echo "::error::assure-evaluate needs a pull request event; it was called on '$EVENT'"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Install assure
+        working-directory: .
+        env:
+          REPO: ${{ github.repository }}
+          WORKFLOW_REPO: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/assure-bin"
+          mkdir -p "$bin"
+          module=github.com/hallow-inc/claude-plugins/plugins/hallow-assurance
+          ref=${WORKFLOW_REF#*@}
+          if [ "$WORKFLOW_REPO" = "$REPO" ]; then
+            echo "Building assure from the checkout"
+            (cd plugins/hallow-assurance && go build -o "$bin/" ./...)
+          else
+            case "$ref" in
+              refs/tags/plugins/hallow-assurance/v*) version=${ref#refs/tags/plugins/hallow-assurance/} ;;
+              *) version=$WORKFLOW_SHA ;;
+            esac
+            echo "go install $module/...@$version"
+            GOBIN="$bin" go install "$module/...@$version"
+          fi
+          echo "$bin" >> "$GITHUB_PATH"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          "$bin/assure" version
+
+      - name: Setup mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca  # v5.1.1
+        with:
+          version: 2026.8.14
+          install: false
+          cache: false
+
+      - name: Install pinned tools
+        run: |
+          set -euo pipefail
+          if [ -n "$(git ls-files -- mise.toml .mise.toml .config/mise.toml .tool-versions)" ]; then
+            mise install
+            echo "${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims" >> "$GITHUB_PATH"
+            export PATH="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims:$PATH"
+          fi
+          assure tools --install-script | sh
+
+      - name: Fetch reviews
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: assure reviews --pr "$PR" > "$RUNNER_TEMP/reviews.json"
+
+      - name: Evaluate
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          assure evaluate --merge-base-with "origin/$BASE_REF" --reviews "$RUNNER_TEMP/reviews.json" | tee -a "$GITHUB_STEP_SUMMARY"

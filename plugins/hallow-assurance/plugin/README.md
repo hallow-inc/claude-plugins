@@ -115,18 +115,18 @@ not read the manifest.
 
 ## Install
 
-The hooks need `assure` on `PATH`, plus `assure-adapter-<lang>` for each language the manifest's
-`languages` lists. There is no release channel yet, so build `assure` from a clone of this repo:
+The hooks need `assure` on `PATH`, plus the adapter for each language the manifest's `languages`
+lists. One line installs `assure` and every adapter at a release tag:
 
 ```sh
-cd plugins/hallow-assurance
-go install ./cmd/assure
+go install github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/...@v0.1.0
 ```
 
-Build each adapter from `adapters/<lang>/assure-adapter-<lang>/` into a directory on `PATH`; the
-directory name makes `assure-adapter-<lang>` the default binary name. The tools an adapter runs
-are listed under `objectives` in its `describe` output (`assure-adapter-<lang> describe`); install
-those too.
+Install the tools the adapters run at the versions your repository pins (`assure tools` lists them):
+
+```sh
+assure tools --install-script | sh
+```
 
 Then install the plugin from the `hallow-claude-plugins` marketplace:
 
@@ -134,9 +134,71 @@ Then install the plugin from the `hallow-claude-plugins` marketplace:
 /plugin install hallow-assurance@hallow-claude-plugins
 ```
 
-If `assure` is missing or was built from a different version than the plugin, SessionStart and
-PreToolUse exit 2 with a message saying which, so edits stay blocked. Stop and SubagentStop let the agent stop and
-show you the same message, because the agent cannot fix the install.
+If `assure` is missing or speaks a different hook protocol than the plugin, SessionStart and
+PreToolUse exit 2 with a message giving the `go install` line for the plugin's version, so edits
+stay blocked. Stop and SubagentStop let the agent stop and show you the same message, because the
+agent cannot fix the install.
+
+## Adopting with CI as the verdict
+
+1. Open a pull request that adds `assurance.yaml` with `authority: ci`, and merge it first. The
+   workflow pull request is then judged against a base that already holds the manifest. If your
+   tool pins live in `mise.toml`, list it under `protected:` so an agent cannot move a pin:
+
+   ```yaml
+   authority: ci
+   protected:
+     - mise.toml
+   ```
+
+2. Open a second pull request that calls the shared workflow at the same tag as your install line:
+
+   ```yaml
+   on:
+     pull_request:
+     pull_request_review:
+       types: [submitted, dismissed]
+
+   jobs:
+     assure:
+       permissions:
+         contents: read
+         pull-requests: read
+       uses: hallow-inc/claude-plugins/.github/workflows/assure-evaluate.yml@plugins/hallow-assurance/v0.1.0
+   ```
+
+   Pass `with: {working-directory: <dir>}` when `assurance.yaml` is not at the repository root.
+   The workflow has no path filter, so you can require its job (`assure / evaluate`) in branch
+   protection.
+
+3. Pin toolchains so CI and your machine run the same versions:
+   - Go: add a `toolchain` line to `go.mod` (for example `toolchain go1.27.1`). The workflow sets
+     `GOTOOLCHAIN=auto`, so CI downloads that exact toolchain.
+   - TypeScript: pin Node in a tracked `mise.toml`. The workflow runs `mise install` when git
+     tracks a mise config, and installs no Node otherwise.
+
+Run the same verdict locally after pushing; the reviews file must name the pushed head, so
+unpushed or amended commits exit 2:
+
+```sh
+assure reviews --pr 42 > r.json
+assure evaluate --merge-base-with origin/master --reviews r.json
+```
+
+`assure reviews` needs `gh`, authenticated with `gh auth login` or `GH_TOKEN`.
+
+## Releases
+
+A tag `plugins/hallow-assurance/vX.Y.Z` on `master` versions `assure`, every adapter, and the
+plugin together.
+
+- While `X` is `0`, a change to the hook protocol or the adapter protocol ships as a minor release
+  (`Y` goes up), never a patch. CI does not check this; the hook's protocol check catches a
+  mismatched install when it runs.
+- `plugin/.claude-plugin/plugin.json` carries `version` equal to the tag's `X.Y.Z`; the release job
+  fails a tag that differs. The marketplace entry carries no `version`.
+- Claude Code updates a plugin only when its version changes, so plugin-only edits (skills, docs)
+  reach users at the next release.
 
 ## Declaring a bug fix
 

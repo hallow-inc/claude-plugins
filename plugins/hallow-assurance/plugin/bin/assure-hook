@@ -17,7 +17,18 @@ unavailable() {
   exit 2
 }
 
-install="Install assure and assure-adapter-<lang> as the hallow-assurance plugin README describes."
+version=$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$(dirname "$0")/../.claude-plugin/plugin.json" 2>/dev/null)
+case $version in
+  '' | *[!0-9.]* | .* | *. | *..* | *.*.*.*) version= ;;
+  *.*.*) ;;
+  *) version= ;;
+esac
+if [ -n "$version" ]; then
+  install="Install it with: go install github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/...@v$version"
+else
+  install="The plugin version could not be read from plugin.json; install assure as the hallow-assurance plugin README describes."
+fi
+
 if ! command -v assure >/dev/null 2>&1; then
   unavailable "$dir/assurance.yaml adopts hallow-assurance, but assure is not on PATH. $install" "assure is not on PATH. $install"
 fi
@@ -26,8 +37,8 @@ got=$(assure hook protocol 2>/dev/null)
 if [ "$got" != "$expected" ]; then
   shown=$got
   case $shown in '' | *[!0-9]*) shown=unknown ;; esac
-  unavailable "this plugin speaks hook protocol $expected, but the assure on PATH prints '$got'. Install the assure build that matches this plugin." \
-    "This plugin speaks hook protocol $expected, but the assure on PATH speaks $shown. Install the assure build that matches this plugin."
+  unavailable "this plugin speaks hook protocol $expected, but the assure on PATH prints '$got'. $install" \
+    "This plugin speaks hook protocol $expected, but the assure on PATH speaks $shown. $install"
 fi
 
 exec assure hook "$event"

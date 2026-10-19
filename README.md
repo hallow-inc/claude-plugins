@@ -82,9 +82,17 @@ Source is publicly visible; use rights are restricted to Hallow personnel per [`
 
 The plugin itself is harmless without tailnet access: Windmill (`windmill.platform.hallow.app`) is tailnet-only, so an outsider who clones the repo cannot reach the backend.
 
+## Licensing
+
+Every plugin here is under the Hallow Internal Use License ([`LICENSE`](./LICENSE)), which limits use to work for Hallow.
+
+**Consent for hallow-assurance in personal repositories (2026-10-19).** Under §2 of `LICENSE`, Hallow, Inc. gives its written consent for every current Authorized User to use, copy, and run hallow-assurance (`plugins/hallow-assurance/`) in their personal repositories, including work not performed for Hallow. The consent covers no other plugin and grants no right to distribute, sublicense, or publish the Software. It ends for a person when their license terminates under §3.
+
 ## Versioning
 
 Plugins **omit the `version` field** in `plugin.json` — every commit on `master` is a new version. Users update via `/plugin marketplace update hallow-claude-plugins` + `/plugin install hallow-windmill@hallow-claude-plugins` + `/reload-plugins`.
+
+Exception: `hallow-assurance` sets `version` in its `plugin.json`, equal to its release tag `plugins/hallow-assurance/vX.Y.Z`, so the plugin and its `assure` binaries stay on the same hook protocol. It updates only on a release. Its marketplace entry carries no `version`.
 
 Change history: `git log` is authoritative.
 
