@@ -71,7 +71,10 @@ jobs:
             GOBIN="$bin" go install "$module/...@$version"
           fi
           echo "$bin" >> "$GITHUB_PATH"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          gobin="$(go env GOPATH)/bin"
+          echo "$gobin" >> "$GITHUB_PATH"
+          # mise's Go sets GOBIN to its own install dir, off PATH, unless GOBIN is already set.
+          echo "GOBIN=$gobin" >> "$GITHUB_ENV"
           "$bin/assure" version
 
       - name: Setup mise
