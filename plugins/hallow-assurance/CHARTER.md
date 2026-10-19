@@ -311,9 +311,10 @@ to decide whether a 3-way check is worth building is not built yet. CI also chec
 
 Any non-author approval counts; there is no approver list. GitHub rejects an author's approval of
 their own PR, so an agent running on the author's credentials cannot produce one. The PR template
-lists what a reviewer is attesting to. CI passes reviews to `assure evaluate --reviews <file>` as
-`{author, head, reviews:[{login, state, commit}]}` (fetched with `gh api`), so the evaluator stays
-offline. An approval counts only when it is the reviewer's latest review and was made on `head`.
+lists what a reviewer is attesting to. `assure reviews --pr <n>` writes the reviews file
+`{author, head, reviews:[{login, state, commit}]}` from the GitHub API through `gh`, and
+`assure evaluate --reviews <file>` reads it, so the evaluator stays offline and a local run uses the
+same two commands as CI. An approval counts only when it is the reviewer's latest review and was made on `head`.
 
 Review is optional at every level unless the manifest sets `human_review: {A|B|C|D: required}`; a
 base ref with no manifest uses the default. At review-optional levels, gaps and protected-file
@@ -410,8 +411,9 @@ keep local behavior as close to fail-closed as the harness allows:
 
 - The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted) and exits 2 when
   `assure` is missing or `assure hook protocol` prints a different hook-protocol number than the
-  shim expects. The shim checks a protocol number rather than a release version because there is no
-  release channel yet. The hook protocol is 2: M4b added the `subagent-stop` event, which an older
+  shim expects. The shim checks a protocol number rather than a release version, because a build
+  from a commit SHA or a checkout carries a pseudo-version yet speaks its tag's protocol; its install
+  advice is the `go install …/...@v<version>` line built from `plugin.json`. The hook protocol is 2: M4b added the `subagent-stop` event, which an older
   `assure` would reject with exit 2 and so block every subagent stop. For `stop` and `subagent-stop`
   the shim allows with a `systemMessage` instead, because the agent cannot fix the install.
 - `internal/hookio` recovers from every internal error and emits a deny/block decision.
@@ -524,9 +526,11 @@ never reassigned, and new work takes a letter suffix.
 - SubagentStop `check --role` for the verifier
 
 **M4c — Solo adoption**
-- `release-channel`: `go install` of `assure` and `assure-adapter-go` from one
-  `plugins/hallow-assurance/v0.N.x` tag; reusable evaluate workflow with a required `version` input;
-  README licensing consent for personal repos
+- `release-channel`: one `go install …/...@<tag>` line installs `assure` and every adapter from a
+  `plugins/hallow-assurance/v0.N.x` tag, and `plugin.json` `version` moves with the tag; reusable
+  `assure-evaluate.yml` whose `uses:` ref picks the binaries; `assure reviews --pr <n>` writes the
+  reviews file, so `assure reviews` + `assure evaluate --merge-base-with` is the one entrypoint locally
+  and in CI; README licensing consent for personal repos
 - `review-optional-default`: `human_review` defaults to `optional` at every level including A; a base
   ref with no manifest uses the default, so the adopting PR needs no special order
 - `provenance-opt-in`: manifest key `provenance` (default `false`); off, the hooks record nothing and

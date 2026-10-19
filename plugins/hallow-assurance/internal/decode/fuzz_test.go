@@ -165,6 +165,48 @@ func FuzzJSON(f *testing.F) {
 	})
 }
 
+func FuzzReviewsAPI(f *testing.F) {
+	pull, err := os.ReadFile(filepath.Join("testdata", "reviews-api", "pull.json"))
+	if err != nil {
+		f.Fatal(err)
+	}
+	pages, err := os.ReadFile(filepath.Join("testdata", "reviews-api", "pages.json"))
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(pull, pages)
+	f.Add(pull, []byte(`[]`))
+	f.Add(pull, []byte(`[[]]`))
+	f.Add(pull, []byte(`[{"user":{"login":"a"},"state":"APPROVED","commit_id":"x"}]`))
+	f.Add([]byte(`{"user":null,"head":{"sha":"x"}}`), pages)
+	f.Add([]byte(`[]`), []byte(`[]`))
+	f.Add([]byte(``), []byte(``))
+	f.Fuzz(func(t *testing.T, pull, pages []byte) {
+		doc, err := ReviewsAPI(pull, pages)
+		if err != nil {
+			return
+		}
+		if doc.Reviews == nil {
+			t.Fatalf("accepted %q / %q with a nil reviews slice; it marshals as null and the reviews schema rejects it", pull, pages)
+		}
+		out, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatalf("marshal %+v: %v", doc, err)
+		}
+		var back ReviewsDoc
+		if err := json.Unmarshal(out, &back); err != nil {
+			t.Fatalf("unmarshal own output %s: %v", out, err)
+		}
+		again, err := json.Marshal(back)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(out, again) || !reflect.DeepEqual(doc, back) {
+			t.Fatalf("doc does not round-trip through encoding/json:\n%s\n%s", out, again)
+		}
+	})
+}
+
 func FuzzJSONLines(f *testing.F) {
 	addFixtureSeeds(f, ".jsonl")
 	f.Fuzz(func(t *testing.T, data []byte) {

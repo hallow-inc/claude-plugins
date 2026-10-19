@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/hookio"
 )
 
-var version = "dev"
+var buildInfo = debug.ReadBuildInfo
 
 const usage = `assure — deterministic verification evaluator
 
@@ -23,13 +26,28 @@ Commands:
   hook       Handle a Claude Code hook event (JSON on stdin)
   record     Append a provenance record for a pending file edit
   reference  Print an adapter's testing reference for a language
+  reviews    Print a pull request's reviews file from the GitHub API (needs gh)
   tools      Print each adapter's pinned tool versions, or an install script
   help       Show this help
-  version    Print the assure version
+  version    Print the assure version and hook protocol
 `
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
+	"guard":     runGuard,
+	"context":   runContext,
+	"check":     runCheck,
+	"baseline":  runBaseline,
+	"evaluate":  runEvaluate,
+	"hook":      runHook,
+	"classify":  runClassify,
+	"record":    runRecord,
+	"reference": runReference,
+	"tools":     runTools,
+	"reviews":   runReviews,
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -37,32 +55,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
 	}
+	if cmd, ok := commands[args[0]]; ok {
+		return cmd(args[1:], stdout, stderr)
+	}
 	var err error
 	switch args[0] {
 	case "help", "-h", "--help":
 		_, err = fmt.Fprint(stdout, usage)
 	case "version", "--version":
-		_, err = fmt.Fprintln(stdout, version)
-	case "guard":
-		return runGuard(args[1:], stdout, stderr)
-	case "context":
-		return runContext(args[1:], stdout, stderr)
-	case "check":
-		return runCheck(args[1:], stdout, stderr)
-	case "baseline":
-		return runBaseline(args[1:], stdout, stderr)
-	case "evaluate":
-		return runEvaluate(args[1:], stdout, stderr)
-	case "hook":
-		return runHook(args[1:], stdout, stderr)
-	case "classify":
-		return runClassify(args[1:], stdout, stderr)
-	case "record":
-		return runRecord(args[1:], stdout, stderr)
-	case "reference":
-		return runReference(args[1:], stdout, stderr)
-	case "tools":
-		return runTools(args[1:], stdout, stderr)
+		_, err = fmt.Fprintf(stdout, "%s (hook protocol %d)\n", moduleVersion(), hookio.Protocol)
 	default:
 		_, _ = fmt.Fprintf(stderr, "assure: unknown command %q\n\n%s", args[0], usage)
 		return 2
@@ -72,4 +73,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func moduleVersion() string {
+	if info, ok := buildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
+	}
+	return "(devel)"
 }

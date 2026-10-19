@@ -1,0 +1,5 @@
+paths:
+  .github/workflows/assure-evaluate.yml:
+    ignore:
+      # job.workflow_{ref,sha,repository} are documented (github/docs contexts.md) but unknown to actionlint v1.7.12.
+      - 'property "workflow_(ref|sha|repository)" is not defined'
