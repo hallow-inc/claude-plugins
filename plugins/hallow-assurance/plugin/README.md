@@ -139,19 +139,13 @@ PreToolUse exit 2 with a message giving the `go install` line for the plugin's v
 stay blocked. Stop and SubagentStop let the agent stop and show you the same message, because the
 agent cannot fix the install.
 
-## Adopting with CI as the verdict
+## Running in CI
 
-1. Open a pull request that adds `assurance.yaml` with `authority: ci`, and merge it first. The
-   workflow pull request is then judged against a base that already holds the manifest. If your
-   tool pins live in `mise.toml`, list it under `protected:` so an agent cannot move a pin:
+The shared workflow runs `assure evaluate` on every pull request, under any `authority`. A
+manifest without an `authority` key is enough.
 
-   ```yaml
-   authority: ci
-   protected:
-     - mise.toml
-   ```
-
-2. Open a second pull request that calls the shared workflow at the same tag as your install line:
+1. Add `assurance.yaml` and a workflow that calls the shared workflow at the same tag as your
+   install line. Both can land in one pull request:
 
    ```yaml
    on:
@@ -171,7 +165,7 @@ agent cannot fix the install.
    The workflow has no path filter, so you can require its job (`assure / evaluate`) in branch
    protection.
 
-3. Pin toolchains so CI and your machine run the same versions:
+2. Pin toolchains so CI and your machine run the same versions:
    - Go: add a `toolchain` line to `go.mod` (for example `toolchain go1.27.1`). The workflow sets
      `GOTOOLCHAIN=auto`, so CI downloads that exact toolchain.
    - TypeScript: pin Node in a tracked `mise.toml`. The workflow runs `mise install` when git
@@ -186,6 +180,16 @@ assure evaluate --merge-base-with origin/master --reviews r.json
 ```
 
 `assure reviews` needs `gh`, authenticated with `gh auth login` or `GH_TOKEN`.
+
+To make the CI run the verdict instead of your own, set `authority: ci`. Merge that manifest change
+in its own pull request first, so later pull requests are judged against a base that holds it. If
+your tool pins live in `mise.toml`, list it under `protected:` so an agent cannot move a pin:
+
+```yaml
+authority: ci
+protected:
+  - mise.toml
+```
 
 ## Releases
 

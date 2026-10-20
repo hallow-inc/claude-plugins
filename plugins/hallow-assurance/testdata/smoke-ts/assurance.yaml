@@ -2,7 +2,6 @@ version: 0
 catalog: v0
 languages: [typescript]
 default_level: B
-authority: ci
 components:
   - path: src/**
     level: B
