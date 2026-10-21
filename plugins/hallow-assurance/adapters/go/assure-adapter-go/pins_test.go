@@ -133,7 +133,7 @@ var specTools = map[string]struct {
 	def, lo, hi, belowLo, belowHi string
 	keys                          []string
 }{
-	"golangci-lint": {"2.13.2", "2.13.2", "3.0.0", "2.13.1", "2.99999999999999999999.99999999999999999999", []string{"golangci-lint", "aqua:golangci/golangci-lint"}},
+	"golangci-lint": {"2.15.0", "2.13.2", "3.0.0", "2.13.1", "2.99999999999999999999.99999999999999999999", []string{"golangci-lint", "aqua:golangci/golangci-lint"}},
 	"gremlins":      {"0.6.0", "0.6.0", "0.7.0", "0.5.99999999999999999999", "0.6.99999999999999999999", []string{"go:github.com/go-gremlins/gremlins/cmd/gremlins"}},
 }
 
@@ -258,7 +258,7 @@ func expect(p probe, name string) expectation {
 	switch {
 	case len(cands) == 0:
 		return expectation{res: resolved{name: name, version: s.def, pinnedBy: "default", install: map[string]string{
-			"golangci-lint": `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.13.2`,
+			"golangci-lint": `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.15.0`,
 			"gremlins":      "go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0",
 		}[name]}}
 	case len(cands) > 1:

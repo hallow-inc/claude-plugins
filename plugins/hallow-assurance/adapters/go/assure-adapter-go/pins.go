@@ -21,7 +21,7 @@ var pinnedTools = []pinnedTool{
 	{
 		name: "golangci-lint",
 		keys: []string{"golangci-lint", "aqua:golangci/golangci-lint"},
-		def:  "2.13.2",
+		def:  "2.15.0",
 		lo:   "2.13.2", hi: "3.0.0",
 		install: func(v string) string {
 			return `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v` + v

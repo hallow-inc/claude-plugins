@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	golangciDefaultInstall = `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.13.2`
+	golangciDefaultInstall = `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.15.0`
 	gremlinsDefaultInstall = "go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0"
 )
 
@@ -250,7 +250,7 @@ func TestFoundVersionMustEqualPin(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d: %s; a wrong installed version is an environment problem, not an adapter error", code, stderr)
 	}
-	environmentIn(t, resp, out, "golangci-lint", "2.14.0", "2.13.2", "default", golangciDefaultInstall)
+	environmentIn(t, resp, out, "golangci-lint", "2.14.0", "2.15.0", "default", golangciDefaultInstall)
 }
 
 func TestUnusedToolNotChecked(t *testing.T) {
@@ -275,7 +275,7 @@ func TestToolsLoosePinExitsZeroWithEnvironment(t *testing.T) {
 	if resp.Environment == nil || len(resp.Tools) != 0 {
 		t.Fatalf("tools = %+v; latest resolves differently on each machine", resp)
 	}
-	for _, m := range []string{"mise.toml", "golangci-lint", `"latest"`, `"golangci-lint" = "2.13.2"`} {
+	for _, m := range []string{"mise.toml", "golangci-lint", `"latest"`, `"golangci-lint" = "2.15.0"`} {
 		if !strings.Contains(resp.Environment.Message, m) {
 			t.Errorf("environment %q does not mention %q", resp.Environment.Message, m)
 		}

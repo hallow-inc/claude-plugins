@@ -16,8 +16,6 @@ jobs:
   evaluate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      GOTOOLCHAIN: auto
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -45,6 +43,11 @@ jobs:
         with:
           go-version: stable
           cache: false
+
+      - name: Let go.mod choose the toolchain
+        working-directory: .
+        # setup-go writes GOTOOLCHAIN=local to GITHUB_ENV, which overrides a job-level env.
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
 
       - name: Install assure
         working-directory: .
