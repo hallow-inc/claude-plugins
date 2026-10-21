@@ -1,1 +1,1 @@
-{"protocol":2,"evidence":[{"type":"junit","path":"junit.xml"}],"tool_versions":{"golangci-lint":"2.13.2","go":"go1.26.5"},"pinned_by":{"golangci-lint":"mise.toml"}}
+{"protocol":2,"evidence":[{"type":"junit","path":"junit.xml"}],"tool_versions":{"gremlins":"0.6.0","go":"go1.26.5"},"pinned_by":{"gremlins":"mise.toml"}}

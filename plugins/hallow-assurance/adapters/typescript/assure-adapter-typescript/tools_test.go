@@ -21,9 +21,6 @@ import (
 )
 
 var specRanges = map[string][2]string{
-	"typescript":                     {"5.0.0", "6.1.0"},
-	"eslint":                         {"10.0.0", "11.0.0"},
-	"typescript-eslint":              {"8.0.0", "9.0.0"},
 	"vitest":                         {"5.0.0", "6.0.0"},
 	"@vitest/coverage-v8":            {"5.0.0", "6.0.0"},
 	"@stryker-mutator/core":          {"10.0.0", "11.0.0"},
@@ -74,7 +71,7 @@ func toolNamed(t fataler, name string) tsTool {
 			return tool
 		}
 	}
-	t.Fatalf("no resolved tool %q; the spec lists it among the eight", name)
+	t.Fatalf("no resolved tool %q; the spec lists it among the five", name)
 	return tsTool{}
 }
 
@@ -119,7 +116,7 @@ func gitRepo(t *testing.T, files map[string]string, tracked ...string) string {
 }
 
 // namedTools reads tool names as whole tokens, so "vitest" inside
-// "@vitest/coverage-v8" or "eslint" inside "typescript-eslint" does not count.
+// "@vitest/coverage-v8" does not count.
 func namedTools(msg string) map[string]bool {
 	nameChar := func(r rune) bool {
 		return r == '@' || r == '/' || r == '-' || r == '_' || r == '.' || unicode.IsLetter(r) || unicode.IsDigit(r)
@@ -317,23 +314,6 @@ func TestInstalledToolFailures(t *testing.T) {
 	}
 }
 
-func TestTypeScript7FailsClosed(t *testing.T) {
-	top := gitRepo(t, map[string]string{"package.json": "{}", "package-lock.json": "{}"}, "package-lock.json")
-	installTool(t, top, "typescript", "7.0.2")
-	installTool(t, top, "eslint", "10.0.0")
-	for _, n := range []string{"typescript", "eslint"} {
-		installBin(t, top, toolNamed(t, n))
-	}
-	rs, env, err := resolveTools(top, top, objectiveTools["CODE-ZERO-WARNINGS"])
-	if err != nil || rs != nil || env == "" {
-		t.Fatalf("got %+v %q %v; typescript 7 output was never parsed by this adapter, so CODE-ZERO-WARNINGS must report environment", rs, env, err)
-	}
-	mustMention(t, env, top, "typescript", "7.0.2", "5.0.0", "6.1.0")
-	if got := namedTools(env); !maps.Equal(got, map[string]bool{"typescript": true}) {
-		t.Fatalf("message %q names %v; only typescript failed", env, got)
-	}
-}
-
 func TestUnusedToolNotChecked(t *testing.T) {
 	top := gitRepo(t, map[string]string{"package.json": "{}", "package-lock.json": "{}"}, "package-lock.json")
 	installTool(t, top, "vitest", "5.0.4")
@@ -467,7 +447,7 @@ func TestToolsForNpmRepository(t *testing.T) {
 		want = append(want, toolEntry{Name: n, Version: specRanges[n][0], PinnedBy: "package-lock.json", Install: "npm ci"})
 	}
 	if resp.Environment != nil || !slices.Equal(resp.Tools, want) {
-		t.Fatalf("got %+v\nwant %+v\nassure tools prints one install line per tool and records pinned_by; all eight tools, sorted by name", resp, want)
+		t.Fatalf("got %+v\nwant %+v\nassure tools prints one install line per tool and records pinned_by; all five tools, sorted by name", resp, want)
 	}
 }
 
@@ -614,7 +594,7 @@ func TestToolsInstallLineFollowsLockfile(t *testing.T) {
 			}
 		}
 		if resp.Environment != nil || !slices.Equal(names, specToolNames) {
-			t.Fatalf("%s (tracked %v): got %+v; all eight tools, sorted by name, whether or not git tracks the lockfile", lock, tracked, resp)
+			t.Fatalf("%s (tracked %v): got %+v; all five tools, sorted by name, whether or not git tracks the lockfile", lock, tracked, resp)
 		}
 		checkUntracked(t, r, !tracked)
 	})

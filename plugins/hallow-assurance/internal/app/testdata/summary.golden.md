@@ -4,34 +4,34 @@ Commit `7330276f12e1`, 3 changed files since `origin/master` (`7330276f12e1`), c
 
 | Objective | Language | Status |
 |---|---|---|
-| CODE-COMPLEXITY | go | pass |
-| CODE-RESOURCE-BOUNDS | go | fail |
+| VER-MUTATION-CHANGED | go | pass |
+| VER-ROBUST-FUZZ | go | fail |
 | IND-VERIFIER-DISTINCT | — | waived |
 | VER-TESTS-PASS | go | fail |
 | FM-COMPLETE | — | advisory-fail |
 
-### CODE-RESOURCE-BOUNDS (go): fail
+### VER-ROBUST-FUZZ (go): fail
 
-- internal/x00.go: noctx: use CommandContext
-- internal/x01.go: noctx: use CommandContext
-- internal/x02.go: noctx: use CommandContext
-- internal/x03.go: noctx: use CommandContext
-- internal/x04.go: noctx: use CommandContext
-- internal/x05.go: noctx: use CommandContext
-- internal/x06.go: noctx: use CommandContext
-- internal/x07.go: noctx: use CommandContext
-- internal/x08.go: noctx: use CommandContext
-- internal/x09.go: noctx: use CommandContext
-- internal/x10.go: noctx: use CommandContext
-- internal/x11.go: noctx: use CommandContext
-- internal/x12.go: noctx: use CommandContext
-- internal/x13.go: noctx: use CommandContext
-- internal/x14.go: noctx: use CommandContext
-- internal/x15.go: noctx: use CommandContext
-- internal/x16.go: noctx: use CommandContext
-- internal/x17.go: noctx: use CommandContext
-- internal/x18.go: noctx: use CommandContext
-- internal/x19.go: noctx: use CommandContext
+- internal/x00.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x01.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x02.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x03.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x04.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x05.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x06.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x07.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x08.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x09.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x10.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x11.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x12.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x13.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x14.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x15.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x16.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x17.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x18.go: fuzz target FuzzParse failed on its seed corpus
+- internal/x19.go: fuzz target FuzzParse failed on its seed corpus
 - … 2 more
 
 ### IND-VERIFIER-DISTINCT: waived
@@ -50,7 +50,3 @@ Commit `7330276f12e1`, 3 changed files since `origin/master` (`7330276f12e1`), c
 ### Expired waivers
 
 - VER-FAIL-ON-BASE, scope `**`, approver owner, expired 2026-09-01
-
-### Removable baseline entries
-
-- CODE-RESOURCE-BOUNDS `noctx` in `internal/app/check.go`: use CommandContext (1 of 2 unused)

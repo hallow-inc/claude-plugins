@@ -65,15 +65,12 @@ func TestCheckModeFlagsExitTwoNamingEvaluateOrUsage(t *testing.T) {
 	})
 }
 
-func TestCheckRoleVerifierBlocksOnTestsNotLint(t *testing.T) {
+func TestCheckRoleVerifierBlocksOnlyOnFailingTests(t *testing.T) {
 	r := goRepo(t)
-	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return a + b }\n\nfunc dead() {}\n")
-	if code, stdout, _ := assure("check", "--fast"); code != 1 || !strings.Contains(stdout, "fail\tCODE-ZERO-WARNINGS\tgo") {
-		t.Fatalf("fixture: --fast exit %d, want a CODE-ZERO-WARNINGS failure on the unused function\n%s", code, stdout)
-	}
+	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
 	code, stdout, stderr := assure("check", "--role", "verifier")
 	if code != 0 || strings.TrimSpace(stdout) != "pass\tVER-TESTS-PASS\tgo" {
-		t.Fatalf("got %d\n%s\n%s; a source lint finding is not the verifier's to fix, and only VER-TESTS-PASS runs", code, stdout, stderr)
+		t.Fatalf("got %d\n%s\n%s; with every test passing the verifier may stop, and only VER-TESTS-PASS runs", code, stdout, stderr)
 	}
 	r.write("p/q_test.go", "package p\n\nimport \"testing\"\n\nfunc TestBroken(t *testing.T) { t.Fatal(\"broken\") }\n")
 	code, stdout, stderr = assure("check", "--role", "verifier")

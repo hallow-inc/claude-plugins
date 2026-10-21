@@ -267,7 +267,7 @@ func (w indWorld) expect(o Objective) indExpect {
 
 func (w indWorld) decide(o Objective) Outcome {
 	pv := w.pv
-	return DecideObjective(o, w.changed, Evidence{Provenance: &pv}, nil, nil, ruleDate)
+	return DecideObjective(o, w.changed, Evidence{Provenance: &pv}, nil, ruleDate)
 }
 
 func isNote(line string) bool {
@@ -375,9 +375,9 @@ func checkProtectedOptional(t *rapid.T, prot Objective, w indWorld) {
 		files = append(files, ChangedFile{Path: f.Path, Level: f.Level})
 	}
 	pd := ProtectedDiff{Files: files, Reviewed: w.pv.Reviewed, Required: allRequired()}
-	strict := DecideObjective(prot, files, Evidence{Protected: &pd}, nil, nil, ruleDate)
+	strict := DecideObjective(prot, files, Evidence{Protected: &pd}, nil, ruleDate)
 	pd.Required = w.pv.Required
-	relaxed := DecideObjective(prot, files, Evidence{Protected: &pd}, nil, nil, ruleDate)
+	relaxed := DecideObjective(prot, files, Evidence{Protected: &pd}, nil, ruleDate)
 	s := splitDetails(t, relaxed.Details, indPaths)
 	for _, f := range files {
 		excused := pd.Reviewed || !pd.Required[f.Level]
@@ -463,7 +463,7 @@ func TestIndependenceScenarios(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			pv := c.pv
-			got := DecideObjective(o, c.files, Evidence{Provenance: &pv}, nil, nil, ruleDate)
+			got := DecideObjective(o, c.files, Evidence{Provenance: &pv}, nil, ruleDate)
 			d := strings.Join(got.Details, "\n")
 			if got.Status != c.want {
 				t.Fatalf("status %s, want %s\n%s", got.Status, c.want, d)
@@ -602,7 +602,7 @@ func TestProtectedDiffScenarios(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			pd := c.pd
-			got := DecideObjective(o, pd.Files, Evidence{Protected: &pd}, nil, nil, ruleDate)
+			got := DecideObjective(o, pd.Files, Evidence{Protected: &pd}, nil, ruleDate)
 			d := strings.Join(got.Details, "\n")
 			if got.Status != c.want {
 				t.Fatalf("status %s, want %s\n%s", got.Status, c.want, d)

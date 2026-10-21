@@ -1,1 +1,1 @@
-{"objectives": [{"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass", "locations": "lib/a.go"}]}
+{"objectives": [{"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass", "locations": "lib/a.go"}]}

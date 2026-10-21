@@ -27,14 +27,26 @@ func waiverYAML(objective, scope, expires string) string {
 	return "- objective: " + objective + "\n  scope: \"" + scope + "\"\n  rationale: generated rationale long enough\n  approver: owner\n  expires: " + expires + "\n"
 }
 
-var levelB = Objective{ID: "CODE-NO-UNSAFE", Evidence: "lint.sarif", Levels: map[Level]string{"A": "required", "B": "required", "C": "advisory"}}
+var fuzzB = Objective{ID: "VER-ROBUST-FUZZ", Evidence: "fuzz.run", AppliesTo: "inputs", Levels: map[Level]string{"A": "required", "B": "required", "C": "advisory"}}
+
+func crashingFuzz(path string) Evidence {
+	return Evidence{Fuzz: &FuzzRun{Suites: []FuzzSuite{{Sources: []string{path}, Cases: []FuzzCase{{Name: "FuzzDecode", Outcome: "failed"}}}}}}
+}
+
+func inputsFile(path string, l Level) ChangedFile {
+	return ChangedFile{Path: path, Level: l, Inputs: true, Role: Source}
+}
 
 func TestScopedWaiverSuppressesALocatedFinding(t *testing.T) {
-	ws := mustWaivers(t, waiverYAML("CODE-NO-UNSAFE", "internal/decode/**", "2026-12-31"))
-	ev := Evidence{Findings: []Finding{{Level: "B", Located: true, Path: "internal/decode/decode.go", Rule: "import-unsafe", Text: "internal/decode/decode.go: import-unsafe"}}}
-	got := DecideObjective(levelB, []ChangedFile{{Path: "internal/decode/decode.go", Level: "B"}}, ev, ws, nil, "2026-09-27")
+	ws := mustWaivers(t, waiverYAML("VER-ROBUST-FUZZ", "internal/decode/**", "2026-12-31"))
+	changed := []ChangedFile{inputsFile("internal/decode/decode.go", "B")}
+	ev := crashingFuzz("internal/decode/decode.go")
+	if got := DecideObjective(fuzzB, changed, ev, nil, "2026-09-27"); got.Status != Fail {
+		t.Fatalf("without the waiver got %+v; the crashing fuzz target must fail, or the waiver below proves nothing", got)
+	}
+	got := DecideObjective(fuzzB, changed, ev, ws, "2026-09-27")
 	if got.Status != Waived || len(got.Waivers) != 1 {
-		t.Fatalf("got %+v", got)
+		t.Fatalf("got %+v; a located failure inside an active waiver's scope must not count", got)
 	}
 }
 
@@ -42,7 +54,7 @@ func TestPartialScopeDoesNotCoverMissingEvidence(t *testing.T) {
 	o := Objective{ID: "IND-VERIFIER-DISTINCT", Levels: map[Level]string{"A": "required", "B": "required"}}
 	ws := mustWaivers(t, waiverYAML("IND-VERIFIER-DISTINCT", "internal/**", "2026-12-31"))
 	changed := []ChangedFile{{Path: "internal/core/fast.go", Level: "B"}, {Path: "cmd/assure/main.go", Level: "B"}}
-	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, ws, nil, "2026-09-27")
+	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, ws, "2026-09-27")
 	if got.Status != Fail {
 		t.Fatalf("got %+v; a narrow waiver must not hide a failure that also covers cmd/", got)
 	}
@@ -52,20 +64,20 @@ func TestRepoWideWaiverCoversMissingEvidence(t *testing.T) {
 	o := Objective{ID: "IND-VERIFIER-DISTINCT", Levels: map[Level]string{"A": "required", "B": "required"}}
 	ws := mustWaivers(t, waiverYAML("IND-VERIFIER-DISTINCT", "**", "2026-12-31"))
 	changed := []ChangedFile{{Path: "internal/core/fast.go", Level: "B"}, {Path: "cmd/assure/main.go", Level: "B"}}
-	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, ws, nil, "2026-09-27")
+	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, ws, "2026-09-27")
 	if got.Status != Waived {
 		t.Fatalf("got %+v", got)
 	}
 }
 
 func TestWaiverIsActiveOnItsLastDayOnly(t *testing.T) {
-	ws := mustWaivers(t, waiverYAML("CODE-NO-UNSAFE", "**", "2026-01-02"))
-	ev := Evidence{Findings: []Finding{{Level: "B", Located: true, Path: "a.go", Text: "a.go: import-unsafe"}}}
-	changed := []ChangedFile{{Path: "a.go", Level: "B"}}
-	if got := DecideObjective(levelB, changed, ev, ws, nil, "2026-01-02"); got.Status != Waived {
+	ws := mustWaivers(t, waiverYAML("VER-ROBUST-FUZZ", "**", "2026-01-02"))
+	ev := crashingFuzz("a.go")
+	changed := []ChangedFile{inputsFile("a.go", "B")}
+	if got := DecideObjective(fuzzB, changed, ev, ws, "2026-01-02"); got.Status != Waived {
 		t.Fatalf("on the expiry date: got %s, want waived", got.Status)
 	}
-	if got := DecideObjective(levelB, changed, ev, ws, nil, "2026-01-03"); got.Status != Fail || len(got.Waivers) != 0 {
+	if got := DecideObjective(fuzzB, changed, ev, ws, "2026-01-03"); got.Status != Fail || len(got.Waivers) != 0 {
 		t.Fatalf("after expiry: got %+v; an expired waiver must suppress nothing", got)
 	}
 	if exp := Expired(ws, "2026-01-03"); len(exp) != 1 {
@@ -74,43 +86,30 @@ func TestWaiverIsActiveOnItsLastDayOnly(t *testing.T) {
 }
 
 func TestWaiverForAnotherObjectiveDoesNothing(t *testing.T) {
-	ws := mustWaivers(t, waiverYAML("CODE-ZERO-WARNINGS", "**", "2026-12-31"))
-	ev := Evidence{Findings: []Finding{{Level: "B", Located: true, Path: "a.go", Text: "a.go: import-unsafe"}}}
-	if got := DecideObjective(levelB, []ChangedFile{{Path: "a.go", Level: "B"}}, ev, ws, nil, "2026-09-27"); got.Status != Fail {
-		t.Fatalf("got %s", got.Status)
-	}
-}
-
-var complexity = Objective{ID: "CODE-COMPLEXITY", Evidence: "lint.sarif", Levels: map[Level]string{"A": "required", "B": "required", "C": "advisory"}, Threshold: map[Level]float64{"A": 15, "B": 15, "C": 15}}
-
-func TestMetricAtThresholdPasses(t *testing.T) {
-	ev := Evidence{Findings: []Finding{{Level: "B", Located: true, Path: "a.go", Rule: "cyclomatic", Metric: 15, HasMetric: true, Text: "a.go: cyclomatic 15"}}}
-	got := DecideObjective(complexity, []ChangedFile{{Path: "a.go", Level: "B"}}, ev, nil, nil, "2026-09-27")
-	if got.Status != Pass || got.UnderThreshold != 1 {
-		t.Fatalf("got %+v; thresholds are ceilings, so 15 <= 15 passes", got)
-	}
-}
-
-func TestMetricOverThresholdFails(t *testing.T) {
-	ev := Evidence{Findings: []Finding{{Level: "B", Located: true, Path: "a.go", Rule: "cyclomatic", Metric: 16, HasMetric: true, Text: "a.go: cyclomatic 16"}}}
-	got := DecideObjective(complexity, []ChangedFile{{Path: "a.go", Level: "B"}}, ev, nil, nil, "2026-09-27")
-	if got.Status != Fail || !slices.Contains(got.Details, "a.go: cyclomatic 16") {
-		t.Fatalf("got %+v", got)
-	}
-}
-
-func TestMetricWithNoThresholdAtItsLevelCounts(t *testing.T) {
-	o := complexity
-	o.Threshold = map[Level]float64{"A": 15}
-	ev := Evidence{Findings: []Finding{{Level: "B", Located: true, Path: "a.go", Metric: 1, HasMetric: true, Text: "a.go: 1"}}}
-	if got := DecideObjective(o, []ChangedFile{{Path: "a.go", Level: "B"}}, ev, nil, nil, "2026-09-27"); got.Status != Fail {
-		t.Fatalf("got %s", got.Status)
+	ws := mustWaivers(t, waiverYAML("VER-MUTATION-CHANGED", "**", "2026-12-31"))
+	if got := DecideObjective(fuzzB, []ChangedFile{inputsFile("a.go", "B")}, crashingFuzz("a.go"), ws, "2026-09-27"); got.Status != Fail || len(got.Waivers) != 0 {
+		t.Fatalf("got %+v; a waiver for VER-MUTATION-CHANGED must not hide a VER-ROBUST-FUZZ crash", got)
 	}
 }
 
 func TestLevelDSkipsLevelBOnlyObjectives(t *testing.T) {
-	if Applicable(complexity, []ChangedFile{{Path: "a.go", Level: "D"}}) {
-		t.Fatal("CODE-COMPLEXITY has no level D entry but was applicable")
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(c.Objectives, func(o Objective) bool { return o.ID == "VER-MUTATION-CHANGED" })
+	if i < 0 {
+		t.Fatal("VER-MUTATION-CHANGED missing from catalog v0")
+	}
+	o := c.Objectives[i]
+	if _, listed := o.Levels["D"]; listed {
+		t.Fatalf("VER-MUTATION-CHANGED lists level D (%v); the scenario needs an objective with no level D entry", o.Levels)
+	}
+	if Applicable(o, []ChangedFile{{Path: "a.go", Level: "D"}}) {
+		t.Fatal("VER-MUTATION-CHANGED has no level D entry but was applicable to a level-D-only change")
+	}
+	if !Applicable(o, []ChangedFile{{Path: "a.go", Level: "D"}, {Path: "b.go", Level: "B"}}) {
+		t.Fatal("VER-MUTATION-CHANGED not applicable once a level-B file changed too")
 	}
 }
 
@@ -126,76 +125,71 @@ func TestFormalObjectivesNeedAFormalComponent(t *testing.T) {
 
 func TestObjectiveNoAdapterProducesFails(t *testing.T) {
 	o := Objective{ID: "IND-VERIFIER-DISTINCT", Levels: map[Level]string{"A": "required", "B": "required"}}
-	got := DecideObjective(o, []ChangedFile{{Path: "a.go", Level: "B"}}, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, nil, nil, "2026-09-27")
+	got := DecideObjective(o, []ChangedFile{{Path: "a.go", Level: "B"}}, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, nil, "2026-09-27")
 	if got.Status != Fail || !strings.Contains(strings.Join(got.Details, "\n"), "no adapter lists") {
 		t.Fatalf("got %+v; missing evidence must fail closed", got)
 	}
 }
 
 type world struct {
-	o        Objective
-	changed  []ChangedFile
-	levelOf  map[string]Level
-	ev       Evidence
-	ws       []Waiver
-	baseline map[Fingerprint]int
-	date     string
+	o       Objective
+	changed []ChangedFile
+	levelOf map[string]Level
+	fuzz    map[string]string
+	ev      Evidence
+	ws      []Waiver
+	date    string
 }
 
 var (
-	paths  = []string{"a/x.go", "a/y.go", "b/z.go"}
-	scopes = []string{"**", "a/**", "b/**", "a/x.go"}
-	dates  = []string{"2026-01-01", "2026-01-02", "2026-01-03"}
+	paths        = []string{"a/x.go", "a/y.go", "b/z.go"}
+	scopes       = []string{"**", "a/**", "b/**", "a/x.go"}
+	dates        = []string{"2026-01-01", "2026-01-02", "2026-01-03"}
+	fuzzOutcomes = []string{"unnamed", "no-target", fuzzPassed, "failed"}
 )
 
 func worldGen(t *rapid.T) world {
-	w := world{o: objectiveGen(t), levelOf: map[string]Level{}, date: "2026-01-02"}
-	w.o.ID = "CODE-X"
-	if rapid.Bool().Draw(t, "hasth") {
-		w.o.Threshold = map[Level]float64{}
-		for _, l := range levels {
-			if w.o.Levels[l] != "" && rapid.Bool().Draw(t, "th"+string(l)) {
-				w.o.Threshold[l] = 10
-			}
-		}
-	}
+	w := world{o: objectiveGen(t), levelOf: map[string]Level{}, fuzz: map[string]string{}, date: "2026-01-02"}
 	for _, p := range paths {
 		w.levelOf[p] = levelGen.Draw(t, "level "+p)
 	}
 	for _, p := range rapid.SliceOfNDistinct(rapid.SampledFrom(paths), 1, 3, func(s string) string { return s }).Draw(t, "changed") {
-		w.changed = append(w.changed, ChangedFile{Path: p, Level: w.levelOf[p]})
+		role := rapid.SampledFrom([]Role{Source, Test}).Draw(t, "role "+p)
+		w.changed = append(w.changed, ChangedFile{Path: p, Level: w.levelOf[p], Role: role})
 	}
 	for range rapid.IntRange(0, 1).Draw(t, "nproblems") {
 		w.ev.Problems = append(w.ev.Problems, "no evidence")
 	}
-	for range rapid.IntRange(0, 4).Draw(t, "nfindings") {
-		f := Finding{Rule: rapid.SampledFrom([]string{"r1", "r2"}).Draw(t, "rule"), Text: "finding"}
-		if rapid.Bool().Draw(t, "located") {
-			f.Located, f.Path = true, rapid.SampledFrom(paths).Draw(t, "fpath")
-			f.Level = w.levelOf[f.Path]
+	for range rapid.IntRange(0, 1).Draw(t, "nfailing") {
+		w.ev.Failing = append(w.ev.Failing, TestFailure{Name: "pkg.TestX", Text: "failing test: pkg.TestX"})
+	}
+	if rapid.Bool().Draw(t, "hasfuzz") {
+		run := FuzzRun{}
+		for _, p := range paths {
+			outcome := rapid.SampledFrom(fuzzOutcomes).Draw(t, "fuzz "+p)
+			w.fuzz[p] = outcome
+			switch outcome {
+			case "no-target":
+				run.Suites = append(run.Suites, FuzzSuite{Sources: []string{p}})
+			case fuzzPassed, "failed":
+				run.Suites = append(run.Suites, FuzzSuite{Sources: []string{p}, Cases: []FuzzCase{{Name: "Fuzz" + p, Outcome: outcome}}})
+			}
 		}
-		if rapid.Bool().Draw(t, "metric") {
-			f.Metric, f.HasMetric = float64(rapid.IntRange(8, 12).Draw(t, "m")), true
-		}
-		w.ev.Findings = append(w.ev.Findings, f)
+		w.ev.Fuzz = &run
 	}
 	var src strings.Builder
 	for range rapid.IntRange(0, 2).Draw(t, "nwaivers") {
-		obj := rapid.SampledFrom([]string{"CODE-X", "CODE-Y"}).Draw(t, "wobj")
+		obj := rapid.SampledFrom([]string{"VER-X", "VER-Y"}).Draw(t, "wobj")
 		src.WriteString(waiverYAML(obj, rapid.SampledFrom(scopes).Draw(t, "scope"), rapid.SampledFrom(dates).Draw(t, "expires")))
 	}
 	if src.Len() > 0 {
 		w.ws = mustWaivers(t, src.String())
 	}
-	w.baseline = map[Fingerprint]int{}
-	for range rapid.IntRange(0, 2).Draw(t, "nbase") {
-		w.baseline[Fingerprint{"CODE-X", rapid.SampledFrom([]string{"r1", "r2"}).Draw(t, "brule"), rapid.SampledFrom(paths).Draw(t, "bpath"), ""}] = rapid.IntRange(1, 2).Draw(t, "bcount")
-	}
 	return w
 }
 
 func (w world) decide() Outcome {
-	return DecideObjective(w.o, w.changed, w.ev, w.ws, w.baseline, w.date)
+	return DecideObjective(w.o, w.changed, w.ev, w.ws, w.date)
 }
 
 func globMatch(scope, p string) bool {
@@ -230,35 +224,34 @@ func oracleCovered(active []Waiver, paths []string) bool {
 	})
 }
 
-func (w world) oracleCounted() (unlocated int, matches map[Fingerprint]int) {
-	unlocated, matches = len(w.ev.Problems), map[Fingerprint]int{}
-	for _, f := range w.ev.Findings {
-		th, hasTh := w.o.Threshold[f.Level]
-		switch {
-		case !f.Located:
-			unlocated++
-		case !(hasTh && f.HasMetric && f.Metric <= th):
-			matches[Fingerprint{"CODE-X", f.Rule, f.Path, f.Message}]++
+func (w world) oracleLocated() []ChangedFile {
+	if w.ev.Fuzz == nil {
+		return nil
+	}
+	var out []ChangedFile
+	for _, c := range w.changed {
+		if c.Role == Source && w.fuzz[c.Path] != fuzzPassed {
+			out = append(out, c)
 		}
 	}
-	return unlocated, matches
+	return out
 }
 
 func evalOracle(w world) Status {
 	active := w.oracleActive()
 	req, adv, applicable := w.oracleApplicable()
-	unlocated, matches := w.oracleCounted()
+	unlocated := len(w.ev.Problems) + len(w.ev.Failing)
 	blocking, advisory, waived := false, false, false
 	if unlocated > 0 && (req || adv) {
 		waived = oracleCovered(active, applicable)
 		blocking, advisory = req && !waived, !waived
 	}
-	for fp, n := range matches {
-		status := w.o.Levels[w.levelOf[fp.Path]]
-		if n <= w.baseline[fp] || status == "" {
+	for _, c := range w.oracleLocated() {
+		status := w.o.Levels[c.Level]
+		if status == "" {
 			continue
 		}
-		if slices.ContainsFunc(active, func(x Waiver) bool { return globMatch(x.Scope, fp.Path) }) {
+		if slices.ContainsFunc(active, func(x Waiver) bool { return globMatch(x.Scope, c.Path) }) {
 			waived = true
 			continue
 		}
@@ -292,13 +285,13 @@ func TestDecisionMatchesTheEvaluationRules(t *testing.T) {
 func TestMissingEvidenceIsWaivedExactlyWhenCovered(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		w := worldGen(t)
-		w.ev = Evidence{Problems: []string{"no adapter lists CODE-X"}}
+		w.ev = Evidence{Problems: []string{"no adapter lists VER-X"}}
 		req, adv, applicable := changedStatus(w.o, w.changed)
 		if !req && !adv {
 			t.Skip("not applicable")
 		}
 		covered := slices.ContainsFunc(w.ws, func(x Waiver) bool {
-			return x.Objective == "CODE-X" && x.Expires >= w.date && !slices.ContainsFunc(applicable, func(p string) bool { return !globMatch(x.Scope, p) })
+			return x.Objective == "VER-X" && x.Expires >= w.date && !slices.ContainsFunc(applicable, func(p string) bool { return !globMatch(x.Scope, p) })
 		})
 		if got := w.decide().Status; (got == Waived) != covered {
 			t.Fatalf("status %s, covered %v, applicable %v, waivers %+v", got, covered, applicable, w.ws)
@@ -310,7 +303,7 @@ func TestWaivedOnlyWhenEveryFailureWasWaived(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		w := worldGen(t)
 		got := w.decide()
-		withoutWaivers := DecideObjective(w.o, w.changed, w.ev, nil, w.baseline, w.date)
+		withoutWaivers := DecideObjective(w.o, w.changed, w.ev, nil, w.date)
 		switch {
 		case got.Status == Waived && (withoutWaivers.Status == Pass || len(got.Waivers) == 0):
 			t.Fatalf("waived with nothing suppressed by a waiver: %+v vs %+v", got, withoutWaivers)
@@ -329,12 +322,17 @@ func TestDecisionIgnoresInputOrder(t *testing.T) {
 		r := w
 		r.changed = slices.Clone(w.changed)
 		slices.Reverse(r.changed)
-		r.ev.Findings = slices.Clone(w.ev.Findings)
-		slices.Reverse(r.ev.Findings)
+		r.ev.Problems = slices.Clone(w.ev.Problems)
+		slices.Reverse(r.ev.Problems)
+		if w.ev.Fuzz != nil {
+			suites := slices.Clone(w.ev.Fuzz.Suites)
+			slices.Reverse(suites)
+			r.ev.Fuzz = &FuzzRun{Suites: suites}
+		}
 		r.ws = slices.Clone(w.ws)
 		slices.Reverse(r.ws)
 		b := r.decide()
-		if a.Status != b.Status || !slices.Equal(a.Details, b.Details) || a.Baselined != b.Baselined || a.UnderThreshold != b.UnderThreshold ||
+		if a.Status != b.Status || !slices.Equal(a.Details, b.Details) ||
 			!slices.EqualFunc(a.Waivers, b.Waivers, func(x, y Waiver) bool { return compareWaivers(x, y) == 0 }) {
 			t.Fatalf("order changed the outcome: %+v vs %+v", a, b)
 		}

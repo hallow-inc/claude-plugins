@@ -26,22 +26,12 @@ var tsTools = []tsTool{
 	{name: "@stryker-mutator/core", bin: "stryker", lo: "10.0.0", hi: "11.0.0"},
 	{name: "@stryker-mutator/vitest-runner", lo: "10.0.0", hi: "11.0.0"},
 	{name: "@vitest/coverage-v8", lo: "5.0.0", hi: "6.0.0"},
-	{name: "eslint", bin: "eslint", lo: "10.0.0", hi: "11.0.0"},
 	{name: "fast-check", lo: "4.0.0", hi: "5.0.0"},
-	{name: "typescript", bin: "tsc", lo: "5.0.0", hi: "6.1.0"},
-	{name: "typescript-eslint", lo: "8.0.0", hi: "9.0.0"},
 	{name: "vitest", bin: "vitest", lo: "5.0.0", hi: "6.0.0"},
 }
 
-var lintTools = []string{"eslint", "typescript", "typescript-eslint"}
-
 var objectiveTools = map[string][]string{
 	"VER-TESTS-PASS":          {"vitest"},
-	"CODE-ZERO-WARNINGS":      {"eslint", "typescript"},
-	"CODE-CHECK-RETURNS":      lintTools,
-	"CODE-RESOURCE-BOUNDS":    lintTools,
-	"CODE-COMPLEXITY":         lintTools,
-	"CODE-NO-UNSAFE":          lintTools,
 	"VER-MUTATION-CHANGED":    {"@stryker-mutator/core", "@stryker-mutator/vitest-runner", "vitest"},
 	"VER-FAIL-ON-BASE":        {"vitest"},
 	"VER-ROBUST-FUZZ":         {"fast-check", "vitest"},

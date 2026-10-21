@@ -22,7 +22,7 @@ const fakeNodeVersion = "v26.8.1"
 
 var recordedDir, _ = filepath.Abs(filepath.Join("testdata", "recorded"))
 
-var fakeBins = map[string]string{"vitest": "vitest", "eslint": "eslint", "typescript": "tsc"}
+var fakeBins = map[string]string{"vitest": "vitest"}
 
 func exe(t fataler, p, src string) {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -121,7 +121,6 @@ var baseRepo = map[string]string{
 	"package.json":      "{}",
 	"package-lock.json": "{}",
 	"tsconfig.json":     "{}",
-	"eslint.config.js":  "export default [];\n",
 	"README.md":         "readme\n",
 	"src/parse.ts":      "export const parse = 1;\n",
 	"src/lint.ts":       "export const lint = 1;\n",
@@ -233,21 +232,6 @@ func junitIn(t fataler, out string, resp runResponse) ev.JUnit {
 	return j
 }
 
-func sarifIn(t fataler, out string, resp runResponse) []ev.Result {
-	if want := []evidence{{Type: "lint.sarif", Path: "lint.sarif"}}; !slices.Equal(resp.Evidence, want) {
-		t.Fatalf("evidence %+v, want %+v; CODE-ZERO-WARNINGS reads exactly this entry", resp.Evidence, want)
-	}
-	data, err := os.ReadFile(filepath.Join(out, "lint.sarif"))
-	if err != nil {
-		t.Fatalf("evidence names lint.sarif but it was not written: %v", err)
-	}
-	rs, err := ev.ParseSARIF(data)
-	if err != nil {
-		t.Fatalf("assure rejects the SARIF: %v\n%s", err, data)
-	}
-	return rs
-}
-
 func outcomes(j ev.JUnit) map[string]ev.Outcome {
 	got := map[string]ev.Outcome{}
 	for _, s := range j.Suites {
@@ -278,7 +262,7 @@ func TestRunTestsReplaysRecordedVitest(t *testing.T) {
 
 	resp, raw := runInRaw(t, "VER-TESTS-PASS", out)
 	if resp.Environment != nil {
-		t.Fatalf("environment %q; eslint, typescript and Stryker are not installed but VER-TESTS-PASS uses only vitest, and an unused tool must not block it", resp.Environment.Message)
+		t.Fatalf("environment %q; Stryker and fast-check are not installed but VER-TESTS-PASS uses only vitest, and an unused tool must not block it", resp.Environment.Message)
 	}
 	if u, ok := runUntracked(t, raw); ok {
 		t.Fatalf("untracked %v with a tracked lockfile; absent means every pin is tracked, and a spurious mark fails the objective under authority: ci", u)
@@ -399,37 +383,27 @@ func TestRunUntrackedLockfilesResolveMarkedOnce(t *testing.T) {
 }
 
 func TestRunNoChangedTypeScriptFiles(t *testing.T) {
-	r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4", "eslint": "10.12.0", "typescript": "6.0.3"}})
+	r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4"}})
 	writeTree(t, r.top, map[string]string{"README.md": "changed\n", "notes.txt": "new\n"})
-	for _, obj := range []string{"VER-TESTS-PASS", "CODE-ZERO-WARNINGS"} {
-		out := t.TempDir()
-		resp := runIn(t, obj, out)
-		if resp.Environment != nil {
-			t.Fatalf("%s: environment %q with no TypeScript change", obj, resp.Environment.Message)
-		}
-		if want := map[string]string{"node": fakeNodeVersion}; !maps.Equal(resp.ToolVersions, want) || len(resp.PinnedBy) != 0 {
-			t.Fatalf("%s: tool_versions %v pinned_by %v; with no unit selected no tool is resolved", obj, resp.ToolVersions, resp.PinnedBy)
-		}
-		if obj == "VER-TESTS-PASS" {
-			if j := junitIn(t, out, resp); j.Cases != 0 || len(j.Suites) != 0 {
-				t.Fatalf("JUnit %+v; only non-TypeScript files changed, so the spec wants a JUnit file with zero cases, not an error", j)
-			}
-		} else if rs := sarifIn(t, out, resp); len(rs) != 0 {
-			t.Fatalf("SARIF results %+v; only non-TypeScript files changed, so the spec wants zero results", rs)
-		}
+	out := t.TempDir()
+	resp := runIn(t, "VER-TESTS-PASS", out)
+	if resp.Environment != nil {
+		t.Fatalf("environment %q with no TypeScript change", resp.Environment.Message)
 	}
-	for bin := range slices.Values([]string{"vitest", "eslint", "tsc"}) {
-		if callOf(t, r.data, bin).invoked {
-			t.Fatalf("%s ran with no TypeScript change; nothing was selected to run it on", bin)
-		}
+	if want := map[string]string{"node": fakeNodeVersion}; !maps.Equal(resp.ToolVersions, want) || len(resp.PinnedBy) != 0 {
+		t.Fatalf("tool_versions %v pinned_by %v; with no unit selected no tool is resolved", resp.ToolVersions, resp.PinnedBy)
+	}
+	if j := junitIn(t, out, resp); j.Cases != 0 || len(j.Suites) != 0 {
+		t.Fatalf("JUnit %+v; only non-TypeScript files changed, so the spec wants a JUnit file with zero cases, not an error", j)
+	}
+	if callOf(t, r.data, "vitest").invoked {
+		t.Fatal("vitest ran with no TypeScript change; nothing was selected to run it on")
 	}
 }
 
-func TestRunUnitWithNoSelectedFileStillTypeChecks(t *testing.T) {
-	r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4", "eslint": "10.12.0", "typescript": "6.0.3"}})
+func TestRunUnitWithNoSelectedFileRunsNoTests(t *testing.T) {
+	r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4"}})
 	writeTree(t, r.top, map[string]string{"src/env.d.ts": "declare const x: number;\n"})
-	replay(t, r.data, "tsc", replayed{stdout: recorded(t, "tsc-syntax.txt", r.unreal), code: 2})
-
 	out := t.TempDir()
 	if j := junitIn(t, out, runIn(t, "VER-TESTS-PASS", out)); j.Cases != 0 {
 		t.Fatalf("%d cases; a changed declaration file selects no test file", j.Cases)
@@ -437,170 +411,28 @@ func TestRunUnitWithNoSelectedFileStillTypeChecks(t *testing.T) {
 	if callOf(t, r.data, "vitest").invoked {
 		t.Fatal("vitest ran with no selected file; vitest related with no file argument would run every test")
 	}
-
-	out = t.TempDir()
-	rs := sarifIn(t, out, runIn(t, "CODE-ZERO-WARNINGS", out))
-	if callOf(t, r.data, "eslint").invoked {
-		t.Fatal("eslint ran with no selected file; with no file argument it lints nothing useful or everything")
-	}
-	if !callOf(t, r.data, "tsc").invoked || len(rs) != 1 || rs[0].RuleID != "TS1134" || rs[0].URI != "src/syntax.ts" {
-		t.Fatalf("results %+v; a changed declaration can break callers, so tsc still checks the unit and its diagnostics are reported", rs)
-	}
 }
 
-func TestRunLintReportsTypeErrorElsewhere(t *testing.T) {
-	r := newRepo(t, nil, map[string]map[string]string{".": {"eslint": "10.12.0", "typescript": "6.0.3"}})
-	writeTree(t, r.top, map[string]string{"src/lint.ts": "export const a: any = 1; const unused = 2;\n"})
-	replay(t, r.data, "eslint", replayed{stdout: recorded(t, "eslint.json", r.unreal), code: 1})
-	replay(t, r.data, "tsc", replayed{stdout: recorded(t, "tsc.txt", r.unreal), code: 2})
+func TestRunTestsNeedsNeitherTypeScriptVersionNorESLintConfig(t *testing.T) {
+	r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4"}})
+	installTool(t, r.top, "typescript", "7.0.2")
+	if exists(filepath.Join(r.top, "eslint.config.js")) {
+		t.Fatal("fixture has an eslint config; the scenario needs a unit without one")
+	}
+	writeTree(t, r.top, map[string]string{"src/parse.ts": "export const parse = 2;\n"})
+	replay(t, r.data, "vitest", replayed{report: `{"testResults":[]}`})
 	out := t.TempDir()
-	resp := runIn(t, "CODE-ZERO-WARNINGS", out)
-	if want := map[string]string{"node": fakeNodeVersion, "eslint": "10.12.0", "typescript": "6.0.3"}; !maps.Equal(resp.ToolVersions, want) {
-		t.Fatalf("tool_versions %v, want %v; vitest is not installed and CODE-ZERO-WARNINGS must not need it", resp.ToolVersions, want)
+	resp := runIn(t, "VER-TESTS-PASS", out)
+	if resp.Environment != nil {
+		t.Fatalf("environment %q; typescript 7.0.2 is outside the range the retired lint path parsed, and no eslint config exists, but VER-TESTS-PASS uses neither", resp.Environment.Message)
 	}
-	got := sarifIn(t, out, resp)
-	want := slices.Concat(eslintRecorded, tscRecorded)
-	sameResults(t, "only src/lint.ts changed; every ESLint finding in it and every tsc diagnostic in the unit, including src/typeerr.ts which did not change, must be reported", got, want)
-
-	e := callOf(t, r.data, "eslint")
-	if i := slices.Index(e.args, "--format"); i < 0 || i+1 >= len(e.args) || e.args[i+1] != "json" || e.cwd != r.top {
-		t.Fatalf("eslint call %+v; the converter reads --format json, run from the unit so the repository's config applies", e)
+	if _, ok := resp.ToolVersions["typescript"]; ok {
+		t.Fatalf("tool_versions %v records typescript; only the tools the objective ran belong there", resp.ToolVersions)
 	}
-	if !slices.Equal(e.files(), []string{filepath.Join(r.top, "src", "lint.ts")}) {
-		t.Fatalf("eslint files %q, want only the selected src/lint.ts", e.files())
+	junitIn(t, out, resp)
+	if !callOf(t, r.data, "vitest").invoked {
+		t.Fatal("vitest did not run for a changed source")
 	}
-	if c := callOf(t, r.data, "tsc"); !slices.Equal(c.args, []string{"--noEmit", "-p", filepath.Join(r.top, "tsconfig.json"), "--pretty", "false"}) || c.cwd != r.top {
-		t.Fatalf("tsc call %+v; the parser reads --pretty false lines, and tsc must check the unit's own tsconfig.json without writing output", c)
-	}
-}
-
-var (
-	eslintRecorded = []ev.Result{
-		{RuleID: "@typescript-eslint/no-explicit-any", Level: "error", Message: "Unexpected any. Specify a different type.", URI: "src/lint.ts"},
-		{RuleID: "@typescript-eslint/no-unused-vars", Level: "error", Message: "'unused' is assigned a value but never used.", URI: "src/lint.ts"},
-	}
-	eslintFatalRecorded = []ev.Result{{RuleID: "parse", Level: "error", Message: "Parsing error: Variable declaration expected.", URI: "src/syntax.ts"}}
-	tscRecorded         = []ev.Result{
-		{RuleID: "TS2307", Level: "error", Message: "Cannot find module './nope' or its corresponding type declarations.", URI: "src/broken.test.ts"},
-		{RuleID: "TS2322", Level: "error", Message: "Type 'string' is not assignable to type 'number'.", URI: "src/multi.ts"},
-		{RuleID: "TS2322", Level: "error", Message: "Type 'number' is not assignable to type 'string'.", URI: "src/multi.ts"},
-		{RuleID: "TS2322", Level: "error", Message: "Type 'string' is not assignable to type 'number'.", URI: "src/typeerr.ts"},
-	}
-	tscSyntaxRecorded = []ev.Result{{RuleID: "TS1134", Level: "error", Message: "Variable declaration expected.", URI: "src/syntax.ts"}}
-	tscGlobalRecorded = []ev.Result{{RuleID: "TS5058", Level: "error", Message: "The specified path does not exist: 'nope.json'."}}
-)
-
-func TestRunLintFollowsToolExitCodes(t *testing.T) {
-	r := newRepo(t, nil, map[string]map[string]string{".": {"eslint": "10.12.0", "typescript": "6.0.3"}})
-	writeTree(t, r.top, map[string]string{"src/lint.ts": "changed"})
-	eslintOuts := map[string][]ev.Result{"eslint.json": eslintRecorded, "eslint-fatal.json": eslintFatalRecorded, "": nil}
-	tscOuts := map[string][]ev.Result{"tsc.txt": tscRecorded, "tsc-syntax.txt": tscSyntaxRecorded, "tsc-global.txt": tscGlobalRecorded, "": nil}
-	rapid.Check(t, func(t *rapid.T) {
-		eName := rapid.SampledFrom(slices.Sorted(maps.Keys(eslintOuts))).Draw(t, "eslintOutput")
-		eCode := rapid.IntRange(0, 2).Draw(t, "eslintExit")
-		tName := rapid.SampledFrom(slices.Sorted(maps.Keys(tscOuts))).Draw(t, "tscOutput")
-		tCode := rapid.IntRange(0, 2).Draw(t, "tscExit")
-		eOut, tOut := "Oops! Something went wrong!", "Segmentation fault"
-		if eName != "" {
-			eOut = recorded(t, eName, r.unreal)
-		}
-		if tName != "" {
-			tOut = recorded(t, tName, r.unreal)
-		}
-		replay(t, r.data, "eslint", replayed{stdout: eOut, stderr: "eslint stderr", code: eCode})
-		replay(t, r.data, "tsc", replayed{stdout: tOut, code: tCode})
-		out, err := os.MkdirTemp(r.data, "out-*")
-		if err != nil {
-			t.Fatalf("%v", err)
-		}
-		got := sarifIn(t, out, runIn(t, "CODE-ZERO-WARNINGS", out))
-
-		var want []ev.Result
-		if eCode == 2 || eName == "" {
-			want = append(want, ev.Result{RuleID: "eslint", Level: "error"})
-		} else {
-			want = append(want, eslintOuts[eName]...)
-		}
-		want = append(want, tscOuts[tName]...)
-		if tName == "" && tCode != 0 {
-			want = append(want, ev.Result{RuleID: "tsc", Level: "error"})
-		}
-		if len(got) != len(want) {
-			t.Fatalf("eslint %q exit %d, tsc %q exit %d: got %+v\nwant %+v; ESLint exit 2 or unreadable output, and tsc failing with no diagnostic, must each be an error result rather than a clean pass", eName, eCode, tName, tCode, got, want)
-		}
-		for i := range want {
-			if want[i].RuleID == "eslint" || want[i].RuleID == "tsc" {
-				got[i].Message = ""
-			}
-			if got[i] != want[i] {
-				t.Fatalf("result %d = %+v, want %+v", i, got[i], want[i])
-			}
-		}
-	})
-}
-
-func TestRunLintNeedsTsconfigAndESLintConfig(t *testing.T) {
-	isolateGit(t)
-	fakeNodeOnPath(t)
-	base := realTempDir(t)
-	t.Chdir(base)
-	rapid.Check(t, func(t *rapid.T) {
-		top, err := os.MkdirTemp(base, "repo-*")
-		if err != nil {
-			t.Fatalf("%v", err)
-		}
-		data := filepath.Join(top, ".data")
-		files := map[string]string{
-			".gitignore":                     "node_modules\n.data\n",
-			"packages/api/package.json":      "{}",
-			"packages/api/package-lock.json": "{}",
-			"packages/api/src/a.ts":          "",
-		}
-		hasTsconfig := rapid.Bool().Draw(t, "tsconfig")
-		if hasTsconfig {
-			files["packages/api/tsconfig.json"] = "{}"
-		}
-		where := rapid.SampledFrom([]string{"none", "packages/api/", "packages/", ""}).Draw(t, "eslintConfigDir")
-		if where != "none" {
-			files[where+"eslint.config."+rapid.SampledFrom(specConfigExts).Draw(t, "ext")] = ""
-		}
-		buildRepo(t, top, data, files, map[string]map[string]string{"packages/api": {"eslint": "10.12.0", "typescript": "6.0.3"}})
-		writeTree(t, top, map[string]string{"packages/api/src/a.ts": "changed"})
-		replay(t, filepath.Join(data, "packages", "api"), "eslint", replayed{stdout: "[]"})
-		replay(t, filepath.Join(data, "packages", "api"), "tsc", replayed{})
-		out := filepath.Join(top, ".data", "out")
-		if err := os.Chdir(top); err != nil {
-			t.Fatalf("%v", err)
-		}
-		resp := runIn(t, "CODE-ZERO-WARNINGS", out)
-
-		switch {
-		case !hasTsconfig:
-			if resp.Environment == nil {
-				t.Fatalf("no environment without packages/api/tsconfig.json; tsc --noEmit has no project to check, so a pass would be unchecked")
-			}
-			mustMention(t, resp.Environment.Message, top, "packages/api/tsconfig.json")
-		case where == "none":
-			if resp.Environment == nil {
-				t.Fatalf("no environment without an eslint.config.*; ESLint would run with no rules and pass everything")
-			}
-			mustMention(t, resp.Environment.Message, top, "packages/api", "eslint.config")
-		default:
-			if resp.Environment != nil {
-				t.Fatalf("environment %q with tsconfig.json present and eslint config in %q; ESLint finds flat config in the unit or any parent", resp.Environment.Message, where)
-			}
-			if rs := sarifIn(t, out, resp); len(rs) != 0 {
-				t.Fatalf("results %+v from clean tool output", rs)
-			}
-			return
-		}
-		if len(resp.Evidence) != 0 || exists(filepath.Join(out, "lint.sarif")) {
-			t.Fatalf("environment response with evidence %+v; an environment problem writes no evidence", resp.Evidence)
-		}
-		if callOf(t, filepath.Join(data, "packages", "api"), "eslint").invoked || callOf(t, filepath.Join(data, "packages", "api"), "tsc").invoked {
-			t.Fatal("a lint tool ran although the unit's configuration was missing")
-		}
-	})
 }
 
 func TestRunEnvironmentWritesNoEvidence(t *testing.T) {
@@ -620,22 +452,16 @@ func TestRunEnvironmentWritesNoEvidence(t *testing.T) {
 			}
 			t.Setenv("PATH", bin)
 		}, []string{"node", "PATH"}},
-		{"node missing for lint", "CODE-ZERO-WARNINGS", func(t *testing.T, _ tsRepo) { t.Setenv("PATH", t.TempDir()) }, []string{"node", "PATH"}},
 		{"vitest missing", "VER-TESTS-PASS", func(t *testing.T, r tsRepo) {
 			if err := os.RemoveAll(filepath.Join(r.top, "node_modules", "vitest")); err != nil {
 				t.Fatal(err)
 			}
 		}, []string{"vitest", "npm ci"}},
-		{"typescript missing", "CODE-ZERO-WARNINGS", func(t *testing.T, r tsRepo) {
-			if err := os.RemoveAll(filepath.Join(r.top, "node_modules", "typescript")); err != nil {
-				t.Fatal(err)
-			}
-		}, []string{"typescript", "npm ci"}},
 		{"plug'n'play", "VER-TESTS-PASS", func(t *testing.T, r tsRepo) { writeTree(t, r.top, map[string]string{".pnp.cjs": ""}) }, []string{".pnp.cjs", "unsupported"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4", "eslint": "10.12.0", "typescript": "6.0.3"}})
+			r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4"}})
 			writeTree(t, r.top, map[string]string{"src/parse.ts": "changed"})
 			tc.setup(t, r)
 			out := t.TempDir()
@@ -647,7 +473,7 @@ func TestRunEnvironmentWritesNoEvidence(t *testing.T) {
 			if entries, _ := os.ReadDir(out); len(resp.Evidence) != 0 || len(entries) != 0 {
 				t.Fatalf("%s: evidence %+v, files %v; an environment response writes no evidence", tc.name, resp.Evidence, entries)
 			}
-			for _, bin := range []string{"vitest", "eslint", "tsc"} {
+			for _, bin := range []string{"vitest"} {
 				if callOf(t, r.data, bin).invoked {
 					t.Fatalf("%s: %s ran; the adapter must resolve and check before running any tool", tc.name, bin)
 				}

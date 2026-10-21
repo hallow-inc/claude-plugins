@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	golangciDefaultInstall = `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.15.0`
+	gremlinsKey            = "go:github.com/go-gremlins/gremlins/cmd/gremlins"
 	gremlinsDefaultInstall = "go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0"
+	gremlinsMiseInstall    = "mise install " + gremlinsKey + "@0.6.0"
 )
 
 func narrowPath(t *testing.T, real []string, stubs map[string]string) {
@@ -38,6 +39,31 @@ func narrowPath(t *testing.T, real []string, stubs map[string]string) {
 	t.Setenv("PATH", bin)
 }
 
+func gremlinsStubs(t *testing.T, version string) map[string]string {
+	t.Helper()
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return map[string]string{
+		"go": `if [ "$1" = version ] && [ "$2" = -m ]; then printf '\tmod\tgithub.com/go-gremlins/gremlins\tv` + version + `\th1:x\n'; exit 0; fi
+exec '` + goBin + `' "$@"
+`,
+		"gremlins": "echo \"gremlins ran: $*\" >&2; exit 9\n",
+	}
+}
+
+func withStubs(a, b map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		out[k] = v
+	}
+	return out
+}
+
 func miseStub(t *testing.T, root string, ls map[string][]miseEntry) string {
 	t.Helper()
 	data, err := json.Marshal(ls)
@@ -52,6 +78,10 @@ printf '%s\n' '` + string(data) + `'
 
 func pinEntry(pin, file string) []miseEntry {
 	return []miseEntry{{Version: pin, RequestedVersion: pin, Source: miseSource{Type: "mise.toml", Path: file}}}
+}
+
+func gremlinsPinConfig(pin string) string {
+	return "[tools]\n\"" + gremlinsKey + "\" = \"" + pin + "\"\n"
 }
 
 func toolsIn(t *testing.T, root string) toolsResponse {
@@ -106,7 +136,7 @@ func untrackedConfigWithoutMise(t *testing.T, root, config string) {
 	if resp.Environment == nil || len(resp.Tools) != 0 {
 		t.Fatalf("untracked %s, no mise: tools = %+v; mise still reads an untracked config, so falling back to the compiled default would resolve a different version than the developer pinned", config, resp)
 	}
-	for _, m := range []string{"install mise", config, "golangci-lint", "gremlins"} {
+	for _, m := range []string{"install mise", config, "gremlins"} {
 		if !strings.Contains(resp.Environment.Message, m) {
 			t.Errorf("untracked %s: environment %q does not mention %q", config, resp.Environment.Message, m)
 		}
@@ -128,34 +158,41 @@ func environmentIn(t *testing.T, resp runResponse, out string, mention ...string
 	}
 }
 
-func TestToolsReadsTrackedAncestorPinAndDefaultsTheRest(t *testing.T) {
-	top := committedModule(t, map[string]string{"mise.toml": "[tools]\ngolangci-lint = \"2.13.2\"\n", "mod/a.go": "package a\n"})
+func TestToolsReadsTrackedAncestorPin(t *testing.T) {
+	top := committedModule(t, map[string]string{"mise.toml": gremlinsPinConfig("0.6.0"), "mod/a.go": "package a\n"})
 	root := filepath.Join(top, "mod")
-	narrowPath(t, []string{"git"}, map[string]string{
-		"mise":          miseStub(t, root, map[string][]miseEntry{"golangci-lint": pinEntry("2.13.2", filepath.Join(top, "mise.toml"))}),
-		"golangci-lint": "echo 2.14.0\n",
-	})
-	want := []toolEntry{
-		{Name: "golangci-lint", Version: "2.13.2", PinnedBy: "mise.toml", Install: "mise install golangci-lint@2.13.2"},
-		{Name: "gremlins", Version: "0.6.0", PinnedBy: "default", Install: gremlinsDefaultInstall},
-	}
+	narrowPath(t, []string{"git"}, withStubs(gremlinsStubs(t, "0.6.1"), map[string]string{
+		"mise": miseStub(t, root, map[string][]miseEntry{gremlinsKey: pinEntry("0.6.0", filepath.Join(top, "mise.toml"))}),
+	}))
+	want := []toolEntry{{Name: "gremlins", Version: "0.6.0", PinnedBy: "mise.toml", Install: gremlinsMiseInstall}}
 	resp, raw := toolsRawIn(t, root)
 	if resp.Environment != nil || !reflect.DeepEqual(resp.Tools, want) {
-		t.Fatalf("tools = %+v env %+v, want %+v; pinned_by is relative to the git top-level, so a pin above the manifest directory still names its file, and the installed 2.14.0 is not tools' concern", resp.Tools, resp.Environment, want)
+		t.Fatalf("tools = %+v env %+v, want %+v; pinned_by is relative to the git top-level, so a pin above the manifest directory still names its file, and the installed 0.6.1 is not tools' concern", resp.Tools, resp.Environment, want)
 	}
 	if u := toolsUntracked(t, raw); len(u) != 0 {
-		t.Fatalf("tools entries carry untracked %v for a tracked pin and a default; absent means tracked, and a spurious mark fails the objective under authority: ci", u)
+		t.Fatalf("tools entries carry untracked %v for a tracked pin; absent means tracked, and a spurious mark fails the objective under authority: ci", u)
+	}
+}
+
+func TestToolsForAPartialPinListsOnlyTheDefaultGremlins(t *testing.T) {
+	dir := committedModule(t, map[string]string{"mise.toml": "[tools]\nnode = \"22.1.0\"\n"})
+	narrowPath(t, []string{"git"}, map[string]string{
+		"mise": miseStub(t, dir, map[string][]miseEntry{"node": pinEntry("22.1.0", filepath.Join(dir, "mise.toml"))}),
+	})
+	want := []toolEntry{{Name: "gremlins", Version: "0.6.0", PinnedBy: "default", Install: gremlinsDefaultInstall}}
+	if resp := toolsIn(t, dir); resp.Environment != nil || !reflect.DeepEqual(resp.Tools, want) {
+		t.Fatalf("tools = %+v env %+v, want %+v; gremlins is the adapter's one pinned tool, and a mise file that pins other tools leaves it at the default", resp.Tools, resp.Environment, want)
 	}
 }
 
 func TestTrackedPinCarriesNoUntrackedInRun(t *testing.T) {
-	dir := committedModule(t, map[string]string{"mise.toml": "[tools]\ngolangci-lint = \"2.13.2\"\n", "a/a.go": "package a\n"})
-	narrowPath(t, []string{"git", "go"}, map[string]string{
-		"mise":          miseStub(t, dir, map[string][]miseEntry{"golangci-lint": pinEntry("2.13.2", filepath.Join(dir, "mise.toml"))}),
-		"golangci-lint": `[ "$*" = "version --short" ] || { echo "linted: $*" >&2; exit 9; }` + "\necho 2.13.2\n",
-	})
-	resp, raw, stderr, code := runRawIn(t, dir, "run", "CODE-ZERO-WARNINGS", "--changed-from", "HEAD", "--out", filepath.Join(t.TempDir(), "ev"))
-	if code != 0 || resp.Environment != nil || resp.PinnedBy["golangci-lint"] != "mise.toml" {
+	dir := committedModule(t, map[string]string{"mise.toml": gremlinsPinConfig("0.6.0"), "a/a.go": "package a\n", "README.md": "x\n"})
+	writeFiles(t, dir, map[string]string{"README.md": "y\n"})
+	narrowPath(t, []string{"git"}, withStubs(gremlinsStubs(t, "0.6.0"), map[string]string{
+		"mise": miseStub(t, dir, map[string][]miseEntry{gremlinsKey: pinEntry("0.6.0", filepath.Join(dir, "mise.toml"))}),
+	}))
+	resp, raw, stderr, code := runRawIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", filepath.Join(t.TempDir(), "ev"))
+	if code != 0 || resp.Environment != nil || resp.PinnedBy["gremlins"] != "mise.toml" {
 		t.Fatalf("exit %d %s, response %+v; a tracked exact pin resolves", code, stderr, resp)
 	}
 	if u, ok := runUntracked(t, raw); ok {
@@ -164,43 +201,39 @@ func TestTrackedPinCarriesNoUntrackedInRun(t *testing.T) {
 }
 
 func TestUntrackedMiseOverrideResolvesMarkedUntracked(t *testing.T) {
-	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
-	writeFiles(t, dir, map[string]string{"mise.local.toml": "[tools]\ngolangci-lint = \"2.13.2\"\n"})
-	narrowPath(t, []string{"git", "go"}, map[string]string{
-		"mise":          miseStub(t, dir, map[string][]miseEntry{"golangci-lint": pinEntry("2.13.2", filepath.Join(dir, "mise.local.toml"))}),
-		"golangci-lint": `[ "$*" = "version --short" ] || { echo "linted: $*" >&2; exit 9; }` + "\necho 2.13.2\n",
-	})
+	dir := committedModule(t, map[string]string{"a/a.go": "package a\n", "README.md": "x\n"})
+	writeFiles(t, dir, map[string]string{"mise.local.toml": gremlinsPinConfig("0.6.0"), "README.md": "y\n"})
+	narrowPath(t, []string{"git"}, withStubs(gremlinsStubs(t, "0.6.0"), map[string]string{
+		"mise": miseStub(t, dir, map[string][]miseEntry{gremlinsKey: pinEntry("0.6.0", filepath.Join(dir, "mise.local.toml"))}),
+	}))
 	resp, raw := toolsRawIn(t, dir)
-	want := []toolEntry{
-		{Name: "golangci-lint", Version: "2.13.2", PinnedBy: "mise.local.toml", Install: "mise install golangci-lint@2.13.2"},
-		{Name: "gremlins", Version: "0.6.0", PinnedBy: "default", Install: gremlinsDefaultInstall},
-	}
+	want := []toolEntry{{Name: "gremlins", Version: "0.6.0", PinnedBy: "mise.local.toml", Install: gremlinsMiseInstall}}
 	if resp.Environment != nil || !reflect.DeepEqual(resp.Tools, want) {
 		t.Fatalf("tools = %+v env %+v, want %+v; without authority: ci the developer's untracked pin is honoured and reported, not refused", resp.Tools, resp.Environment, want)
 	}
-	if u := toolsUntracked(t, raw); !reflect.DeepEqual(u, map[string]string{"golangci-lint": "true"}) {
-		t.Fatalf("tools untracked marks = %v, want only golangci-lint: true; the evaluator fails exactly the marked pins under authority: ci, so the default-pinned gremlins must stay unmarked\n%s", u, raw)
+	if u := toolsUntracked(t, raw); !reflect.DeepEqual(u, map[string]string{"gremlins": "true"}) {
+		t.Fatalf("tools untracked marks = %v, want gremlins: true; the evaluator fails exactly the marked pins under authority: ci\n%s", u, raw)
 	}
-	r, rawRun, stderr, code := runRawIn(t, dir, "run", "CODE-ZERO-WARNINGS", "--changed-from", "HEAD", "--out", filepath.Join(t.TempDir(), "ev"))
-	if code != 0 || r.Environment != nil || r.ToolVersions["golangci-lint"] != "2.13.2" || r.PinnedBy["golangci-lint"] != "mise.local.toml" {
+	r, rawRun, stderr, code := runRawIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", filepath.Join(t.TempDir(), "ev"))
+	if code != 0 || r.Environment != nil || r.ToolVersions["gremlins"] != "0.6.0" || r.PinnedBy["gremlins"] != "mise.local.toml" {
 		t.Fatalf("exit %d %s, response %+v; the run resolves the untracked pin and records where it came from", code, stderr, r)
 	}
-	if u, ok := runUntracked(t, rawRun); !ok || !reflect.DeepEqual(u, []string{"golangci-lint"}) {
-		t.Fatalf("run untracked = %v (present %v), want [golangci-lint]; the evaluator cannot tell an untracked pin from a tracked one without it\n%s", u, ok, rawRun)
+	if u, ok := runUntracked(t, rawRun); !ok || !reflect.DeepEqual(u, []string{"gremlins"}) {
+		t.Fatalf("run untracked = %v (present %v), want [gremlins]; the evaluator cannot tell an untracked pin from a tracked one without it\n%s", u, ok, rawRun)
 	}
 }
 
 func TestUntrackedLoosePinStillFails(t *testing.T) {
 	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
-	writeFiles(t, dir, map[string]string{"mise.local.toml": "[tools]\ngolangci-lint = \"latest\"\n"})
+	writeFiles(t, dir, map[string]string{"mise.local.toml": gremlinsPinConfig("latest")})
 	narrowPath(t, []string{"git"}, map[string]string{
-		"mise": miseStub(t, dir, map[string][]miseEntry{"golangci-lint": pinEntry("latest", filepath.Join(dir, "mise.local.toml"))}),
+		"mise": miseStub(t, dir, map[string][]miseEntry{gremlinsKey: pinEntry("latest", filepath.Join(dir, "mise.local.toml"))}),
 	})
 	resp := toolsIn(t, dir)
 	if resp.Environment == nil || len(resp.Tools) != 0 {
 		t.Fatalf("tools = %+v; an untracked pin is honoured, but latest still resolves differently on each run", resp)
 	}
-	for _, m := range []string{"mise.local.toml", "golangci-lint", `"latest"`} {
+	for _, m := range []string{"mise.local.toml", "gremlins", `"latest"`} {
 		if !strings.Contains(resp.Environment.Message, m) {
 			t.Errorf("environment %q does not mention %q", resp.Environment.Message, m)
 		}
@@ -229,7 +262,7 @@ func TestMiseConfigWithoutMiseFails(t *testing.T) {
 		if resp.Environment == nil || len(resp.Tools) != 0 {
 			t.Fatalf("%s tracked in an ancestor, no mise: tools = %+v; without mise the adapter cannot read the pins CI reads, so it must not guess the default", name, resp)
 		}
-		for _, m := range []string{"install mise", name, "golangci-lint", "gremlins"} {
+		for _, m := range []string{"install mise", name, "gremlins"} {
 			if !strings.Contains(resp.Environment.Message, m) {
 				t.Errorf("%s: environment %q does not mention %q", name, resp.Environment.Message, m)
 			}
@@ -242,15 +275,25 @@ func TestMiseConfigWithoutMiseFails(t *testing.T) {
 func TestFoundVersionMustEqualPin(t *testing.T) {
 	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
 	writeFiles(t, dir, map[string]string{"a/a.go": "package a\n\nvar X = 1\n"})
-	narrowPath(t, []string{"git", "go"}, map[string]string{
-		"golangci-lint": `[ "$*" = "version --short" ] || { echo "linted: $*" >&2; exit 9; }` + "\necho 2.14.0\n",
-	})
+	narrowPath(t, []string{"git"}, gremlinsStubs(t, "0.6.1"))
 	out := filepath.Join(t.TempDir(), "ev")
-	resp, stderr, code := runIn(t, dir, "run", "CODE-ZERO-WARNINGS", "--changed-from", "HEAD", "--out", out)
+	resp, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", out)
 	if code != 0 {
 		t.Fatalf("exit %d: %s; a wrong installed version is an environment problem, not an adapter error", code, stderr)
 	}
-	environmentIn(t, resp, out, "golangci-lint", "2.14.0", "2.15.0", "default", golangciDefaultInstall)
+	environmentIn(t, resp, out, "gremlins", "0.6.1", "0.6.0", "default", gremlinsDefaultInstall)
+}
+
+func TestGremlinsMissingIsEnvironment(t *testing.T) {
+	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
+	writeFiles(t, dir, map[string]string{"a/a.go": "package a\n\nvar X = 1\n"})
+	narrowPath(t, []string{"go", "git"}, nil)
+	out := filepath.Join(t.TempDir(), "ev")
+	resp, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", out)
+	if code != 0 {
+		t.Fatalf("exit %d: %s; a missing tool is the environment's fault and must reach the evaluator as a failing objective, not an adapter crash", code, stderr)
+	}
+	environmentIn(t, resp, out, "gremlins", gremlinsDefaultInstall)
 }
 
 func TestUnusedToolNotChecked(t *testing.T) {
@@ -267,15 +310,15 @@ func TestUnusedToolNotChecked(t *testing.T) {
 }
 
 func TestToolsLoosePinExitsZeroWithEnvironment(t *testing.T) {
-	dir := committedModule(t, map[string]string{"mise.toml": "[tools]\ngolangci-lint = \"latest\"\n"})
+	dir := committedModule(t, map[string]string{"mise.toml": gremlinsPinConfig("latest")})
 	narrowPath(t, []string{"git"}, map[string]string{
-		"mise": miseStub(t, dir, map[string][]miseEntry{"golangci-lint": pinEntry("latest", filepath.Join(dir, "mise.toml"))}),
+		"mise": miseStub(t, dir, map[string][]miseEntry{gremlinsKey: pinEntry("latest", filepath.Join(dir, "mise.toml"))}),
 	})
 	resp := toolsIn(t, dir)
 	if resp.Environment == nil || len(resp.Tools) != 0 {
 		t.Fatalf("tools = %+v; latest resolves differently on each machine", resp)
 	}
-	for _, m := range []string{"mise.toml", "golangci-lint", `"latest"`, `"golangci-lint" = "2.15.0"`} {
+	for _, m := range []string{"mise.toml", "gremlins", `"latest"`, `"` + gremlinsKey + `" = "0.6.0"`} {
 		if !strings.Contains(resp.Environment.Message, m) {
 			t.Errorf("environment %q does not mention %q", resp.Environment.Message, m)
 		}

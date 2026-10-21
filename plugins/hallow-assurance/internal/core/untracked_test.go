@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	pinTools   = []string{"golangci-lint", "gremlins", "vitest", "eslint"}
+	pinTools   = []string{"gremlins", "vitest", "@stryker-mutator/core", "fast-check"}
 	pinOrigins = []string{"mise.local.toml", "package-lock.json", "mise.toml", "default"}
 )
 

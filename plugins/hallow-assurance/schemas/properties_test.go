@@ -358,7 +358,7 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 		claims = append(claims, pathGen.Draw(t, "claim"))
 		r.bad("/claims", idx(i), badPath...)
 	}
-	doc := map[string]any{"protocol": 1, "languages": la, "claims": claims, "patterns": patterns, "objectives": objectives}
+	doc := map[string]any{"protocol": 2, "languages": la, "claims": claims, "patterns": patterns, "objectives": objectives}
 	if rapid.Bool().Draw(t, "hasref") {
 		doc["reference"] = rapid.SampledFrom(langs).Draw(t, "ref")
 	}
@@ -367,7 +367,7 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 	r.closed("")
 	r.required("", "protocol", "languages", "claims", "patterns", "objectives")
 	r.bad("", "claims", "x", []any{})
-	r.bad("", "protocol", badProtocolV1...)
+	r.bad("", "protocol", badProtocolV2...)
 	r.bad("", "languages", "x", []any{}, []any{langs[0], langs[0]})
 	r.bad("", "patterns", "x", map[string]any{"source": []any{}}, map[string]any{"test": "x"}, map[string]any{"test": []any{"/abs"}})
 	r.bad("", "objectives", "x", map[string]any{"ver-x": map[string]any{"tool": "t"}}, map[string]any{"VER-X": "x"},
@@ -434,7 +434,7 @@ var runGen = rapid.Custom(func(t *rapid.T) sample {
 	if u := untrackedOf(t, doc["pinned_by"].(map[string]any)); u != nil {
 		doc["untracked"] = u
 	}
-	r.bad("", "untracked", "x", []any{}, []any{"golangci-lint", "golangci-lint"}, []any{7}, []any{""})
+	r.bad("", "untracked", "x", []any{}, []any{"gremlins", "gremlins"}, []any{7}, []any{""})
 	r.root("x", []any{})
 	r.closed("")
 	r.required("", "protocol", "evidence", "tool_versions", "pinned_by")
@@ -445,10 +445,7 @@ var runGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
-var (
-	badProtocolV1 = []any{0, 2, "1"}
-	badProtocolV2 = []any{0, 1, 3, "2"}
-)
+var badProtocolV2 = []any{0, 1, 3, "2"}
 
 func untrackedOf(t *rapid.T, pins map[string]any) []any {
 	if len(pins) == 0 || !rapid.Bool().Draw(t, "has untracked") {
@@ -615,23 +612,6 @@ var shaGen = rapid.OneOf(rapid.StringMatching(`[0-9a-f]{40}`), rapid.StringMatch
 
 var badSHA = []any{"7330276", strings.Repeat("A", 40), strings.Repeat("a", 41), 7}
 
-func baselineEntry(t *rapid.T, r *rec, p string) map[string]any {
-	r.closed(p)
-	r.required(p, "objective", "rule", "path", "message", "count")
-	r.bad(p, "objective", badObjID...)
-	r.bad(p, "rule", badText...)
-	r.bad(p, "path", badPath...)
-	r.bad(p, "message", 7)
-	r.bad(p, "count", 0, 1.5, "1")
-	return map[string]any{
-		"objective": objIDGen.Draw(t, "obj"),
-		"rule":      textGen.Draw(t, "rule"),
-		"path":      pathGen.Draw(t, "path"),
-		"message":   rapid.StringMatching(`[A-Za-z ]{0,20}`).Draw(t, "msg"),
-		"count":     rapid.IntRange(1, 5).Draw(t, "count"),
-	}
-}
-
 func waiverEntry(t *rapid.T, r *rec, p string) map[string]any {
 	r.closed(p)
 	r.bad(p, "expires", "2026-02-30")
@@ -643,22 +623,6 @@ func waiverEntry(t *rapid.T, r *rec, p string) map[string]any {
 		"expires":   "2026-12-31",
 	}
 }
-
-var baselineGen = rapid.Custom(func(t *rapid.T) sample {
-	r := &rec{}
-	entries := []any{}
-	for i := range rapid.IntRange(0, 3).Draw(t, "n") {
-		entries = append(entries, baselineEntry(t, r, "/entries/"+idx(i)))
-		r.bad("/entries", idx(i), "x")
-	}
-	doc := map[string]any{"version": 0, "entries": entries}
-	r.root("x", []any{})
-	r.closed("")
-	r.required("", "version", "entries")
-	r.bad("", "version", 1, "0")
-	r.bad("", "entries", "x", map[string]any{})
-	return sample{doc, r.cs}
-})
 
 var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
@@ -684,14 +648,6 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	for i := range rapid.IntRange(0, 2).Draw(t, "ne") {
 		expired = append(expired, waiverEntry(t, r, "/expired_waivers/"+idx(i)))
 	}
-	removable := []any{}
-	for i := range rapid.IntRange(0, 2).Draw(t, "nr") {
-		p := "/removable_baseline/" + idx(i)
-		removable = append(removable, map[string]any{"entry": baselineEntry(t, r, p+"/entry"), "unused": rapid.IntRange(1, 3).Draw(t, "unused")})
-		r.closed(p)
-		r.required(p, "entry", "unused")
-		r.bad(p, "unused", 0, 1.5, "1")
-	}
 	objs := []any{}
 	for i := range rapid.IntRange(0, 3).Draw(t, "no") {
 		p := "/objectives/" + idx(i)
@@ -700,46 +656,45 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 			ws = append(ws, waiverEntry(t, r, p+"/waivers/"+idx(j)))
 		}
 		o := map[string]any{
-			"objective":       objIDGen.Draw(t, "oid"),
-			"status":          rapid.SampledFrom([]string{"pass", "fail", "advisory-fail", "waived"}).Draw(t, "status"),
-			"details":         []any{textGen.Draw(t, "detail")},
-			"waivers":         ws,
-			"baselined":       rapid.IntRange(0, 5).Draw(t, "bl"),
-			"under_threshold": rapid.IntRange(0, 5).Draw(t, "ut"),
+			"objective": objIDGen.Draw(t, "oid"),
+			"status":    rapid.SampledFrom([]string{"pass", "fail", "advisory-fail", "waived"}).Draw(t, "status"),
+			"details":   []any{textGen.Draw(t, "detail")},
+			"waivers":   ws,
 		}
 		if rapid.Bool().Draw(t, "haslang") {
 			o["language"] = langGen.Draw(t, "lang")
 		}
 		objs = append(objs, o)
 		r.closed(p)
-		r.required(p, "objective", "status", "details", "waivers", "baselined", "under_threshold")
+		r.required(p, "objective", "status", "details", "waivers")
 		r.bad(p, "objective", badObjID...)
 		r.bad(p, "language", badLang...)
 		r.bad(p, "status", "skipped", 1)
 		r.bad(p, "details", "x", []any{7})
 		r.bad(p, "waivers", "x", []any{"x"})
-		r.bad(p, "baselined", -1, 1.5)
-		r.bad(p, "under_threshold", -1, 1.5)
+		for _, k := range []string{"baselined", "under_threshold"} {
+			r.add("objective entry carries a retired "+k+" count", p, op{at: p, key: k, val: 0})
+		}
 	}
 	doc := map[string]any{
-		"version":            0,
-		"commit":             shaGen.Draw(t, "commit"),
-		"changed_from":       map[string]any{"ref": textGen.Draw(t, "ref"), "sha": shaGen.Draw(t, "base")},
-		"date":               "2026-09-27",
-		"catalog":            "v" + strconv.Itoa(rapid.IntRange(0, 9).Draw(t, "cat")),
-		"authority":          rapid.SampledFrom([]string{"local", "ci"}).Draw(t, "authority"),
-		"untracked_pins":     untracked,
-		"changed_files":      rapid.IntRange(0, 50).Draw(t, "changed"),
-		"tool_versions":      tv,
-		"pinned_by":          pins,
-		"problems":           probs,
-		"expired_waivers":    expired,
-		"removable_baseline": removable,
-		"objectives":         objs,
+		"version":         0,
+		"commit":          shaGen.Draw(t, "commit"),
+		"changed_from":    map[string]any{"ref": textGen.Draw(t, "ref"), "sha": shaGen.Draw(t, "base")},
+		"date":            "2026-09-27",
+		"catalog":         "v" + strconv.Itoa(rapid.IntRange(0, 9).Draw(t, "cat")),
+		"authority":       rapid.SampledFrom([]string{"local", "ci"}).Draw(t, "authority"),
+		"untracked_pins":  untracked,
+		"changed_files":   rapid.IntRange(0, 50).Draw(t, "changed"),
+		"tool_versions":   tv,
+		"pinned_by":       pins,
+		"problems":        probs,
+		"expired_waivers": expired,
+		"objectives":      objs,
 	}
 	r.root("x", []any{})
 	r.closed("")
-	r.required("", "version", "commit", "changed_from", "date", "catalog", "authority", "untracked_pins", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "removable_baseline", "objectives")
+	r.add("report carries a retired removable_baseline list", "", op{key: "removable_baseline", val: []any{}})
+	r.required("", "version", "commit", "changed_from", "date", "catalog", "authority", "untracked_pins", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "objectives")
 	r.bad("", "authority", "team", "", 1)
 	r.bad("", "untracked_pins", "x", []any{})
 	r.bad("", "version", 1, "0")
@@ -756,13 +711,11 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "pinned_by", "x")
 	r.bad("", "problems", "x")
 	r.bad("", "expired_waivers", "x", []any{"x"})
-	r.bad("", "removable_baseline", "x", []any{"x"})
 	r.bad("", "objectives", "x", []any{"x"})
 	return sample{doc, r.cs}
 })
 
 var generators = map[Kind]*rapid.Generator[sample]{
-	Baseline:        baselineGen,
 	Report:          reportGen,
 	Snapshot:        snapshotGen,
 	StopState:       stopStateGen,

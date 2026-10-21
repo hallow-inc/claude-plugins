@@ -32,11 +32,9 @@ const (
 	AdapterClassify Kind = "adapter-classify"
 	AdapterRun      Kind = "adapter-run"
 	AdapterTools    Kind = "adapter-tools"
-	AdapterLint     Kind = "adapter-lint"
 	AdapterCache    Kind = "adapter-cache"
 	Snapshot        Kind = "snapshot"
 	StopState       Kind = "stop-state"
-	Baseline        Kind = "baseline"
 	Report          Kind = "report"
 	MutationReport  Kind = "mutation-report"
 	Resolutions     Kind = "coverage-resolutions"
@@ -46,8 +44,6 @@ const (
 )
 
 const base = "https://assure.invalid/schemas/v0/"
-
-const sarifID = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json"
 
 const strykerID = "http://stryker-mutator.io/report.schema.json"
 
@@ -71,11 +67,9 @@ var kinds = map[Kind]struct {
 	AdapterClassify: {base + "adapter-classify.schema.json", jsonDoc},
 	AdapterRun:      {base + "adapter-run.schema.json", jsonDoc},
 	AdapterTools:    {base + "adapter-tools.schema.json", jsonDoc},
-	AdapterLint:     {sarifID, jsonDoc},
 	AdapterCache:    {base + "adapter-cache.schema.json", jsonDoc},
 	Snapshot:        {base + "snapshot.schema.json", jsonDoc},
 	StopState:       {base + "stop-state.schema.json", jsonDoc},
-	Baseline:        {base + "baseline.schema.json", jsonDoc},
 	Report:          {base + "report.schema.json", jsonDoc},
 	MutationReport:  {strykerID, jsonDoc},
 	Resolutions:     {base + "coverage-resolutions.schema.json", yamlDoc},

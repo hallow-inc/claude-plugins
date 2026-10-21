@@ -124,20 +124,32 @@ func TestUnknownCatalogVersion(t *testing.T) {
 	}
 }
 
-func TestStarterCatalogKeepsComplexityThreshold(t *testing.T) {
+func TestStarterCatalogKeepsMutationThreshold(t *testing.T) {
 	c, err := LoadCatalog("v0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, o := range c.Objectives {
-		if o.ID == "CODE-COMPLEXITY" {
-			if got := o.Threshold["B"]; got != 15 {
-				t.Fatalf("CODE-COMPLEXITY threshold at B = %v, want 15; without it every function counts as a finding", got)
+		if o.ID == "VER-MUTATION-CHANGED" {
+			if got := o.Threshold["B"]; got != 65 {
+				t.Fatalf("VER-MUTATION-CHANGED threshold at B = %v, want 65; without it a single surviving mutant fails the level", got)
 			}
 			return
 		}
 	}
-	t.Fatal("CODE-COMPLEXITY missing from catalog v0")
+	t.Fatal("VER-MUTATION-CHANGED missing from catalog v0")
+}
+
+func TestStarterCatalogHasNoCodeShapeObjectives(t *testing.T) {
+	c, err := LoadCatalog("v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range c.Objectives {
+		if strings.HasPrefix(o.ID, "CODE-") || o.Evidence == "lint.sarif" {
+			t.Errorf("v0 contains %s (evidence %s); hallow-assurance judges behaviour evidence, and a repo's own lint owns code shape", o.ID, o.Evidence)
+		}
+	}
 }
 
 func TestStarterCatalogRestrictsFailOnBaseToFixes(t *testing.T) {

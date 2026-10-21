@@ -38,11 +38,6 @@ type runner func(root, ref, out string, sel map[string][]string, versions map[st
 
 var runners = map[string]runner{
 	"VER-TESTS-PASS":          runTests,
-	"CODE-ZERO-WARNINGS":      runLint,
-	"CODE-CHECK-RETURNS":      checkReturnsPack.run,
-	"CODE-RESOURCE-BOUNDS":    resourceBoundsPack.run,
-	"CODE-COMPLEXITY":         runComplexity,
-	"CODE-NO-UNSAFE":          runNoUnsafe,
 	"VER-MUTATION-CHANGED":    runMutation,
 	"VER-FAIL-ON-BASE":        runFailOnBase,
 	"VER-ROBUST-FUZZ":         runFuzz,
@@ -268,96 +263,13 @@ func runTests(root, _, out string, sel map[string][]string, _ map[string]string)
 	return []evidence{{Type: "test.junit", Path: "junit.xml"}}, nil
 }
 
-func golangci(root, mod, tmp, config string, pkgs []string) ([]sarifResult, error) {
-	f, err := os.CreateTemp(tmp, "*.sarif")
-	if err != nil {
-		return nil, err
+func capText(b []byte) string {
+	s := strings.TrimSpace(string(b))
+	if len(s) > maxOutput {
+		s = s[:maxOutput]
 	}
-	sf := f.Name()
-	if err := f.Close(); err != nil {
-		return nil, err
+	if s == "" {
+		s = "no output"
 	}
-	args := []string{"run", "--allow-serial-runners", "--path-mode", "abs", "--max-issues-per-linter", "0", "--max-same-issues", "0", "--output.sarif.path", sf, "--output.text.path", "stderr"}
-	if config != "" {
-		args = append(args, "--config", config)
-	}
-	_, stderr, code, err := runTool(filepath.Join(root, mod), "golangci-lint", append(args, pkgs...)...)
-	if err != nil {
-		return nil, err
-	}
-	return lintResults(root, mod, sf, stderr, code == 0 || code == 1), nil
-}
-
-func writeSARIF(out string, runs ...sarifRun) ([]evidence, error) {
-	data, err := json.Marshal(sarifLog{Version: "2.1.0", Runs: runs})
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join(out, "lint.sarif"), data, 0o644); err != nil {
-		return nil, err
-	}
-	return []evidence{{Type: "lint.sarif", Path: "lint.sarif"}}, nil
-}
-
-func runLint(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
-	vet, lint := newRun("go vet"), newRun("golangci-lint")
-	tmp, err := os.MkdirTemp("", "assure-lint-*")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = os.RemoveAll(tmp) }()
-	for _, mod := range modules(sel) {
-		_, stderr, code, err := runTool(filepath.Join(root, mod), "go", append([]string{"vet"}, sel[mod]...)...)
-		if err != nil {
-			return nil, err
-		}
-		vet.Results = append(vet.Results, vetResults(root, mod, stderr, code != 0)...)
-		rs, err := golangci(root, mod, tmp, "", sel[mod])
-		if err != nil {
-			return nil, err
-		}
-		lint.Results = append(lint.Results, rs...)
-	}
-	return writeSARIF(out, vet, lint)
-}
-
-type pack struct {
-	name   string
-	config string
-}
-
-var checkReturnsPack = pack{"check-returns/v1", `version: "2"
-linters:
-  default: none
-  enable: [errcheck]
-`}
-
-var resourceBoundsPack = pack{"resource-bounds/v1", `version: "2"
-linters:
-  default: none
-  enable: [bodyclose, noctx, gosec]
-  settings:
-    gosec:
-      includes: [G110, G112, G114]
-`}
-
-func (p pack) run(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
-	config := filepath.Join(out, "golangci.yml")
-	if err := os.WriteFile(config, []byte(p.config), 0o644); err != nil {
-		return nil, err
-	}
-	tmp, err := os.MkdirTemp("", "assure-pack-*")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = os.RemoveAll(tmp) }()
-	r := newRun("golangci-lint " + p.name)
-	for _, mod := range modules(sel) {
-		rs, err := golangci(root, mod, tmp, config, sel[mod])
-		if err != nil {
-			return nil, err
-		}
-		r.Results = append(r.Results, rs...)
-	}
-	return writeSARIF(out, r)
+	return s
 }

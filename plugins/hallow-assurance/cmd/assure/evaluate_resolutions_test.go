@@ -26,7 +26,7 @@ const resolutionsYAML = `- {path: p/p.go, function: Fresh, resolution: missing-t
 
 func inputsRepo(t *testing.T) repo {
 	t.Helper()
-	path := toolPath(t, "go", "golangci-lint")
+	path := toolPath(t, "go")
 	r := newRepo(t, inputsManifest)
 	t.Setenv("PATH", path)
 	r.write(".gitignore", ".assure/state/\n")

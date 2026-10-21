@@ -1,4 +1,4 @@
 {"version": 0, "commit": "7330276aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "changed_from": {"ref": "upstream/main", "sha": "2a1c38cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, "date": "2026-10-17", "catalog": "v0", "authority": "local",
- "untracked_pins": {"go": ["golangci-lint", "gremlins"]},
- "changed_files": 2, "tool_versions": {"go": {"go": "go1.27.1", "golangci-lint": "2.13.2", "gremlins": "0.6.0"}}, "pinned_by": {"go": {"golangci-lint": "mise.local.toml", "gremlins": "mise.local.toml"}},
- "problems": [], "expired_waivers": [], "removable_baseline": [], "objectives": []}
+ "untracked_pins": {"go": ["gremlins"]},
+ "changed_files": 2, "tool_versions": {"go": {"go": "go1.27.1", "gremlins": "0.6.0"}}, "pinned_by": {"go": {"gremlins": "mise.local.toml"}},
+ "problems": [], "expired_waivers": [], "objectives": []}

@@ -32,7 +32,7 @@ func toolPath(t *testing.T, tools ...string) string {
 
 func goRepo(t *testing.T) repo {
 	t.Helper()
-	path := toolPath(t, "go", "golangci-lint")
+	path := toolPath(t, "go")
 	r := newRepo(t, levelB)
 	t.Setenv("PATH", path)
 	r.write(".gitignore", ".assure/state/\n")
@@ -81,8 +81,17 @@ func TestCheckCleanChangePasses(t *testing.T) {
 	r := goRepo(t)
 	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
 	code, stdout, stderr := assure("check", "--fast")
-	if code != 0 || !strings.Contains(stdout, "pass\tVER-TESTS-PASS\tgo") || !strings.Contains(stdout, "pass\tCODE-ZERO-WARNINGS\tgo") || strings.Contains(stdout, "CODE-COMPLEXITY") {
+	if code != 0 {
 		t.Fatalf("got %d\n%s\n%s", code, stdout, stderr)
+	}
+	var ran []string
+	for _, line := range strings.Split(stdout, "\n") {
+		if f := strings.Split(line, "\t"); len(f) == 3 && (f[0] == "pass" || f[0] == "fail" || f[0] == "advisory-fail") {
+			ran = append(ran, f[1]+" "+f[2])
+		}
+	}
+	if len(ran) != 1 || ran[0] != "VER-TESTS-PASS go" {
+		t.Fatalf("fast check decided %q, want only VER-TESTS-PASS for go: the Stop hook judges behaviour evidence, not code shape\n%s", ran, stdout)
 	}
 }
 

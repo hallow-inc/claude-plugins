@@ -93,7 +93,10 @@ func TestCacheFromOlderProtocolIsRefreshed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	old := strings.Replace(goodDescribe, `"protocol":1`, `"protocol":0`, 1)
+	old := strings.Replace(goodDescribe, `"protocol":2`, `"protocol":1`, 1)
+	if old == goodDescribe {
+		t.Fatal("goodDescribe no longer carries protocol 2, so this test would cache a current entry")
+	}
 	if err := os.MkdirAll(filepath.Join(root, ".assure/state"), 0o755); err != nil {
 		t.Fatal(err)
 	}

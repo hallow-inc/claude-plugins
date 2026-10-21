@@ -42,7 +42,7 @@ func ruleWaivers(t *rapid.T, id string) []Waiver {
 }
 
 func decideWith(o Objective, changed []ChangedFile, ev Evidence, ws []Waiver) Outcome {
-	return DecideObjective(o, changed, ev, ws, nil, ruleDate)
+	return DecideObjective(o, changed, ev, ws, ruleDate)
 }
 
 func waiverMatches(ws []Waiver, path string) bool {

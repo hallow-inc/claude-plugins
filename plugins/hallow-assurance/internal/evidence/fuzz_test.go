@@ -102,18 +102,6 @@ func FuzzParseJUnit(f *testing.F) {
 	})
 }
 
-func FuzzParseSARIF(f *testing.F) {
-	addFixtures(f, schemaFixtures(schemas.AdapterLint)...)
-	f.Fuzz(func(t *testing.T, data []byte) {
-		if _, err := ParseSARIF(data); err != nil {
-			return
-		}
-		if vs, err := schemas.Validate(schemas.AdapterLint, data); err != nil || len(vs) > 0 {
-			t.Fatalf("reader accepted bytes the schema rejects: %v %v\n%q", vs, err, data)
-		}
-	})
-}
-
 func FuzzParseMutationReport(f *testing.F) {
 	addFixtures(f, schemaFixtures(schemas.MutationReport)...)
 	f.Add(repeatedKeyReport)

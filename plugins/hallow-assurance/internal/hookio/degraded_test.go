@@ -26,7 +26,7 @@ func retryAdapter(t *testing.T, mode string) {
 	}
 	script := `#!/bin/sh
 case "$1" in
-describe) printf '%s' '{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true}}}' ;;
+describe) printf '%s' '{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true}}}' ;;
 run) ` + run + ` ;;
 *) echo "assure-adapter-xx: unexpected $*" >&2; exit 1 ;;
 esac

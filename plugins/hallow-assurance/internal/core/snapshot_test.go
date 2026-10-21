@@ -16,7 +16,7 @@ import (
 var snapshotPool = map[string]bool{
 	"assurance.yaml":              true,
 	".assure/waivers.yaml":        true,
-	".assure/baseline/lint.json":  true,
+	".assure/coverage/r.yaml":     true,
 	".assure/state/adapters.json": false,
 	"secret/a.txt":                true,
 	"secret/deep/b.txt":           true,

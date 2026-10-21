@@ -16,7 +16,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-const goodDescribe = `{"protocol":1,"languages":["go"],"claims":["**/*.go"],"patterns":{"test":["**/*_test.go"]},"objectives":{}}`
+const goodDescribe = `{"protocol":2,"languages":["go"],"claims":["**/*.go"],"patterns":{"test":["**/*_test.go"]},"objectives":{}}`
 
 func fakeAdapter(t *testing.T, lang, script string) string {
 	t.Helper()
@@ -34,7 +34,7 @@ func TestDescribeFailureModesNameTheAdapter(t *testing.T) {
 		"non-zero exit":     {"echo adapter-broke >&2; exit 1", "stderr: adapter-broke"},
 		"invalid JSON":      {"echo '{not json'", "invalid JSON"},
 		"two documents":     {"echo '" + goodDescribe + goodDescribe + "'", "trailing data"},
-		"schema violation":  {`echo '{"protocol": 1}'`, "violates the protocol"},
+		"schema violation":  {`echo '{"protocol": 2}'`, "violates the protocol"},
 		"wrong language":    {`echo '` + strings.Replace(goodDescribe, `["go"]`, `["rust"]`, 1) + `'`, `does not include "go"`},
 		"foreign reference": {`echo '` + strings.Replace(goodDescribe, `"objectives":{}`, `"objectives":{},"reference":"typescript"`, 1) + `'`, "/reference"},
 		"timeout":           {"exec sleep 10", "killed after timeout of 2s"},
@@ -51,6 +51,21 @@ func TestDescribeFailureModesNameTheAdapter(t *testing.T) {
 				t.Fatalf("error %q does not mention %q", err, c.want)
 			}
 		})
+	}
+}
+
+func TestOldDescribeProtocolIsRejectedNamingBothNumbers(t *testing.T) {
+	old := `{"protocol":1,"languages":["go"],"claims":["**/*.go"],"patterns":{},"objectives":{"VER-TESTS-PASS":{"tool":"go test","fast":true},"CODE-ZERO-WARNINGS":{"tool":"golangci-lint","fast":true}}}`
+	exe := fakeAdapter(t, "go", `echo '`+old+`'`)
+	d, _, err := RunDescribe(exe, t.TempDir(), "go")
+	var ae *Error
+	if !errors.As(err, &ae) || ae.Adapter != "assure-adapter-go" || ae.Sub != "describe" {
+		t.Fatalf("got %+v, %v; a protocol-1 describe comes from an adapter built before CODE-* left the catalog and would mark them fast, so it must be refused naming assure-adapter-go describe", d, err)
+	}
+	for _, want := range []string{"received protocol 1", "expected 2", "same release"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q lacks %q; the user must learn that assure and the adapter are from different releases, not that the adapter is broken", err, want)
+		}
 	}
 }
 

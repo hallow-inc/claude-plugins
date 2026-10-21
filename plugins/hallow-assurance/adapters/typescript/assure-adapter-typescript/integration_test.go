@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -34,7 +33,7 @@ var (
 // concurrent or interrupted install from leaving a half-filled cache.
 func installedModules(t *testing.T) string {
 	if os.Getenv(integrationVar) != "1" {
-		t.Skipf("set %s=1 to run vitest, eslint and tsc for real (needs node and npm on PATH and network for npm ci)", integrationVar)
+		t.Skipf("set %s=1 to run vitest, Stryker and fast-check for real (needs node and npm on PATH and network for npm ci)", integrationVar)
 	}
 	npmOnce.Do(func() { npmModules, npmErr = npmCI() })
 	if npmErr != nil {
@@ -84,7 +83,6 @@ func npmCI() (string, error) {
 var realUnitFiles = map[string]string{
 	".gitignore":        "node_modules\n",
 	"tsconfig.json":     `{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "target": "es2022", "noEmit": true, "types": [] }, "include": ["src"] }`,
-	"eslint.config.js":  "import tseslint from \"typescript-eslint\";\nexport default tseslint.config(tseslint.configs.recommended);\n",
 	"src/parse.ts":      "export function parse(s: string): number {\n  return Number(s);\n}\n",
 	"src/cli.ts":        "import { parse } from \"./parse\";\n\nexport function cli(s: string): number {\n  const n: number = parse(s);\n  return n + 1;\n}\n",
 	"src/cli.test.ts":   "import { describe, it, expect } from \"vitest\";\nimport { cli } from \"./cli\";\n\ndescribe(\"cli\", () => {\n  it(\"adds one\", () => {\n    expect(cli(\"1\")).toBe(2);\n  });\n});\n",
@@ -162,21 +160,5 @@ func TestIntegrationImportErrorIsTestError(t *testing.T) {
 	}
 	if len(errored) != 1 || !strings.Contains(errored[0].Text, "./nope") {
 		t.Fatalf("erroring cases for src/broken.test.ts: %+v (all failing: %+v); a test file that cannot load must be one erroring case carrying vitest's message, or VER-TESTS-PASS passes a file that never ran", errored, j.Failing)
-	}
-}
-
-func TestIntegrationTypeErrorElsewhereReported(t *testing.T) {
-	top := realUnit(t)
-	writeTree(t, top, map[string]string{"src/parse.ts": "export function parse(s: string): string {\n  return s;\n}\n"})
-	out := t.TempDir()
-	resp := runIn(t, "CODE-ZERO-WARNINGS", out)
-	if want := map[string]string{"node": nodeVersion(t), "eslint": "10.12.0", "typescript": "6.0.3"}; !maps.Equal(resp.ToolVersions, want) {
-		t.Fatalf("tool_versions %v, want %v", resp.ToolVersions, want)
-	}
-	rs := sarifIn(t, out, resp)
-	if !slices.ContainsFunc(rs, func(r ev.Result) bool {
-		return r.URI == "src/cli.ts" && r.RuleID == "TS2322" && r.Level == "error"
-	}) {
-		t.Fatalf("results %+v; src/parse.ts changed its return type and the unchanged src/cli.ts no longer type-checks, so its TS2322 must be reported", rs)
 	}
 }

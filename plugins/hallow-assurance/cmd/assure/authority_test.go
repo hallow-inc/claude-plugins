@@ -95,7 +95,7 @@ func checkAuthority(t *testing.T, key string, excluded bool) {
 func untrackedPinRepo(t *testing.T, manifest string) repo {
 	t.Helper()
 	xx := passingXXResponses()
-	xx["CODE-ZERO-WARNINGS.json"] = `{"protocol":2,"evidence":[{"type":"lint.sarif","path":"ev"}],"tool_versions":{"go":"go1.26.7","golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.local.toml"},"untracked":["golangci-lint"]}`
+	xx["VER-MUTATION-CHANGED.json"] = mutationResponse("mise.local.toml", true)
 	return cannedXXRepo(t, manifest, xx)
 }
 
@@ -107,8 +107,8 @@ func TestEvaluateUntrackedPinFailsOnlyUnderCentralAuthority(t *testing.T) {
 			t.Fatalf("exit %d, want 1: a pin CI cannot see blocks a CI verdict\n%s%s", code, stdout, stderr)
 		}
 		rep, _ := readReport(t, r)
-		if e, ok := entry(rep, "CODE-ZERO-WARNINGS", "xx"); !ok || e.Status != "fail" || !detailWith(e, "golangci-lint", "mise.local.toml") {
-			t.Fatalf("CODE-ZERO-WARNINGS %+v; want fail with a detail naming the tool and its pin file", e)
+		if e, ok := entry(rep, "VER-MUTATION-CHANGED", "xx"); !ok || e.Status != "fail" || !detailWith(e, "gremlins", "mise.local.toml") {
+			t.Fatalf("VER-MUTATION-CHANGED %+v; want fail with a detail naming the tool and its pin file", e)
 		}
 		if e, _ := entry(rep, "VER-TESTS-PASS", "xx"); e.Status != "pass" {
 			t.Fatalf("VER-TESTS-PASS %+v; only the objective whose run marked the pin may fail", e)
@@ -121,17 +121,17 @@ func TestEvaluateUntrackedPinFailsOnlyUnderCentralAuthority(t *testing.T) {
 			t.Fatalf("exit 2:\n%s%s", stdout, stderr)
 		}
 		rep, _ := readReport(t, r)
-		if e, ok := entry(rep, "CODE-ZERO-WARNINGS", "xx"); !ok || e.Status != "pass" {
-			t.Fatalf("CODE-ZERO-WARNINGS %+v; an untracked pin must not change a local verdict", e)
+		if e, ok := entry(rep, "VER-MUTATION-CHANGED", "xx"); !ok || e.Status != "pass" {
+			t.Fatalf("VER-MUTATION-CHANGED %+v; every mutant was killed, and an untracked pin must not change a local verdict", e)
 		}
-		if rep.PinnedBy["xx"]["golangci-lint"] != "mise.local.toml" {
+		if rep.PinnedBy["xx"]["gremlins"] != "mise.local.toml" {
 			t.Fatalf("pinned_by %v", rep.PinnedBy)
 		}
-		if _, pins := reportAuthority(t, r); !slices.Equal(pins["xx"], []string{"golangci-lint"}) || len(pins) != 1 {
-			t.Fatalf("untracked_pins %v, want {xx: [golangci-lint]}", pins)
+		if _, pins := reportAuthority(t, r); !slices.Equal(pins["xx"], []string{"gremlins"}) || len(pins) != 1 {
+			t.Fatalf("untracked_pins %v, want {xx: [gremlins]}", pins)
 		}
-		if !hasLine(stdout, "golangci-lint", "untracked") {
-			t.Fatalf("summary does not list golangci-lint as untracked:\n%s", stdout)
+		if !hasLine(stdout, "gremlins", "untracked") {
+			t.Fatalf("summary does not list gremlins as untracked:\n%s", stdout)
 		}
 	})
 }

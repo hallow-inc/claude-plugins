@@ -21,18 +21,17 @@ func goldenReport() EvalReport {
 	sha := "7330276f12e1aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	var many []string
 	for i := range maxDetails + 2 {
-		many = append(many, fmt.Sprintf("internal/x%02d.go: noctx: use CommandContext", i))
+		many = append(many, fmt.Sprintf("internal/x%02d.go: fuzz target FuzzParse failed on its seed corpus", i))
 	}
 	w := core.Waiver{Objective: "IND-VERIFIER-DISTINCT", Scope: "**", Rationale: "provenance arrives in milestone M4", Approver: "owner", Expires: "2026-12-31"}
 	return EvalReport{
 		Commit: sha, ChangedFrom: ChangedFrom{Ref: "origin/master", SHA: sha}, Date: "2026-09-28", Catalog: "v0", ChangedFiles: 3,
-		Authority:         core.AuthorityCI,
-		ToolVersions:      map[string]map[string]string{"go": {"go": "go1.27.1"}},
-		ExpiredWaivers:    []core.Waiver{{Objective: "VER-FAIL-ON-BASE", Scope: "**", Rationale: "fail-on-base runner arrives in M3b", Approver: "owner", Expires: "2026-09-01"}},
-		RemovableBaseline: []RemovableEntry{{Entry: core.BaselineEntry{Objective: "CODE-RESOURCE-BOUNDS", Rule: "noctx", Path: "internal/app/check.go", Message: "use CommandContext", Count: 2}, Unused: 1}},
+		Authority:      core.AuthorityCI,
+		ToolVersions:   map[string]map[string]string{"go": {"go": "go1.27.1"}},
+		ExpiredWaivers: []core.Waiver{{Objective: "VER-FAIL-ON-BASE", Scope: "**", Rationale: "fail-on-base runner arrives in M3b", Approver: "owner", Expires: "2026-09-01"}},
 		Objectives: []Entry{
-			{Objective: "CODE-COMPLEXITY", Language: "go", Status: core.Pass, UnderThreshold: 40},
-			{Objective: "CODE-RESOURCE-BOUNDS", Language: "go", Status: core.Fail, Details: many},
+			{Objective: "VER-MUTATION-CHANGED", Language: "go", Status: core.Pass},
+			{Objective: "VER-ROBUST-FUZZ", Language: "go", Status: core.Fail, Details: many},
 			{Objective: "IND-VERIFIER-DISTINCT", Status: core.Waived, Details: []string{"waived: no adapter lists IND-VERIFIER-DISTINCT"}, Waivers: []core.Waiver{w}},
 			{Objective: "VER-TESTS-PASS", Language: "go", Status: core.Fail, Details: []string{"failing test: example.com/m/p.TestX: boom\np_test.go:9: boom"}},
 			{Objective: "FM-COMPLETE", Status: core.AdvisoryFail, Details: []string{"no adapter lists FM-COMPLETE"}},
@@ -77,7 +76,6 @@ func TestSummaryOmitsSectionsWithNothingToList(t *testing.T) {
 		rep := goldenReport()
 		rep.Objectives = rep.Objectives[:rapid.IntRange(0, len(rep.Objectives)).Draw(t, "objectives")]
 		rep.ExpiredWaivers = rep.ExpiredWaivers[:rapid.IntRange(0, len(rep.ExpiredWaivers)).Draw(t, "expired")]
-		rep.RemovableBaseline = rep.RemovableBaseline[:rapid.IntRange(0, len(rep.RemovableBaseline)).Draw(t, "removable")]
 		got := rep.Summary()
 		sections := []struct {
 			heading string
@@ -85,7 +83,6 @@ func TestSummaryOmitsSectionsWithNothingToList(t *testing.T) {
 		}{
 			{"| Objective | Language | Status |", len(rep.Objectives)},
 			{"### Expired waivers", len(rep.ExpiredWaivers)},
-			{"### Removable baseline entries", len(rep.RemovableBaseline)},
 		}
 		for _, s := range sections {
 			if present := strings.Contains(got, s.heading); present != (s.n > 0) {
@@ -146,7 +143,7 @@ func TestMarshalRefusesReportsThatViolateTheSchema(t *testing.T) {
 	})
 }
 
-var untrackedToolNames = []string{"golangci-lint", "gremlins", "vitest", "@stryker-mutator/core"}
+var untrackedToolNames = []string{"fast-check", "gremlins", "vitest", "@stryker-mutator/core"}
 
 func drawUntrackedPins(t *rapid.T) map[string][]string {
 	if rapid.Bool().Draw(t, "pins nil") {

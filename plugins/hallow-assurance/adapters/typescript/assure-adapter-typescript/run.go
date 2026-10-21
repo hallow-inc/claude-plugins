@@ -41,11 +41,6 @@ type runner func(c runContext) (ev []evidence, env string, err error)
 
 var runners = map[string]runner{
 	"VER-TESTS-PASS":          runTests,
-	"CODE-ZERO-WARNINGS":      runLint,
-	"CODE-CHECK-RETURNS":      checkReturnsPack.run,
-	"CODE-COMPLEXITY":         complexityPack.run,
-	"CODE-NO-UNSAFE":          noUnsafePack.run,
-	"CODE-RESOURCE-BOUNDS":    resourceBoundsPack.run,
 	"VER-MUTATION-CHANGED":    runMutation,
 	"VER-FAIL-ON-BASE":        runFailOnBase,
 	"VER-ROBUST-FUZZ":         runFuzz,
@@ -254,64 +249,4 @@ func runTests(c runContext) ([]evidence, string, error) {
 		return nil, "", err
 	}
 	return []evidence{{Type: "test.junit", Path: "junit.xml"}}, "", nil
-}
-
-var eslintConfigs = globsFor("eslint.config.%s", configExts)
-
-func hasESLintConfig(top, unit string) bool {
-	for _, name := range eslintConfigs {
-		if _, ok := findUp(top, unit, name); ok {
-			return true
-		}
-	}
-	return false
-}
-
-func lintEnvironment(top string, units []string) string {
-	for _, unit := range units {
-		if !exists(filepath.Join(unit, "tsconfig.json")) {
-			return fmt.Sprintf("%s is missing; CODE-ZERO-WARNINGS runs tsc --noEmit on each unit's tsconfig.json", relSlash(top, filepath.Join(unit, "tsconfig.json")))
-		}
-		if !hasESLintConfig(top, unit) {
-			return fmt.Sprintf("%s has no ESLint flat configuration (eslint.config.<ext>) in it or any parent up to the git top-level; CODE-ZERO-WARNINGS runs the repository's ESLint configuration", relSlash(top, unit))
-		}
-	}
-	return ""
-}
-
-func runLint(c runContext) ([]evidence, string, error) {
-	units := slices.Sorted(maps.Keys(c.sel))
-	if env := lintEnvironment(c.top, units); env != "" {
-		return nil, env, nil
-	}
-	eslint, tsc := newRun("eslint"), newRun("tsc")
-	for _, unit := range units {
-		name := relSlash(c.top, unit)
-		if files := c.sel[unit]; len(files) > 0 {
-			args := append([]string{"--format", "json", "--no-warn-ignored"}, absFiles(c.root, files)...)
-			stdout, stderr, code, err := runTool(unit, c.tools[unit]["eslint"].bin, args...)
-			if err != nil {
-				return nil, "", err
-			}
-			eslint.Results = append(eslint.Results, eslintResults(c.root, name, stdout, stderr, code == 0 || code == 1)...)
-		}
-		stdout, stderr, code, err := runTool(unit, c.tools[unit]["typescript"].bin, "--noEmit", "-p", filepath.Join(unit, "tsconfig.json"), "--pretty", "false")
-		if err != nil {
-			return nil, "", err
-		}
-		tsc.Results = append(tsc.Results, tscResults(c.root, unit, name, append(stdout, stderr...), code != 0)...)
-	}
-	ev, err := writeSARIF(c.out, eslint, tsc)
-	return ev, "", err
-}
-
-func writeSARIF(out string, runs ...sarifRun) ([]evidence, error) {
-	data, err := json.Marshal(sarifLog{Version: "2.1.0", Runs: runs})
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join(out, "lint.sarif"), data, 0o644); err != nil {
-		return nil, err
-	}
-	return []evidence{{Type: "lint.sarif", Path: "lint.sarif"}}, nil
 }

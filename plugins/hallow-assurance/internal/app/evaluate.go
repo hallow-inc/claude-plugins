@@ -26,19 +26,12 @@ type ChangedFrom struct {
 }
 
 type Entry struct {
-	Objective      string            `json:"objective"`
-	Language       string            `json:"language,omitempty"`
-	Status         core.Status       `json:"status"`
-	Details        []string          `json:"details"`
-	Waivers        []core.Waiver     `json:"waivers"`
-	Baselined      int               `json:"baselined"`
-	UnderThreshold int               `json:"under_threshold"`
-	Resolutions    []core.Resolution `json:"resolutions,omitempty"`
-}
-
-type RemovableEntry struct {
-	Entry  core.BaselineEntry `json:"entry"`
-	Unused int                `json:"unused"`
+	Objective   string            `json:"objective"`
+	Language    string            `json:"language,omitempty"`
+	Status      core.Status       `json:"status"`
+	Details     []string          `json:"details"`
+	Waivers     []core.Waiver     `json:"waivers"`
+	Resolutions []core.Resolution `json:"resolutions,omitempty"`
 }
 
 type EvalReport struct {
@@ -54,7 +47,6 @@ type EvalReport struct {
 	UntrackedPins        map[string][]string          `json:"untracked_pins"`
 	Problems             []string                     `json:"problems"`
 	ExpiredWaivers       []core.Waiver                `json:"expired_waivers"`
-	RemovableBaseline    []RemovableEntry             `json:"removable_baseline"`
 	RemovableResolutions []core.Resolution            `json:"removable_resolutions"`
 	Objectives           []Entry                      `json:"objectives"`
 }
@@ -74,7 +66,6 @@ func orEmpty[T any](s []T) []T {
 func (r EvalReport) Marshal() ([]byte, error) {
 	r.Problems = orEmpty(r.Problems)
 	r.ExpiredWaivers = orEmpty(r.ExpiredWaivers)
-	r.RemovableBaseline = orEmpty(r.RemovableBaseline)
 	r.RemovableResolutions = orEmpty(r.RemovableResolutions)
 	r.Objectives = slices.Clone(orEmpty(r.Objectives))
 	for i := range r.Objectives {
@@ -129,7 +120,6 @@ type evalResult struct {
 	entry Entry
 	ev    core.Evidence
 	run   adapterproto.Run
-	used  map[core.Fingerprint]int
 }
 
 func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
@@ -138,10 +128,6 @@ func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
 
 func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (EvalReport, error) {
 	ws, err := core.LoadWaivers(m.Root)
-	if err != nil {
-		return EvalReport{}, err
-	}
-	bl, err := core.LoadBaseline(m.Root)
 	if err != nil {
 		return EvalReport{}, err
 	}
@@ -191,26 +177,23 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 			ev, run := collect(m, j, ref, EvaluateTimeout)
 			decided := ev
 			decided.Problems = slices.Concat(ev.Problems, core.UntrackedPinProblems(m.Authority, run.Untracked, run.PinnedBy))
-			out := core.DecideObjective(j.obj, j.files, decided, ws, bl.For(j.obj.ID), date)
-			results[i] = evalResult{entry: entryOf(j.lang, out), ev: ev, run: run, used: out.BaselineUsed}
+			out := core.DecideObjective(j.obj, j.files, decided, ws, date)
+			results[i] = evalResult{entry: entryOf(j.lang, out), ev: ev, run: run}
 		})
 	}
 	wg.Wait()
-	used, ran := rep.fold(jobs, results)
+	rep.fold(jobs, results)
 	all := allChanged(m, changed, fix)
 	in := newBuiltinInputs(m.Root, base, withRoles(m, all, &rep), reviews != nil && reviews.Approved())
-	rep.decideUnlisted(m, rest, in, ws, bl, date)
+	rep.decideUnlisted(m, rest, in, ws, date)
 	slices.SortFunc(rep.Objectives, func(a, b Entry) int {
 		return cmp.Or(cmp.Compare(a.Objective, b.Objective), cmp.Compare(a.Language, b.Language))
 	})
-	for _, r := range bl.Removable(used, func(e core.BaselineEntry) bool { return ran[e.Objective][e.Path] }) {
-		rep.RemovableBaseline = append(rep.RemovableBaseline, RemovableEntry{Entry: r.Entry, Unused: r.Unused})
-	}
 	rep.RemovableResolutions = removableResolutions(m.Root, results, &rep)
 	return rep, nil
 }
 
-func (rep *EvalReport) decideUnlisted(m *core.Manifest, rest []core.Objective, in builtinInputs, ws []core.Waiver, bl core.Baseline, date string) {
+func (rep *EvalReport) decideUnlisted(m *core.Manifest, rest []core.Objective, in builtinInputs, ws []core.Waiver, date string) {
 	for _, o := range rest {
 		if o.Evidence == provenanceEvidence && !in.provenance {
 			continue
@@ -222,13 +205,11 @@ func (rep *EvalReport) decideUnlisted(m *core.Manifest, rest []core.Objective, i
 		case protectedEvidence:
 			ev = protectedEvidenceFor(m, in)
 		}
-		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, in.changed, ev, ws, bl.For(o.ID), date)))
+		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, in.changed, ev, ws, date)))
 	}
 }
 
-func (rep *EvalReport) fold(jobs []job, results []evalResult) (used map[core.Fingerprint]int, ran map[string]map[string]bool) {
-	used = map[core.Fingerprint]int{}
-	ran = map[string]map[string]bool{}
+func (rep *EvalReport) fold(jobs []job, results []evalResult) {
 	for i, res := range results {
 		rep.Objectives = append(rep.Objectives, res.entry)
 		mergeInto(rep.ToolVersions, jobs[i].lang, res.run.ToolVersions)
@@ -237,20 +218,7 @@ func (rep *EvalReport) fold(jobs []job, results []evalResult) (used map[core.Fin
 			lang := jobs[i].lang
 			rep.UntrackedPins[lang] = slices.Compact(slices.Sorted(slices.Values(slices.Concat(rep.UntrackedPins[lang], res.run.Untracked))))
 		}
-		for fp, n := range res.used {
-			used[fp] += n
-		}
-		if len(res.ev.Problems) > 0 {
-			continue
-		}
-		if ran[jobs[i].obj.ID] == nil {
-			ran[jobs[i].obj.ID] = map[string]bool{}
-		}
-		for _, f := range jobs[i].files {
-			ran[jobs[i].obj.ID][f.Path] = true
-		}
 	}
-	return used, ran
 }
 
 func mergeInto(dst map[string]map[string]string, lang string, src map[string]string) {
@@ -264,7 +232,7 @@ func mergeInto(dst map[string]map[string]string, lang string, src map[string]str
 }
 
 func entryOf(lang string, o core.Outcome) Entry {
-	return Entry{Objective: o.ID, Language: lang, Status: o.Status, Details: o.Details, Waivers: o.Waivers, Baselined: o.Baselined, UnderThreshold: o.UnderThreshold, Resolutions: o.Resolutions}
+	return Entry{Objective: o.ID, Language: lang, Status: o.Status, Details: o.Details, Waivers: o.Waivers, Resolutions: o.Resolutions}
 }
 
 func allChanged(m *core.Manifest, changed []string, fix bool) []core.ChangedFile {

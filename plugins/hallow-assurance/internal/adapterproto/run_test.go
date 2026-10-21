@@ -39,12 +39,12 @@ func TestRunObjectiveFailureModesNameTheAdapter(t *testing.T) {
 }
 
 func TestRunEnvironmentIsAResultNotAnError(t *testing.T) {
-	fakeAdapter(t, "go", `echo '{"protocol":2,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"golangci-lint is not on PATH"}}'`)
-	r, err := RunObjective(t.TempDir(), "go", "CODE-ZERO-WARNINGS", "main", "ev", 5*time.Second)
+	fakeAdapter(t, "go", `echo '{"protocol":2,"evidence":[],"tool_versions":{},"pinned_by":{},"environment":{"message":"gremlins is not on PATH"}}'`)
+	r, err := RunObjective(t.TempDir(), "go", "VER-MUTATION-CHANGED", "main", "ev", 5*time.Second)
 	if err != nil {
 		t.Fatalf("environment must reach check and evaluate as a typed result so they can classify it outside the agent's reach; got error %v", err)
 	}
-	if r.Environment == nil || r.Environment.Message != "golangci-lint is not on PATH" || len(r.Evidence) != 0 {
+	if r.Environment == nil || r.Environment.Message != "gremlins is not on PATH" || len(r.Evidence) != 0 {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -67,7 +67,7 @@ func TestProtocolMismatchNamesBothNumbersBeforeSchema(t *testing.T) {
 		want int64
 		call func() error
 	}{
-		"describe": {1, func() error { _, _, err := RunDescribe(exe, dir, "go"); return err }},
+		"describe": {2, func() error { _, _, err := RunDescribe(exe, dir, "go"); return err }},
 		"classify": {0, func() error { _, err := Classify(dir, "go", []string{"a.go"}); return err }},
 		"run": {2, func() error {
 			_, err := RunObjective(dir, "go", "VER-TESTS-PASS", "main", "ev", time.Minute)
@@ -95,7 +95,7 @@ func TestProtocolMismatchNamesBothNumbersBeforeSchema(t *testing.T) {
 
 var toolGen = rapid.Custom(func(rt *rapid.T) Tool {
 	return Tool{
-		Name:      rapid.SampledFrom([]string{"golangci-lint", "gremlins", "go", "x"}).Draw(rt, "name"),
+		Name:      rapid.SampledFrom([]string{"vitest", "gremlins", "go", "x"}).Draw(rt, "name"),
 		Version:   rapid.StringMatching(`[0-9]\.[0-9]{1,2}\.[0-9]`).Draw(rt, "version"),
 		PinnedBy:  rapid.SampledFrom([]string{"default", "mise.toml", ".tool-versions"}).Draw(rt, "pinned_by"),
 		Install:   rapid.StringMatching(`[a-z@./ -]{1,30}`).Draw(rt, "install"),

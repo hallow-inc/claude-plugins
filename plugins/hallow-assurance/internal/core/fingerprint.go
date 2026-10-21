@@ -27,13 +27,6 @@ func (ev Evidence) Keys() []string {
 	for _, f := range ev.Failing {
 		keys = append(keys, "test:"+f.Name)
 	}
-	for _, f := range ev.Findings {
-		if f.Located {
-			keys = append(keys, "finding:"+f.Path+":"+f.Rule)
-		} else {
-			keys = append(keys, "finding:"+f.Rule)
-		}
-	}
 	for _, m := range ev.Mutants {
 		switch classify(m.Status) {
 		case undetected:

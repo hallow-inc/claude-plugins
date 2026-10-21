@@ -124,6 +124,21 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 	if v["reference"] != "typescript" {
 		t.Fatalf("reference = %v; assure reference typescript cannot find this adapter's reference", v["reference"])
 	}
+	if v["protocol"] != float64(2) {
+		t.Fatalf("protocol = %v; describe must announce protocol 2 so an assure from before CODE-* left the catalog refuses it with the same-release error", v["protocol"])
+	}
+	var fast []string
+	for id, o := range v["objectives"].(map[string]any) {
+		if strings.HasPrefix(id, "CODE-") {
+			t.Errorf("describe lists %s; code-shape objectives left the catalog", id)
+		}
+		if o.(map[string]any)["fast"] == true {
+			fast = append(fast, id)
+		}
+	}
+	if !slices.Equal(fast, []string{"VER-TESTS-PASS"}) {
+		t.Fatalf("fast objectives %v; VER-TESTS-PASS is the whole Stop-path set", fast)
+	}
 	globs := v["claims"].([]any)
 	for _, g := range v["patterns"].(map[string]any) {
 		globs = append(globs, g.([]any)...)
@@ -132,6 +147,13 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 		if strings.Contains(g.(string), "{") {
 			t.Errorf("glob %q uses a brace; core globs match braces literally, so the pattern would never match", g)
 		}
+	}
+}
+
+func TestLintSubcommandIsGone(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"lint", "src"}, &out, &errb); code == 0 || out.Len() != 0 {
+		t.Fatalf("lint exited %d with stdout %q; the subcommand left the protocol with the CODE-* objectives and must fail as unknown", code, out.String())
 	}
 }
 

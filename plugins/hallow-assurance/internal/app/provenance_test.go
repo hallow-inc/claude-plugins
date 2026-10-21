@@ -34,7 +34,7 @@ func xxOnPath(t *testing.T) {
 	bin := t.TempDir()
 	script := `#!/bin/sh
 case "$1" in
-describe) printf '%s' '{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{}}' ;;
+describe) printf '%s' '{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{}}' ;;
 *) echo "assure-adapter-xx: unexpected $*" >&2; exit 1 ;;
 esac
 `
@@ -510,7 +510,7 @@ func decidesProvenanceOnlyWhenOn(t *rapid.T, m *core.Manifest, in builtinInputs,
 		}
 	}
 	var rep EvalReport
-	rep.decideUnlisted(m, builtin, in, nil, core.Baseline{}, "2026-10-01")
+	rep.decideUnlisted(m, builtin, in, nil, "2026-10-01")
 	got := map[string]bool{}
 	for _, e := range rep.Objectives {
 		got[e.Objective] = true

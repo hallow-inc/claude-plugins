@@ -87,7 +87,7 @@ func TestVersionWithoutBuildInfoIsDevel(t *testing.T) {
 
 func TestUnknownCommandFails(t *testing.T) {
 	known := map[string]bool{"help": true, "--help": true, "-h": true, "version": true, "--version": true, "guard": true, "context": true, "classify": true,
-		"check": true, "baseline": true, "evaluate": true, "hook": true, "record": true, "reference": true, "tools": true, "reviews": true}
+		"check": true, "evaluate": true, "hook": true, "record": true, "reference": true, "tools": true, "reviews": true}
 	rapid.Check(t, func(t *rapid.T) {
 		cmd := rapid.String().Filter(func(s string) bool { return !known[s] }).Draw(t, "cmd")
 		var out, errOut bytes.Buffer
@@ -98,6 +98,19 @@ func TestUnknownCommandFails(t *testing.T) {
 			t.Fatalf("stderr lacks diagnosis: %q", errOut.String())
 		}
 	})
+}
+
+func TestRetiredBaselineCommandIsUnknown(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run([]string{"baseline"}, &out, &errOut)
+	if code != 2 || !strings.Contains(errOut.String(), "unknown command") {
+		t.Fatalf("assure baseline: exit %d, stderr %q; the baseline ratcheted lint findings that no objective produces now, so the command is gone and must exit 2 as unknown", code, errOut.String())
+	}
+	var help bytes.Buffer
+	run([]string{"--help"}, &help, &help)
+	if strings.Contains(help.String(), "baseline") {
+		t.Fatalf("usage still offers baseline:\n%s", help.String())
+	}
 }
 
 func TestNoArgsFails(t *testing.T) {

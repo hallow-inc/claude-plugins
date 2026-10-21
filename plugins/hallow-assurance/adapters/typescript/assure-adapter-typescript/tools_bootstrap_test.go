@@ -49,7 +49,7 @@ func checkUntracked(t fataler, r toolsReply, untracked bool) {
 	}
 }
 
-// checkListing asserts the response lists all eight tools sorted by name,
+// checkListing asserts the response lists all five tools sorted by name,
 // each pinned by lock with npm ci, carrying exactly the versions in installed
 // and no version key at all for the rest, each marked untracked exactly when
 // the lockfile is.
@@ -62,7 +62,7 @@ func checkListing(t fataler, r toolsReply, lock string, installed map[string]str
 		want = append(want, toolEntry{Name: n, Version: installed[n], PinnedBy: lock, Install: "npm ci"})
 	}
 	if !slices.Equal(r.resp.Tools, want) {
-		t.Fatalf("got %+v\nwant %+v\nall eight tools sorted by name, with a version only where the package is installed", r.resp.Tools, want)
+		t.Fatalf("got %+v\nwant %+v\nall five tools sorted by name, with a version only where the package is installed", r.resp.Tools, want)
 	}
 	for i, e := range r.entries {
 		_, has := e["version"]
@@ -86,15 +86,15 @@ func TestToolsPartlyInstalled(t *testing.T) {
 
 func TestToolsInstalledOutOfRangeStillFails(t *testing.T) {
 	top := npmRepo(t)
-	installTool(t, top, "typescript", "7.0.2")
-	installBin(t, top, toolNamed(t, "typescript"))
+	installTool(t, top, "vitest", "6.0.0")
+	installBin(t, top, toolNamed(t, "vitest"))
 	r := toolsReplyOf(t, top)
 	if r.resp.Environment == nil || len(r.resp.Tools) != 0 {
-		t.Fatalf("got %+v; npm ci from the lockfile would reinstall typescript 7.0.2, so listing it as installable would let the script succeed and the next run fail", r.resp)
+		t.Fatalf("got %+v; npm ci from the lockfile would reinstall vitest 6.0.0, so listing it as installable would let the script succeed and the next run fail", r.resp)
 	}
-	mustMention(t, r.resp.Environment.Message, top, "typescript", "7.0.2", "5.0.0", "6.1.0")
-	if got := namedTools(r.resp.Environment.Message); !maps.Equal(got, map[string]bool{"typescript": true}) {
-		t.Fatalf("message %q names %v; only typescript fails to resolve, the seven not installed are fixed by npm ci", r.resp.Environment.Message, got)
+	mustMention(t, r.resp.Environment.Message, top, "vitest", "6.0.0", "5.0.0")
+	if got := namedTools(r.resp.Environment.Message); !maps.Equal(got, map[string]bool{"vitest": true}) {
+		t.Fatalf("message %q names %v; only vitest fails to resolve, the four not installed are fixed by npm ci", r.resp.Environment.Message, got)
 	}
 }
 

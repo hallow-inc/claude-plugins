@@ -15,10 +15,6 @@ components:
 node_modules
 -- base/tsconfig.json --
 { "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "target": "es2022", "noEmit": true, "types": [] }, "include": ["src"] }
--- base/eslint.config.js --
-import tseslint from "typescript-eslint";
-
-export default tseslint.config(tseslint.configs.recommended);
 -- base/vitest.config.ts --
 import { defineConfig } from "vitest/config";
 
@@ -47,11 +43,6 @@ test(src): cover double
 {
   "objectives": [
     {"objective": "CFG-PROTECTED", "status": "pass"},
-    {"objective": "CODE-CHECK-RETURNS", "language": "typescript", "status": "pass"},
-    {"objective": "CODE-COMPLEXITY", "language": "typescript", "status": "pass"},
-    {"objective": "CODE-NO-UNSAFE", "language": "typescript", "status": "pass"},
-    {"objective": "CODE-RESOURCE-BOUNDS", "language": "typescript", "status": "pass"},
-    {"objective": "CODE-ZERO-WARNINGS", "language": "typescript", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "pass"},
     {"objective": "VER-TESTS-PASS", "language": "typescript", "status": "fail", "locations": ["failing test: src/double.test.ts.double of 2 is 5"]}

@@ -23,7 +23,7 @@ const lastSrc = "package p\n\nfunc Last(xs []int) int {\n\treturn xs[len(xs)-2]\
 
 func fixRepo(t *testing.T, tools ...string) repo {
 	t.Helper()
-	path := toolPath(t, append([]string{"go", "golangci-lint"}, tools...)...)
+	path := toolPath(t, append([]string{"go"}, tools...)...)
 	r := newRepo(t, levelB)
 	t.Setenv("PATH", path)
 	r.write(".gitignore", ".assure/state/\n")

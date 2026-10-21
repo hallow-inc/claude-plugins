@@ -133,8 +133,7 @@ var specTools = map[string]struct {
 	def, lo, hi, belowLo, belowHi string
 	keys                          []string
 }{
-	"golangci-lint": {"2.15.0", "2.13.2", "3.0.0", "2.13.1", "2.99999999999999999999.99999999999999999999", []string{"golangci-lint", "aqua:golangci/golangci-lint"}},
-	"gremlins":      {"0.6.0", "0.6.0", "0.7.0", "0.5.99999999999999999999", "0.6.99999999999999999999", []string{"go:github.com/go-gremlins/gremlins/cmd/gremlins"}},
+	"gremlins": {"0.6.0", "0.6.0", "0.7.0", "0.5.99999999999999999999", "0.6.99999999999999999999", []string{"go:github.com/go-gremlins/gremlins/cmd/gremlins"}},
 }
 
 func TestSupportedRange(t *testing.T) {
@@ -172,7 +171,7 @@ const probeTop = "/work/repo"
 var (
 	inRepoFiles  = []string{"mise.toml", ".mise.toml", "sub/mise.toml", ".config/mise.toml", "mise.local.toml", ".tool-versions"}
 	outsideFiles = []string{"/home/u/.config/mise/config.toml", "/work/repo-other/mise.toml", "/work/mise.toml"}
-	probeKeys    = []string{"golangci-lint", "aqua:golangci/golangci-lint", "go:github.com/go-gremlins/gremlins/cmd/gremlins", "asdf:golangci-lint", "gremlins", "go", "go:github.com/go-gremlins/gremlins"}
+	probeKeys    = []string{"go:github.com/go-gremlins/gremlins/cmd/gremlins", "node", "aqua:go-gremlins/gremlins", "asdf:gremlins", "gremlins", "go", "go:github.com/go-gremlins/gremlins"}
 )
 
 var probeGen = rapid.Custom(func(t *rapid.T) probe {
@@ -209,7 +208,7 @@ var probeGen = rapid.Custom(func(t *rapid.T) probe {
 		f := rapid.SampledFrom(inRepoFiles).Draw(t, "plantFile")
 		p.tracked[f] = true
 		p.mise[rapid.SampledFrom(probeKeys[:3]).Draw(t, "plantKey")] = []miseEntry{{
-			RequestedVersion: rapid.SampledFrom([]string{"2.13.2", "v2.13.2", "2.14.0", "2.999.0", "0.6.0", "v0.6.3", "0.6.99"}).Draw(t, "plantPin"),
+			RequestedVersion: rapid.SampledFrom([]string{"0.5.9", "0.7.0", "v0.6.0", "2.13.2", "0.6.0", "v0.6.3", "0.6.99"}).Draw(t, "plantPin"),
 			Source:           miseSource{Type: "mise.toml", Path: probeTop + "/" + f},
 		}}
 	}
@@ -258,8 +257,7 @@ func expect(p probe, name string) expectation {
 	switch {
 	case len(cands) == 0:
 		return expectation{res: resolved{name: name, version: s.def, pinnedBy: "default", install: map[string]string{
-			"golangci-lint": `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.15.0`,
-			"gremlins":      "go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0",
+			"gremlins": "go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0",
 		}[name]}}
 	case len(cands) > 1:
 		var m []string
@@ -307,8 +305,7 @@ func TestResolveFollowsPinPrecedence(t *testing.T) {
 }
 
 var installTemplates = map[string]*regexp.Regexp{
-	"golangci-lint": regexp.MustCompile(`^(?:mise install (?:golangci-lint|aqua:golangci/golangci-lint)@([0-9]+\.[0-9]+\.[0-9]+)|curl -sSfL https://golangci-lint\.run/install\.sh \| sh -s -- -b "\$\(go env GOPATH\)/bin" v([0-9]+\.[0-9]+\.[0-9]+))$`),
-	"gremlins":      regexp.MustCompile(`^(?:mise install go:github\.com/go-gremlins/gremlins/cmd/gremlins@([0-9]+\.[0-9]+\.[0-9]+)|go install github\.com/go-gremlins/gremlins/cmd/gremlins@v([0-9]+\.[0-9]+\.[0-9]+))$`),
+	"gremlins": regexp.MustCompile(`^(?:mise install go:github\.com/go-gremlins/gremlins/cmd/gremlins@([0-9]+\.[0-9]+\.[0-9]+)|go install github\.com/go-gremlins/gremlins/cmd/gremlins@v([0-9]+\.[0-9]+\.[0-9]+))$`),
 }
 
 func TestInstallLinesCarryNoRepositoryText(t *testing.T) {

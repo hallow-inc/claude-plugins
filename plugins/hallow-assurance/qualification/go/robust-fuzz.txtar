@@ -44,11 +44,6 @@ feat(p): add First
 {
   "objectives": [
     {"objective": "CFG-PROTECTED", "status": "pass"},
-    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
-    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
-    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
-    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "pass"},
-    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["assure-adapter-go run: exit status 1; stderr: assure-adapter-go: run VER-MUTATION-CHANGED: gremlins unleash in "]},
     {"objective": "VER-ROBUST-FUZZ", "language": "go", "status": "fail", "locations": ["p/first.go: fuzz target p.FuzzFirst failed"]},

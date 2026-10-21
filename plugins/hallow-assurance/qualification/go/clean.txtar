@@ -101,11 +101,6 @@ fix(p): accept the digit 9
 {
   "objectives": [
     {"objective": "CFG-PROTECTED", "status": "pass"},
-    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "pass"},
-    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
-    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
-    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "pass"},
-    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
     {"objective": "VER-FAIL-ON-BASE", "language": "go", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},

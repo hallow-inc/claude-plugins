@@ -41,8 +41,8 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 	if err != nil || len(vs) > 0 {
 		t.Fatalf("describe invalid: %v %v", err, vs)
 	}
-	if v["protocol"] != float64(1) {
-		t.Fatalf("protocol = %v; describe must announce protocol 1 so an older assure refuses it with the same-release error", v["protocol"])
+	if v["protocol"] != float64(2) {
+		t.Fatalf("protocol = %v; describe must announce protocol 2 so an assure from before CODE-* left the catalog refuses it with the same-release error", v["protocol"])
 	}
 	if c := v["claims"].([]any); len(c) != 1 || c[0] != "**/*.go" {
 		t.Fatalf("claims = %v", c)
@@ -63,9 +63,19 @@ func TestDescribeConformsToProtocol(t *testing.T) {
 	}
 	slices.Sort(fast)
 	slices.Sort(slow)
-	if !slices.Equal(fast, []string{"CODE-ZERO-WARNINGS", "VER-TESTS-PASS"}) ||
-		!slices.Equal(slow, []string{"CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE", "CODE-RESOURCE-BOUNDS", "VER-COVERAGE-RESOLUTION", "VER-FAIL-ON-BASE", "VER-MUTATION-CHANGED", "VER-ROBUST-FUZZ"}) {
-		t.Fatalf("fast %v, slow %v; only cheap objectives may run on the Stop path (per-turn latency budget)", fast, slow)
+	if !slices.Equal(fast, []string{"VER-TESTS-PASS"}) ||
+		!slices.Equal(slow, []string{"VER-COVERAGE-RESOLUTION", "VER-FAIL-ON-BASE", "VER-MUTATION-CHANGED", "VER-ROBUST-FUZZ"}) {
+		t.Fatalf("fast %v, slow %v; VER-TESTS-PASS is the whole Stop-path set, and no CODE-* objective may be listed", fast, slow)
+	}
+}
+
+func TestLintSubcommandIsGone(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"lint", "./..."}, &out, &errb); code == 0 || out.Len() != 0 {
+		t.Fatalf("lint exited %d with stdout %q; the subcommand left the protocol with the CODE-* objectives and must fail as unknown", code, out.String())
+	}
+	if _, ok := runners["CODE-ZERO-WARNINGS"]; ok {
+		t.Fatal("run still has a CODE-ZERO-WARNINGS runner")
 	}
 }
 

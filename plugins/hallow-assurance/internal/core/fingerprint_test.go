@@ -20,13 +20,6 @@ func fpEvidence(t *rapid.T) Evidence {
 	for range rapid.IntRange(0, 3).Draw(t, "failing") {
 		ev.Failing = append(ev.Failing, TestFailure{Name: "T" + fpName.Draw(t, "test"), Text: fpText.Draw(t, "text")})
 	}
-	for range rapid.IntRange(0, 3).Draw(t, "findings") {
-		f := Finding{Rule: fpName.Draw(t, "rule"), Message: fpText.Draw(t, "msg"), Text: fpText.Draw(t, "ftext")}
-		if rapid.Bool().Draw(t, "located") {
-			f.Located, f.Path = true, fpName.Draw(t, "path")+".x"
-		}
-		ev.Findings = append(ev.Findings, f)
-	}
 	for range rapid.IntRange(0, 2).Draw(t, "mutants") {
 		ev.Mutants = append(ev.Mutants, Mutant{Path: fpName.Draw(t, "mpath"), Line: rapid.IntRange(1, 9).Draw(t, "line"),
 			Mutator: fpName.Draw(t, "mutator"), Status: rapid.SampledFrom([]string{"Survived", "NoCoverage", "Pending"}).Draw(t, "status")})
@@ -75,15 +68,11 @@ func rewordEvidence(t *rapid.T, ev Evidence) Evidence {
 	for _, f := range ev.Failing {
 		out.Failing = append(out.Failing, TestFailure{Name: f.Name, Text: fpText.Draw(t, "reworded text")})
 	}
-	for _, f := range ev.Findings {
-		f.Message, f.Text = fpText.Draw(t, "reworded msg"), fpText.Draw(t, "reworded ftext")
-		out.Findings = append(out.Findings, f)
-	}
 	for _, m := range ev.Mutants {
 		m.Line = rapid.IntRange(1, 9).Draw(t, "moved line")
 		out.Mutants = append(out.Mutants, m)
 	}
-	out.Problems, out.Failing, out.Findings, out.Mutants = perm(t, out.Problems, "p"), perm(t, out.Failing, "f"), perm(t, out.Findings, "g"), perm(t, out.Mutants, "m")
+	out.Problems, out.Failing, out.Mutants = perm(t, out.Problems, "p"), perm(t, out.Failing, "f"), perm(t, out.Mutants, "m")
 	return out
 }
 
@@ -112,7 +101,7 @@ func TestFingerprintTracksFailureIdentity(t *testing.T) {
 		in := fpInputGen(t)
 		before := in.fingerprint()
 		grown := fpInput{ids: slices.Clone(in.ids), evs: slices.Clone(in.evs), drifted: slices.Clone(in.drifted)}
-		what := rapid.SampledFrom([]string{"objective", "test", "finding", "drifted"}).Draw(t, "what")
+		what := rapid.SampledFrom([]string{"objective", "test", "mutant", "drifted"}).Draw(t, "what")
 		switch what {
 		case "objective":
 			grown.ids = append(grown.ids, "NEW")
@@ -128,7 +117,7 @@ func TestFingerprintTracksFailureIdentity(t *testing.T) {
 			if what == "test" {
 				ev.Failing = append(slices.Clone(ev.Failing), TestFailure{Name: "TNew"})
 			} else {
-				ev.Findings = append(slices.Clone(ev.Findings), Finding{Located: true, Path: "new.x", Rule: "r"})
+				ev.Mutants = append(slices.Clone(ev.Mutants), Mutant{Path: "new.x", Line: 1, Mutator: "m", Status: "Survived"})
 			}
 			grown.evs[i] = ev
 		}

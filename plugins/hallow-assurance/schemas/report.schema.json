@@ -4,7 +4,7 @@
   "title": "assure evaluate report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "commit", "changed_from", "date", "catalog", "changed_files", "authority", "tool_versions", "pinned_by", "untracked_pins", "problems", "expired_waivers", "removable_baseline", "objectives"],
+  "required": ["version", "commit", "changed_from", "date", "catalog", "changed_files", "authority", "tool_versions", "pinned_by", "untracked_pins", "problems", "expired_waivers", "objectives"],
   "properties": {
     "version": { "const": 0 },
     "commit": { "$ref": "#/$defs/sha" },
@@ -47,18 +47,6 @@
       "type": "array",
       "items": { "$ref": "waivers.schema.json#/items" }
     },
-    "removable_baseline": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["entry", "unused"],
-        "properties": {
-          "entry": { "$ref": "baseline.schema.json#/properties/entries/items" },
-          "unused": { "type": "integer", "minimum": 1 }
-        }
-      }
-    },
     "removable_resolutions": {
       "type": "array",
       "items": { "$ref": "coverage-resolutions.schema.json#/items" }
@@ -68,15 +56,13 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["objective", "status", "details", "waivers", "baselined", "under_threshold"],
+        "required": ["objective", "status", "details", "waivers"],
         "properties": {
           "objective": { "$ref": "common.schema.json#/$defs/objectiveId" },
           "language": { "$ref": "common.schema.json#/$defs/languageId" },
           "status": { "enum": ["pass", "fail", "advisory-fail", "waived"] },
           "details": { "type": "array", "items": { "type": "string" } },
           "waivers": { "type": "array", "items": { "$ref": "waivers.schema.json#/items" } },
-          "baselined": { "type": "integer", "minimum": 0 },
-          "under_threshold": { "type": "integer", "minimum": 0 },
           "resolutions": { "type": "array", "items": { "$ref": "coverage-resolutions.schema.json#/items" } }
         }
       }

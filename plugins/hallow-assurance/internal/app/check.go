@@ -180,10 +180,6 @@ func check(m *core.Manifest, ref, label string, keep func(string, adapterproto.O
 	if err != nil {
 		rep.Results = append(rep.Results, problem("-", "waivers", err))
 	}
-	bl, err := core.LoadBaseline(m.Root)
-	if err != nil {
-		rep.Results = append(rep.Results, problem("-", "baseline", err))
-	}
 	date := time.Now().UTC().Format(time.DateOnly)
 	jobs, bad := plan(m, descs, changed, filepath.Join(m.Root, EvidenceDir, label), keep)
 	rep.Results = append(rep.Results, bad...)
@@ -192,7 +188,7 @@ func check(m *core.Manifest, ref, label string, keep func(string, adapterproto.O
 	for i, j := range jobs {
 		wg.Go(func() {
 			ev, _ := collect(m, j, ref, RunTimeout)
-			results[i] = Result{Lang: j.lang, Outcome: core.DecideObjective(j.obj, j.files, ev, ws, bl.For(j.obj.ID), date), Errs: ev.Errs, Keys: ev.Keys()}
+			results[i] = Result{Lang: j.lang, Outcome: core.DecideObjective(j.obj, j.files, ev, ws, date), Errs: ev.Errs, Keys: ev.Keys()}
 		})
 	}
 	wg.Wait()
@@ -284,23 +280,6 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 		}
 		for _, f := range j.Failing {
 			ev.Failing = append(ev.Failing, core.TestFailure{Name: f.Name, Text: failingText(f)})
-		}
-	case "lint.sarif":
-		results, err := evidence.ParseSARIF(data)
-		if err != nil {
-			ev.Problems = append(ev.Problems, err.Error())
-			return
-		}
-		for _, r := range results {
-			f := core.Finding{Path: r.URI, Rule: r.RuleID, Message: r.Message, Metric: r.Metric, HasMetric: r.HasMetric, Text: fmt.Sprintf("%s: %s: %s", r.URI, r.RuleID, r.Message)}
-			if r.HasMetric {
-				f.Text += fmt.Sprintf(" (metric %g)", r.Metric)
-			}
-			if r.URI != "" {
-				_, f.Level = m.Resolve(r.URI)
-				f.Located = true
-			}
-			ev.Findings = append(ev.Findings, f)
 		}
 	case "mutation.report":
 		readMutation(m, data, ev)
