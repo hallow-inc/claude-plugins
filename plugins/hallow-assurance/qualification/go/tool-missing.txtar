@@ -1,5 +1,5 @@
-Missing tool: golangci-lint is absent from PATH. The change itself is clean, so only the
-objectives that need golangci-lint fail, each with a detail naming it.
+Missing tool: gremlins is absent from PATH. The change itself is clean, so only the objective
+that needs gremlins fails, with a detail naming it.
 
 -- base/assurance.yaml --
 version: 0
@@ -28,20 +28,15 @@ func TestDouble(t *testing.T) {
 	}
 }
 -- omit-tools --
-golangci-lint
+gremlins
 -- head.msg --
 test(p): cover Double
 -- expect.json --
 {
   "objectives": [
     {"objective": "CFG-PROTECTED", "status": "pass"},
-    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "fail", "locations": ["golangci-lint: golangci-lint is not on PATH"]},
-    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass"},
-    {"objective": "CODE-NO-UNSAFE", "language": "go", "status": "pass"},
-    {"objective": "CODE-RESOURCE-BOUNDS", "language": "go", "status": "fail", "locations": ["golangci-lint: golangci-lint is not on PATH"]},
-    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "fail", "locations": ["golangci-lint: golangci-lint is not on PATH"]},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
-    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["gremlins: gremlins is not on PATH"]},
     {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
   ]
 }

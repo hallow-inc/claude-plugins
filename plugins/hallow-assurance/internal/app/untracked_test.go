@@ -81,7 +81,7 @@ func requireUntrackedProblems(rt *rapid.T, tools []adapterproto.Tool, problems [
 
 const untrackedPinAdapter = `#!/bin/sh
 case "$1" in
-describe) printf '%%s' '{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"vitest","fast":true}}}' ;;
+describe) printf '%%s' '{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"vitest","fast":true}}}' ;;
 run)
   out=""
   while [ $# -gt 0 ]; do [ "$1" = "--out" ] && out="$2"; shift; done

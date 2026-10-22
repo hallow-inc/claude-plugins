@@ -12,7 +12,7 @@ import (
 	"pgregory.net/rapid"
 )
 
-var pinTools = []string{"golangci-lint", "gremlins", "vitest", "eslint", "typescript"}
+var pinTools = []string{"gremlins", "vitest", "@vitest/coverage-v8", "@stryker-mutator/core", "fast-check"}
 
 func TestRunRejectsUntrackedToolWithoutPin(t *testing.T) {
 	resp := respondingAdapter(t, "")
@@ -43,7 +43,7 @@ func TestRunRejectsUntrackedToolWithoutPin(t *testing.T) {
 				orphans = append(orphans, tool)
 			}
 		}
-		got, err := RunObjective(dir, "go", "CODE-ZERO-WARNINGS", "main", "ev", 5*time.Second)
+		got, err := RunObjective(dir, "go", "VER-MUTATION-CHANGED", "main", "ev", 5*time.Second)
 		if len(orphans) > 0 {
 			ae, ok := errors.AsType[*Error](err)
 			if !ok || ae.Adapter != "assure-adapter-go" || ae.Sub != "run" ||

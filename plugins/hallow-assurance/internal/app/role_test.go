@@ -64,7 +64,7 @@ func drawVerifierCase(t *rapid.T, bin, root string, ids []string) verifierCase {
 	for _, id := range rapid.SliceOfDistinct(rapid.OneOf(rapid.SampledFrom(ids), rapid.Just("ZZ-UNKNOWN")), rapid.ID).Draw(t, "objectives") {
 		c.objectives[id] = map[string]any{"tool": "x", "fast": rapid.Bool().Draw(t, "fast "+id)}
 	}
-	describe, err := json.Marshal(map[string]any{"protocol": 1, "languages": []string{"xx"}, "claims": []string{"**/*.xx"}, "patterns": map[string]any{"test": []string{"**/*_test.xx"}}, "objectives": c.objectives})
+	describe, err := json.Marshal(map[string]any{"protocol": 2, "languages": []string{"xx"}, "claims": []string{"**/*.xx"}, "patterns": map[string]any{"test": []string{"**/*_test.xx"}}, "objectives": c.objectives})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

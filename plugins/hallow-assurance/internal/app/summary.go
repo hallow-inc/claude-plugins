@@ -49,13 +49,6 @@ func (r EvalReport) Summary() string {
 			fmt.Fprintf(&b, "- %s, scope `%s`, approver %s, expired %s\n", w.Objective, w.Scope, w.Approver, w.Expires)
 		}
 	}
-	if len(r.RemovableBaseline) > 0 {
-		b.WriteString("\n### Removable baseline entries\n\n")
-		for _, x := range r.RemovableBaseline {
-			e := x.Entry
-			fmt.Fprintf(&b, "- %s `%s` in `%s`: %s (%d of %d unused)\n", e.Objective, e.Rule, e.Path, indent(e.Message), x.Unused, e.Count)
-		}
-	}
 	r.resolutionSummary(&b)
 	if len(r.UntrackedPins) > 0 {
 		b.WriteString("\n### Untracked pins\n\n")

@@ -7,20 +7,17 @@
   "authority": "ci",
   "untracked_pins": {},
   "changed_files": 3,
-  "tool_versions": {"go": {"go": "go1.27.1", "golangci-lint": "2.13.2"}},
-  "pinned_by": {"go": {"golangci-lint": "mise.toml"}},
+  "tool_versions": {"go": {"go": "go1.27.1", "gremlins": "0.6.0"}},
+  "pinned_by": {"go": {"gremlins": "mise.toml"}},
   "problems": [],
   "expired_waivers": [
     {"objective": "VER-FAIL-ON-BASE", "scope": "**", "rationale": "M3b builds the fail-on-base runner", "approver": "@owner", "expires": "2026-09-01"}
   ],
-  "removable_baseline": [
-    {"entry": {"objective": "CODE-RESOURCE-BOUNDS", "rule": "noctx", "path": "internal/app/check.go", "message": "use CommandContext", "count": 2}, "unused": 1}
-  ],
   "objectives": [
-    {"objective": "CODE-COMPLEXITY", "language": "go", "status": "pass", "details": [], "waivers": [], "baselined": 0, "under_threshold": 41},
-    {"objective": "CODE-ZERO-WARNINGS", "language": "go", "status": "fail", "details": ["internal/core/fast.go: unusedresult: result dropped"], "waivers": [], "baselined": 1, "under_threshold": 0},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass", "details": [], "waivers": []},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "details": ["mutation score 61 below threshold 65"], "waivers": []},
     {"objective": "IND-VERIFIER-DISTINCT", "status": "waived", "details": ["no adapter lists IND-VERIFIER-DISTINCT"], "waivers": [
       {"objective": "IND-VERIFIER-DISTINCT", "scope": "**", "rationale": "provenance lands in milestone M4", "approver": "@owner", "expires": "2026-12-31"}
-    ], "baselined": 0, "under_threshold": 0}
+    ]}
   ]
 }

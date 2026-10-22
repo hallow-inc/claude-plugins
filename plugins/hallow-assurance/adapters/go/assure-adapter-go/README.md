@@ -12,9 +12,6 @@ go build -o "$HOME/go/bin/assure-adapter-go" ./adapters/go/assure-adapter-go
 | Objective | Tool |
 |---|---|
 | `VER-TESTS-PASS`, `VER-FAIL-ON-BASE`, `VER-ROBUST-FUZZ`, `VER-COVERAGE-RESOLUTION` | `go` |
-| `CODE-ZERO-WARNINGS` | `go vet`, `golangci-lint` v2 |
-| `CODE-CHECK-RETURNS`, `CODE-RESOURCE-BOUNDS` | `golangci-lint` v2 |
-| `CODE-COMPLEXITY`, `CODE-NO-UNSAFE` | built into the adapter |
 | `VER-MUTATION-CHANGED` | Gremlins v0.6.0 |
 
 Install Gremlins the same way:

@@ -1,1 +1,1 @@
-{"objectives": [{"objective": "CODE-CHECK-RETURNS", "language": "go"}]}
+{"objectives": [{"objective": "VER-MUTATION-CHANGED", "language": "go"}]}

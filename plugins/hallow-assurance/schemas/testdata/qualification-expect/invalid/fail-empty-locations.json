@@ -1,1 +1,1 @@
-{"objectives": [{"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "advisory-fail", "locations": []}]}
+{"objectives": [{"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "advisory-fail", "locations": []}]}

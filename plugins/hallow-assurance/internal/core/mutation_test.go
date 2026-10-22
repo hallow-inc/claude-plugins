@@ -34,7 +34,7 @@ func decideMutation(o Objective, ms []Mutant, ws []Waiver) Outcome {
 	if len(changed) == 0 {
 		changed = []ChangedFile{{Path: "a.go", Level: "B"}}
 	}
-	return DecideObjective(o, changed, Evidence{Mutation: true, Mutants: ms}, ws, nil, "2026-10-01")
+	return DecideObjective(o, changed, Evidence{Mutation: true, Mutants: ms}, ws, "2026-10-01")
 }
 
 func TestMutationTimeoutCountsAsDetected(t *testing.T) {
@@ -194,13 +194,13 @@ func TestMutationDecisionMatchesOracle(t *testing.T) {
 		if !Applicable(w.o, w.changed) {
 			return
 		}
-		got := DecideObjective(w.o, w.changed, Evidence{Mutation: true, Mutants: w.ms}, w.ws, nil, "2026-10-01")
+		got := DecideObjective(w.o, w.changed, Evidence{Mutation: true, Mutants: w.ms}, w.ws, "2026-10-01")
 		if want := w.oracle(); got.Status != want {
 			t.Fatalf("got %v, want %v\nobjective %+v\nmutants %+v\nwaivers %+v\ndetails %s", got.Status, want, w.o, w.ms, w.ws, got.Details)
 		}
 		rev := slices.Clone(w.ms)
 		slices.Reverse(rev)
-		if again := DecideObjective(w.o, w.changed, Evidence{Mutation: true, Mutants: rev}, w.ws, nil, "2026-10-01"); again.Status != got.Status || fmt.Sprint(again.Details) != fmt.Sprint(got.Details) {
+		if again := DecideObjective(w.o, w.changed, Evidence{Mutation: true, Mutants: rev}, w.ws, "2026-10-01"); again.Status != got.Status || fmt.Sprint(again.Details) != fmt.Sprint(got.Details) {
 			t.Fatalf("result depends on mutant order: %v %v vs %v %v", got.Status, got.Details, again.Status, again.Details)
 		}
 	})

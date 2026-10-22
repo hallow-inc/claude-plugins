@@ -29,9 +29,6 @@
     "protocolV0": {
       "const": 0
     },
-    "protocolV1": {
-      "const": 1
-    },
     "protocolV2": {
       "const": 2
     },

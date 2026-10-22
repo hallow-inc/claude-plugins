@@ -1,1 +1,1 @@
-{"protocol":2,"evidence":[],"tool_versions":{"golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.toml"},"untracked":[]}
+{"protocol":2,"evidence":[],"tool_versions":{"gremlins":"0.6.0"},"pinned_by":{"gremlins":"mise.toml"},"untracked":[]}

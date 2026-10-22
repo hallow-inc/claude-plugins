@@ -9,7 +9,7 @@ the hooks exit immediately and do nothing.
 | PreToolUse (`Edit`, `Write`, `NotebookEdit`) | Denies edits to protected files and edits the role rules forbid; before an allowed edit, records the file's blob |
 | PostToolUse (`Edit`, `Write`, `NotebookEdit`) | With `provenance: true`, appends a provenance record (file, blobs before and after, agent) to `.assure/provenance/<session>.jsonl`. Never blocks; if recording fails it warns you. Otherwise does nothing |
 | Stop | Blocks stopping while changed code fails a fast objective or a protected file changed. Each distinct set of failures blocks at most 3 times per session; after that the agent may stop, and every later stop with the same failures warns you instead of blocking. Failures the agent cannot fix (no protected-file snapshot, an adapter not on `PATH`) warn you on the first stop and never block |
-| SubagentStop (`hallow-assurance:verifier`) | Blocks the verifier from finishing while a changed package has a failing test (only `VER-TESTS-PASS`; source lint is the parent's Stop check). Same retry cap as Stop, counted per subagent. Other subagents are ignored |
+| SubagentStop (`hallow-assurance:verifier`) | Blocks the verifier from finishing while a changed package has a failing test (only `VER-TESTS-PASS`). Same retry cap as Stop, counted per subagent. Other subagents are ignored |
 
 Local hooks are early warning. The verdict is `assure evaluate`, and `authority` in
 `assurance.yaml` says whose run counts:

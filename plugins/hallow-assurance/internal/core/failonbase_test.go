@@ -11,7 +11,7 @@ import (
 var failOnBase = Objective{ID: "VER-FAIL-ON-BASE", Evidence: "test.fail_on_base", AppliesTo: "fix", Levels: map[Level]string{"A": "required", "B": "required", "C": "required", "D": "advisory"}}
 
 func decideBase(b BaseRun) Outcome {
-	return DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Base: &b}, nil, nil, "2026-10-01")
+	return DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Base: &b}, nil, "2026-10-01")
 }
 
 func TestFailOnBaseEveryNewTestFails(t *testing.T) {
@@ -43,7 +43,7 @@ func TestFailOnBaseFixWithoutATestPassesWithARecommendation(t *testing.T) {
 }
 
 func TestFailOnBaseMissingEvidenceStillFails(t *testing.T) {
-	missing := DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Problems: []string{"no test.fail_on_base evidence"}}, nil, nil, "2026-10-01")
+	missing := DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Problems: []string{"no test.fail_on_base evidence"}}, nil, "2026-10-01")
 	if missing.Status != Fail {
 		t.Fatalf("got %+v; an adapter that reported nothing must fail closed, unlike one that reported zero cases", missing)
 	}
@@ -70,7 +70,7 @@ func TestFailOnBasePassesExactlyWhenAllCasesFailed(t *testing.T) {
 			t.Fatalf("pass = %v, want %v for %+v; every case must fail on base, and a fix with no case passes", got, want, b)
 		}
 		ws := mustWaivers(t, waiverYAML("VER-FAIL-ON-BASE", "**", "2026-12-31"))
-		waived := DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Base: &b}, ws, nil, "2026-10-01")
+		waived := DecideObjective(failOnBase, []ChangedFile{{Path: "a.go", Level: "B", Fix: true}}, Evidence{Base: &b}, ws, "2026-10-01")
 		if want := map[bool]Status{true: Pass, false: Waived}[b.Failed == cases]; waived.Status != want {
 			t.Fatalf("with a covering waiver got %v, want %v", waived.Status, want)
 		}

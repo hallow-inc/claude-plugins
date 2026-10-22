@@ -1,9 +1,10 @@
-Missing tool: the no-eslint dependency set omits eslint, and typescript-eslint with it (npm
-installs peer dependencies, so keeping typescript-eslint would install eslint). The change itself
-is clean, so only the objectives that need eslint fail, each with a detail naming it.
+Missing tool: the no-stryker dependency set omits @stryker-mutator/core, and
+@stryker-mutator/vitest-runner with it (npm installs peer dependencies, so keeping the runner would
+install the core). The change itself is clean, so only the objective that needs
+@stryker-mutator/core fails, with a detail naming it.
 
 -- deps --
-no-eslint
+no-stryker
 -- base/assurance.yaml --
 version: 0
 catalog: v0
@@ -16,10 +17,6 @@ components:
 node_modules
 -- base/tsconfig.json --
 { "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "target": "es2022", "noEmit": true, "types": [] }, "include": ["src"] }
--- base/eslint.config.js --
-import tseslint from "typescript-eslint";
-
-export default tseslint.config(tseslint.configs.recommended);
 -- base/vitest.config.ts --
 import { defineConfig } from "vitest/config";
 
@@ -48,13 +45,8 @@ test(src): cover double
 {
   "objectives": [
     {"objective": "CFG-PROTECTED", "status": "pass"},
-    {"objective": "CODE-CHECK-RETURNS", "language": "typescript", "status": "fail", "locations": ["eslint: not installed in node_modules of . or any parent up to the git top-level"]},
-    {"objective": "CODE-COMPLEXITY", "language": "typescript", "status": "fail", "locations": ["eslint: not installed in node_modules of . or any parent up to the git top-level"]},
-    {"objective": "CODE-NO-UNSAFE", "language": "typescript", "status": "fail", "locations": ["eslint: not installed in node_modules of . or any parent up to the git top-level"]},
-    {"objective": "CODE-RESOURCE-BOUNDS", "language": "typescript", "status": "fail", "locations": ["eslint: not installed in node_modules of . or any parent up to the git top-level"]},
-    {"objective": "CODE-ZERO-WARNINGS", "language": "typescript", "status": "fail", "locations": ["eslint: not installed in node_modules of . or any parent up to the git top-level"]},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
-    {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "fail", "locations": ["@stryker-mutator/core: not installed in node_modules of . or any parent up to the git top-level"]},
     {"objective": "VER-TESTS-PASS", "language": "typescript", "status": "pass"}
   ]
 }

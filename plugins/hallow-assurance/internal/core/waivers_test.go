@@ -10,7 +10,7 @@ import (
 
 func TestLoadWaiversReadsTheRepoFile(t *testing.T) {
 	root := t.TempDir()
-	body := waiverYAML("CODE-NO-UNSAFE", "legacy/**", "2026-12-31") + waiverYAML("CODE-NO-UNSAFE", "old/**", "2026-11-30")
+	body := waiverYAML("VER-ROBUST-FUZZ", "legacy/**", "2026-12-31") + waiverYAML("VER-ROBUST-FUZZ", "old/**", "2026-11-30")
 	writeFile(t, root, WaiversFile, body)
 	got, err := LoadWaivers(root)
 	want := mustWaivers(t, body)

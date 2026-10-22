@@ -19,15 +19,6 @@ type pinnedTool struct {
 
 var pinnedTools = []pinnedTool{
 	{
-		name: "golangci-lint",
-		keys: []string{"golangci-lint", "aqua:golangci/golangci-lint"},
-		def:  "2.15.0",
-		lo:   "2.13.2", hi: "3.0.0",
-		install: func(v string) string {
-			return `curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v` + v
-		},
-	},
-	{
 		name: "gremlins",
 		keys: []string{"go:github.com/go-gremlins/gremlins/cmd/gremlins"},
 		def:  "0.6.0",
@@ -39,9 +30,6 @@ var pinnedTools = []pinnedTool{
 }
 
 var objectiveTools = map[string][]string{
-	"CODE-ZERO-WARNINGS":   {"golangci-lint"},
-	"CODE-CHECK-RETURNS":   {"golangci-lint"},
-	"CODE-RESOURCE-BOUNDS": {"golangci-lint"},
 	"VER-MUTATION-CHANGED": {"gremlins"},
 }
 

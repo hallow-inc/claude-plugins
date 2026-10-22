@@ -88,23 +88,6 @@ test("decode never throws on arbitrary text", () => {
   test.
 - The file ends in `.test.ts`, so `VER-TESTS-PASS` runs it too.
 
-## Lint packs
-
-The adapter lints with its own ESLint config, not the unit's, so a rule disabled in the repo config
-still reports. Inline `eslint-disable` comments are ignored.
-
-| Objective | Reports |
-|---|---|
-| `CODE-CHECK-RETURNS` | floating and misused promises |
-| `CODE-COMPLEXITY` | each function's cyclomatic complexity, in source files only |
-| `CODE-NO-UNSAFE` | `eval`, `new Function`, implied eval, `any`, `@ts-` comments, `as unknown as` (`double-cast`), `Reflect` (`reflect`), `new Proxy` (`proxy`) |
-| `CODE-RESOURCE-BOUNDS` | constant loop conditions, and `fetch` without a `signal` (`fetch-signal`) |
-
-`fetch-signal` checks `fetch`, `globalThis.fetch`, `window.fetch`, and `self.fetch` calls whose second
-argument is missing or is an object literal with no `signal` property. An init object passed as a
-variable is not checked: `fetch(url, init)` passes even when `init` has no signal. Write the init
-inline, or pass `AbortSignal.timeout(ms)` as its `signal`.
-
 ## Mutation (`VER-MUTATION-CHANGED`)
 
 Stryker, with the vitest runner, mutates only the lines changed since `--changed-from` in tracked

@@ -10,7 +10,7 @@ import (
 
 var listedToolGen = rapid.Custom(func(rt *rapid.T) adapterproto.Tool {
 	return adapterproto.Tool{
-		Name:      rapid.SampledFrom([]string{"vitest", "eslint", "golangci-lint", "@vitest/coverage-v8"}).Draw(rt, "name"),
+		Name:      rapid.SampledFrom([]string{"vitest", "fast-check", "gremlins", "@vitest/coverage-v8"}).Draw(rt, "name"),
 		Version:   rapid.OneOf(rapid.Just(""), rapid.StringMatching(`[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}`)).Draw(rt, "version"),
 		PinnedBy:  rapid.SampledFrom([]string{"package-lock.json", "mise.toml", "default"}).Draw(rt, "pinned_by"),
 		Install:   rapid.SampledFrom(installPool).Draw(rt, "install"),

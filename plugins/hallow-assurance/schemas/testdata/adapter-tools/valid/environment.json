@@ -1,1 +1,1 @@
-{"protocol":2,"tools":[],"environment":{"message":"mise.toml pins golangci-lint = \"latest\"; pin an exact version"}}
+{"protocol":2,"tools":[],"environment":{"message":"mise.toml pins gremlins = \"latest\"; pin an exact version"}}

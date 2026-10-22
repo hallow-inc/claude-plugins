@@ -40,7 +40,7 @@ func globsFor(format string, exts []string) []string {
 var configExts = []string{"ts", "mts", "cts", "js", "mjs", "cjs"}
 
 var description = describe{
-	Protocol:  1,
+	Protocol:  2,
 	Reference: "typescript",
 	Languages: []string{"typescript"},
 	Claims:    globsFor("**/*.%s", sourceExts),
@@ -54,11 +54,6 @@ var description = describe{
 	},
 	Objectives: map[string]any{
 		"VER-TESTS-PASS":          map[string]any{"tool": "vitest", "fast": true},
-		"CODE-ZERO-WARNINGS":      map[string]any{"tool": "eslint, tsc", "fast": true},
-		"CODE-CHECK-RETURNS":      map[string]any{"tool": "eslint check-returns/v1 (typescript-eslint)"},
-		"CODE-COMPLEXITY":         map[string]any{"tool": "eslint complexity/v1"},
-		"CODE-NO-UNSAFE":          map[string]any{"tool": "eslint no-unsafe/v1 (typescript-eslint)"},
-		"CODE-RESOURCE-BOUNDS":    map[string]any{"tool": "eslint resource-bounds/v1"},
 		"VER-MUTATION-CHANGED":    map[string]any{"tool": "stryker (vitest runner)"},
 		"VER-FAIL-ON-BASE":        map[string]any{"tool": "vitest"},
 		"VER-ROBUST-FUZZ":         map[string]any{"tool": "vitest, fast-check"},

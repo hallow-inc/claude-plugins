@@ -158,7 +158,7 @@ func invokeCapped(exe, dir, name, sub string, timeout time.Duration, limit int, 
 }
 
 var protocols = map[schemas.Kind]int{
-	schemas.AdapterDescribe: 1,
+	schemas.AdapterDescribe: 2,
 	schemas.AdapterClassify: 0,
 	schemas.AdapterRun:      2,
 	schemas.AdapterTools:    2,

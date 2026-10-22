@@ -27,7 +27,7 @@ type describe struct {
 }
 
 var description = describe{
-	Protocol:  1,
+	Protocol:  2,
 	Reference: "go",
 	Languages: []string{"go"},
 	Claims:    []string{"**/*.go"},
@@ -38,11 +38,6 @@ var description = describe{
 	},
 	Objectives: map[string]any{
 		"VER-TESTS-PASS":          map[string]any{"tool": "go test", "fast": true},
-		"CODE-ZERO-WARNINGS":      map[string]any{"tool": "golangci-lint", "fast": true},
-		"CODE-CHECK-RETURNS":      map[string]any{"tool": "golangci-lint check-returns/v1 (errcheck)"},
-		"CODE-RESOURCE-BOUNDS":    map[string]any{"tool": "golangci-lint resource-bounds/v1 (bodyclose, noctx, gosec G110 G112 G114)"},
-		"CODE-COMPLEXITY":         map[string]any{"tool": "gocyclo"},
-		"CODE-NO-UNSAFE":          map[string]any{"tool": "assure-adapter-go no-unsafe/v1"},
 		"VER-MUTATION-CHANGED":    map[string]any{"tool": "gremlins"},
 		"VER-FAIL-ON-BASE":        map[string]any{"tool": "go test on the base commit"},
 		"VER-ROBUST-FUZZ":         map[string]any{"tool": "go test fuzz seed corpus"},

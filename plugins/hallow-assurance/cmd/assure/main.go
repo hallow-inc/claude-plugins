@@ -17,7 +17,6 @@ Usage:
   assure <command> [arguments]
 
 Commands:
-  baseline   Record current lint findings in .assure/baseline.json
   check      Run the fast objectives on changed files
   classify   Print level, language, and role for each path
   context    Print the level map and applicable objectives
@@ -40,7 +39,6 @@ var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"guard":     runGuard,
 	"context":   runContext,
 	"check":     runCheck,
-	"baseline":  runBaseline,
 	"evaluate":  runEvaluate,
 	"hook":      runHook,
 	"classify":  runClassify,

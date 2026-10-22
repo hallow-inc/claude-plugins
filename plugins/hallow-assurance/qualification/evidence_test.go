@@ -9,7 +9,6 @@ import (
 )
 
 var emptyDocs = map[string][]byte{
-	"lint.sarif":          []byte(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"golangci-lint"}},"results":[]}]}` + "\n"),
 	"test.junit":          []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n<testsuites></testsuites>\n"),
 	"test.fail_on_base":   []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n<testsuites></testsuites>\n"),
 	"fuzz.run":            []byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n<testsuites></testsuites>\n"),
@@ -23,10 +22,6 @@ func junitResults(data []byte) (int, error) {
 }
 
 var evidenceReaders = map[string]func([]byte) (int, error){
-	"lint.sarif": func(data []byte) (int, error) {
-		rs, err := evidence.ParseSARIF(data)
-		return len(rs), err
-	},
 	"test.junit":        junitResults,
 	"test.fail_on_base": junitResults,
 	"fuzz.run":          junitResults,

@@ -14,19 +14,19 @@ import (
 
 const (
 	twoLangManifest = "version: 0\ncatalog: v0\nlanguages: [yy, xx]\ndefault_level: B\ncomponents: []\n"
-	untrackedLint   = `{"protocol":2,"tools":[{"name":"golangci-lint","version":"2.13.2","pinned_by":"mise.local.toml","untracked":true,"install":"go install example/golangci-lint@v2.13.2"}]}`
+	untrackedPin    = `{"protocol":2,"tools":[{"name":"gremlins","version":"0.6.0","pinned_by":"mise.local.toml","untracked":true,"install":"mise install go:github.com/go-gremlins/gremlins/cmd/gremlins@0.6.0"}]}`
 )
 
 func TestToolsUntrackedPinUnderLocalAuthority(t *testing.T) {
 	newRepo(t, twoLangManifest)
-	cannedAdapters(t, map[string]map[string]string{"yy": {"tools.json": `{"protocol":2,"tools":[]}`}, "xx": {"tools.json": untrackedLint}})
+	cannedAdapters(t, map[string]map[string]string{"yy": {"tools.json": `{"protocol":2,"tools":[]}`}, "xx": {"tools.json": untrackedPin}})
 	code, stdout, stderr := assure("tools")
 	f := strings.Fields(stdout)
-	if code != 0 || strings.Count(stdout, "\n") != 1 || len(f) < 5 || f[0] != "xx" || f[1] != "golangci-lint" || f[2] != "2.13.2" || f[len(f)-2] != "mise.local.toml" || f[len(f)-1] != "untracked" {
+	if code != 0 || strings.Count(stdout, "\n") != 1 || len(f) < 5 || f[0] != "xx" || f[1] != "gremlins" || f[2] != "0.6.0" || f[len(f)-2] != "mise.local.toml" || f[len(f)-1] != "untracked" {
 		t.Fatalf("exit %d stdout %q stderr %q; a solo contributor's untracked pin is listed, marked, and accepted", code, stdout, stderr)
 	}
 	code, stdout, _ = assure("tools", "--install-script")
-	if code != 0 || stdout != "#!/bin/sh\nset -eu\ngo install example/golangci-lint@v2.13.2\n" {
+	if code != 0 || stdout != "#!/bin/sh\nset -eu\nmise install go:github.com/go-gremlins/gremlins/cmd/gremlins@0.6.0\n" {
 		t.Fatalf("exit %d script %q; an untracked entry's install line belongs in the script", code, stdout)
 	}
 }
@@ -150,13 +150,13 @@ func TestToolsFailuresPrintNothingOnStdout(t *testing.T) {
 		code                  int
 		stderr                string
 	}{
-		"environment":                 {twoLangManifest, `{"protocol":2,"tools":[],"environment":{"message":"golangci-lint pin 2.13 is not exact"}}`, "", 1, "golangci-lint pin 2.13 is not exact"},
-		"environment, install script": {twoLangManifest, `{"protocol":2,"tools":[],"environment":{"message":"golangci-lint pin 2.13 is not exact"}}`, "--install-script", 1, "golangci-lint pin 2.13 is not exact"},
+		"environment":                 {twoLangManifest, `{"protocol":2,"tools":[],"environment":{"message":"gremlins pin 0.6 is not exact"}}`, "", 1, "gremlins pin 0.6 is not exact"},
+		"environment, install script": {twoLangManifest, `{"protocol":2,"tools":[],"environment":{"message":"gremlins pin 0.6 is not exact"}}`, "--install-script", 1, "gremlins pin 0.6 is not exact"},
 		"adapter error":               {twoLangManifest, `{"protocol":1,"tools":[]}`, "--install-script", 1, "assure-adapter-xx tools: protocol mismatch"},
 		"missing manifest":            {"", `{"protocol":2,"tools":[]}`, "", 2, "assurance.yaml"},
 		"usage":                       {twoLangManifest, `{"protocol":2,"tools":[]}`, "--bogus", 2, "usage: assure tools"},
-		"untracked pin, ci":           {twoLangManifest + "authority: ci\n", untrackedLint, "", 1, "golangci-lint"},
-		"untracked pin, ci, script":   {twoLangManifest + "authority: ci\n", untrackedLint, "--install-script", 1, "mise.local.toml"},
+		"untracked pin, ci":           {twoLangManifest + "authority: ci\n", untrackedPin, "", 1, "gremlins"},
+		"untracked pin, ci, script":   {twoLangManifest + "authority: ci\n", untrackedPin, "--install-script", 1, "mise.local.toml"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

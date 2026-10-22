@@ -23,7 +23,7 @@ var (
 )
 
 var caseTools = map[string][]string{
-	"go":         {"go", "gofmt", "git", "golangci-lint", "gremlins"},
+	"go":         {"go", "gofmt", "git", "gremlins"},
 	"typescript": {"node", "npm", "git"},
 }
 

@@ -1,6 +1,6 @@
 {
   "objectives": [
-    {"objective": "CODE-CHECK-RETURNS", "language": "go", "status": "fail", "locations": ["lib/read.go"]},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["lib/read.go"]},
     {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"},
     {"objective": "CFG-PROTECTED", "status": "pass"}
   ],

@@ -58,7 +58,7 @@ func TestDecodeErrorsSurfaceFromValidate(t *testing.T) {
 }
 
 func TestVendoredSchemasMatchPinnedHash(t *testing.T) {
-	for _, name := range []string{"sarif-schema-2.1.0.json", "mutation-testing-report-schema.json"} {
+	for _, name := range []string{"mutation-testing-report-schema.json"} {
 		data, err := files.ReadFile("external/" + name)
 		if err != nil {
 			t.Fatal(err)

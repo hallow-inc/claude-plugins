@@ -103,7 +103,7 @@ func checkEmptyDocsCoverAdapter(t *testing.T, lang string, kinds map[string]stri
 	}
 }
 
-func TestSilentPass(t *testing.T) {
+func TestEmptyEvidenceDetected(t *testing.T) {
 	if !gated {
 		t.Skip("set ASSURE_QUALIFICATION=1 without -short to rerun seeded cases with emptied evidence")
 	}
@@ -116,6 +116,9 @@ func TestSilentPass(t *testing.T) {
 		t.Run(lang, func(t *testing.T) {
 			checkEmptyDocsCoverAdapter(t, lang, kinds)
 			cases := loadCases(t, lang)
+			if !slices.ContainsFunc(slices.Collect(maps.Values(cases)), func(c loadedCase) bool { return c.seeds == "VER-TESTS-PASS" }) {
+				t.Fatalf("no %s case seeds VER-TESTS-PASS, so an adapter that writes a JUnit file with no test cases would go unnoticed", lang)
+			}
 			for _, name := range slices.Sorted(maps.Keys(cases)) {
 				obj := cases[name].seeds
 				if obj == "" {

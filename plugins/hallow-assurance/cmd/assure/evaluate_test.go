@@ -191,7 +191,7 @@ func TestEvaluateRefusesExcludedManifestUnderCentralAuthority(t *testing.T) {
 
 func TestEvaluateInvalidWaiversExitTwoNamingLocation(t *testing.T) {
 	r := newRepo(t, levelB)
-	r.write(".assure/waivers.yaml", "- objective: CODE-COMPLEXITY\n  scope: '**'\n  rationale: short\n  approver: owner\n  expires: 2099-01-01\n")
+	r.write(".assure/waivers.yaml", "- objective: VER-ROBUST-FUZZ\n  scope: '**'\n  rationale: short\n  approver: owner\n  expires: 2099-01-01\n")
 	r.git("init", "-q")
 	r.git("add", "-A")
 	r.git("commit", "-qm", "init")
@@ -242,33 +242,51 @@ func TestEvaluateCleanChangePassesWithWaivers(t *testing.T) {
 		t.Fatalf("got %d\n%s\n%s", code, stdout, stderr)
 	}
 	rep, _ := readReport(t, r)
-	for _, id := range []string{"VER-TESTS-PASS", "CODE-ZERO-WARNINGS", "CODE-CHECK-RETURNS", "CODE-RESOURCE-BOUNDS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE"} {
-		if e, ok := entry(rep, id, "go"); !ok || e.Status != "pass" {
-			t.Errorf("%s: %+v %v", id, e, ok)
+	if e, ok := entry(rep, "VER-TESTS-PASS", "go"); !ok || e.Status != "pass" {
+		t.Errorf("VER-TESTS-PASS: %+v %v", e, ok)
+	}
+	for _, e := range rep.Objectives {
+		if strings.HasPrefix(e.Objective, "CODE-") {
+			t.Errorf("report decides %s; no code-shape objective is in the catalog", e.Objective)
 		}
 	}
 	if e, _ := entry(rep, "IND-VERIFIER-DISTINCT", ""); e.Status != "waived" || len(e.Waivers) != 1 {
 		t.Errorf("IND-VERIFIER-DISTINCT: %+v", e)
 	}
-	if rep.ToolVersions["go"]["golangci-lint"] == "" {
+	if rep.ToolVersions["go"]["go"] == "" {
 		t.Errorf("tool_versions: %v", rep.ToolVersions)
 	}
 }
 
-func TestEvaluateLintFindingBlocks(t *testing.T) {
+func TestEvaluateFailingTestBlocks(t *testing.T) {
 	r := waivedGoRepo(t)
-	r.write("p/p.go", "package p\n\nimport \"fmt\"\n\nfunc Add(a, b int) int { fmt.Printf(\"%d\", \"x\"); return a + b }\n")
+	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return a - b }\n")
 	code, stdout, stderr := assure("evaluate", "--changed-from", "HEAD")
 	if code != 1 {
-		t.Fatalf("got %d\n%s\n%s", code, stdout, stderr)
+		t.Fatalf("got %d\n%s\n%s; a failing test on a changed level-B file that no waiver covers must block", code, stdout, stderr)
 	}
 	rep, _ := readReport(t, r)
-	e, _ := entry(rep, "CODE-ZERO-WARNINGS", "go")
-	if e.Status != "fail" || len(e.Details) == 0 || !strings.HasPrefix(e.Details[0], "p/p.go: ") {
-		t.Fatalf("CODE-ZERO-WARNINGS: %+v", e)
+	e, _ := entry(rep, "VER-TESTS-PASS", "go")
+	if e.Status != "fail" || !strings.Contains(strings.Join(e.Details, "\n"), "TestAdd") {
+		t.Fatalf("VER-TESTS-PASS: %+v; the report must record the failure and name the test", e)
 	}
-	if !strings.Contains(stdout, "| CODE-ZERO-WARNINGS | go | fail |") {
+	if !strings.Contains(stdout, "| VER-TESTS-PASS | go | fail |") {
 		t.Fatalf("summary lacks the failing row:\n%s", stdout)
+	}
+}
+
+func TestEvaluateIgnoresAStaleBaselineFile(t *testing.T) {
+	r := waivedGoRepo(t)
+	r.write(".assure/baseline.json", "{not json")
+	r.git("add", "-A")
+	r.git("commit", "-qm", "leftover baseline")
+	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
+	code, stdout, stderr := assure("evaluate", "--changed-from", "HEAD")
+	if code != 0 {
+		t.Fatalf("got %d\n%s\n%s; assure no longer reads .assure/baseline.json, so a leftover broken one must not stop evaluation", code, stdout, stderr)
+	}
+	if rep, _ := readReport(t, r); rep.ChangedFiles != 1 {
+		t.Fatalf("changed_files %d, want 1: the stale baseline is committed at the ref and must not count as a change", rep.ChangedFiles)
 	}
 }
 
@@ -292,8 +310,20 @@ func TestEvaluateReportIsReproducible(t *testing.T) {
 	if rep.Date != "2026-01-02" {
 		t.Fatalf("date %q", rep.Date)
 	}
-	if e, _ := entry(rep, "CODE-COMPLEXITY", "go"); e.UnderThreshold != 1 {
-		t.Fatalf("CODE-COMPLEXITY under_threshold %d, want 1 (one function in the changed file)", e.UnderThreshold)
+	raw := rawReport(t, r)
+	if _, ok := raw["removable_baseline"]; ok {
+		t.Fatalf("report carries removable_baseline; the baseline is retired")
+	}
+	var objs []map[string]json.RawMessage
+	if err := json.Unmarshal(raw["objectives"], &objs); err != nil || len(objs) == 0 {
+		t.Fatalf("objectives %s: %v", raw["objectives"], err)
+	}
+	for _, o := range objs {
+		for _, k := range []string{"baselined", "under_threshold"} {
+			if _, ok := o[k]; ok {
+				t.Fatalf("objective entry %s carries %s; no evidence produces baselined or threshold-passed findings any more", o["objective"], k)
+			}
+		}
 	}
 }
 

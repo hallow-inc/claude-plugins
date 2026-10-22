@@ -21,8 +21,7 @@ const (
 
 var xxWaivers = func() string {
 	var b strings.Builder
-	for _, id := range []string{"CODE-ZERO-WARNINGS", "CODE-RESOURCE-BOUNDS", "CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE",
-		"VER-TESTS-PASS", "VER-MUTATION-CHANGED", "VER-FAIL-ON-BASE", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
+	for _, id := range []string{"VER-TESTS-PASS", "VER-MUTATION-CHANGED", "VER-FAIL-ON-BASE", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
 		b.WriteString("- {objective: " + id + ", scope: '**', rationale: the fake adapter in this test produces no evidence, approver: owner, expires: 2099-01-01}\n")
 	}
 	return b.String()
@@ -38,7 +37,7 @@ func xxAdapter(t *testing.T, objectives string) {
 	bin := t.TempDir()
 	script := `#!/bin/sh
 case "$1" in
-describe) printf '%s' '{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":` + objectives + `}' ;;
+describe) printf '%s' '{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":` + objectives + `}' ;;
 *) echo "assure-adapter-xx: unexpected $*" >&2; exit 1 ;;
 esac
 `

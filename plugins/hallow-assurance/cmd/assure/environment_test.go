@@ -38,27 +38,34 @@ esac
 	return bin
 }
 
-const envMessage = "golangci-lint 2.13.2 is pinned by mise.toml but is not on PATH"
+const envMessage = "gremlins 0.6.0 is pinned by mise.toml but is not on PATH"
 
 var envWaivers = func() string {
 	var b strings.Builder
-	for _, id := range []string{"CODE-RESOURCE-BOUNDS", "CODE-CHECK-RETURNS", "CODE-COMPLEXITY", "CODE-NO-UNSAFE",
-		"VER-FAIL-ON-BASE", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
+	for _, id := range []string{"VER-FAIL-ON-BASE", "VER-ROBUST-FUZZ", "VER-COVERAGE-RESOLUTION"} {
 		b.WriteString("- {objective: " + id + ", scope: '**', rationale: the canned adapter in this test produces no evidence, approver: owner, expires: 2099-01-01}\n")
 	}
 	return b.String()
 }()
 
+const killedXXMutant = `{"schemaVersion":"1","thresholds":{"high":80,"low":60},"files":{"p/x.xx":{"language":"xx","source":"two\n","mutants":[{"id":"p/x.xx:1:1:M","mutatorName":"M","location":{"start":{"line":1,"column":1},"end":{"line":1,"column":1}},"status":"Killed"}]}}}`
+
+func mutationResponse(pin string, untracked bool) string {
+	u := ""
+	if untracked {
+		u = `,"untracked":["gremlins"]`
+	}
+	return `{"protocol":2,"evidence":[{"type":"mutation.report","path":"ev"}],"tool_versions":{"go":"go1.26.7","gremlins":"0.6.0"},"pinned_by":{"gremlins":"` + pin + `"}` + u + `}`
+}
+
 func passingXXResponses() map[string]string {
-	sarif := `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"golangci-lint"}},"results":[]}]}`
 	junit := `<testsuite name="p" tests="1"><testcase classname="p" name="TestFine"/></testsuite>`
 	return map[string]string{
-		"describe.json":             `{"protocol":1,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true},"CODE-ZERO-WARNINGS":{"tool":"golangci-lint","fast":true},"VER-MUTATION-CHANGED":{"tool":"gremlins","fast":false}}}`,
+		"describe.json":             `{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true},"VER-MUTATION-CHANGED":{"tool":"gremlins","fast":false}}}`,
 		"VER-TESTS-PASS.json":       `{"protocol":2,"evidence":[{"type":"test.junit","path":"ev"}],"tool_versions":{"go":"go1.26.7","gotestsum":"1.12.0"},"pinned_by":{"gotestsum":"default"}}`,
 		"VER-TESTS-PASS.ev":         junit,
-		"CODE-ZERO-WARNINGS.json":   `{"protocol":2,"evidence":[{"type":"lint.sarif","path":"ev"}],"tool_versions":{"go":"go1.26.7","golangci-lint":"2.13.2"},"pinned_by":{"golangci-lint":"mise.toml"}}`,
-		"CODE-ZERO-WARNINGS.ev":     sarif,
-		"VER-MUTATION-CHANGED.json": `{"protocol":2,"evidence":[],"tool_versions":{"go":"go1.26.7","gremlins":"0.6.0"},"pinned_by":{"gremlins":"default"}}`,
+		"VER-MUTATION-CHANGED.json": mutationResponse("mise.toml", false),
+		"VER-MUTATION-CHANGED.ev":   killedXXMutant,
 	}
 }
 
@@ -85,6 +92,25 @@ func cannedXXRepo(t *testing.T, manifest string, xx map[string]string) repo {
 	return r
 }
 
+func TestEvaluatePinOriginsAreMergedFromEveryRun(t *testing.T) {
+	r := cannedXXRepo(t, xxManifestOff, passingXXResponses())
+	code, stdout, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01")
+	if code == 2 {
+		t.Fatalf("exit 2:\n%s\n%s", stdout, stderr)
+	}
+	rep, _ := readReport(t, r)
+	if e, _ := entry(rep, "VER-MUTATION-CHANGED", "xx"); e.Status != "pass" {
+		t.Fatalf("VER-MUTATION-CHANGED %+v; its only mutant was killed", e)
+	}
+	want := map[string]string{"gremlins": "mise.toml", "gotestsum": "default"}
+	if !maps.Equal(rep.PinnedBy["xx"], want) {
+		t.Fatalf("pinned_by %v, want %v merged from both runs, with no go key though tool_versions has one", rep.PinnedBy, want)
+	}
+	if rep.ToolVersions["xx"]["go"] != "go1.26.7" || rep.ToolVersions["xx"]["gremlins"] != "0.6.0" {
+		t.Fatalf("tool_versions %v", rep.ToolVersions)
+	}
+}
+
 func TestEvaluateEnvironmentFailsAndPinOriginsAreRecorded(t *testing.T) {
 	r := envRepo(t, "VER-MUTATION-CHANGED")
 	var reports [2][]byte
@@ -102,27 +128,43 @@ func TestEvaluateEnvironmentFailsAndPinOriginsAreRecorded(t *testing.T) {
 	if e, ok := entry(rep, "VER-MUTATION-CHANGED", "xx"); !ok || e.Status != "fail" || !detailWith(e, envMessage) {
 		t.Fatalf("VER-MUTATION-CHANGED %+v; want fail with the environment message as detail", e)
 	}
-	for _, id := range []string{"VER-TESTS-PASS", "CODE-ZERO-WARNINGS"} {
-		if e, _ := entry(rep, id, "xx"); e.Status != "pass" {
-			t.Fatalf("%s %+v; an environment failure in one objective must not spill into another", id, e)
-		}
+	if e, _ := entry(rep, "VER-TESTS-PASS", "xx"); e.Status != "pass" {
+		t.Fatalf("VER-TESTS-PASS %+v; an environment failure in one objective must not spill into another", e)
 	}
-	want := map[string]string{"golangci-lint": "mise.toml", "gotestsum": "default"}
+	want := map[string]string{"gotestsum": "default"}
 	if !maps.Equal(rep.PinnedBy["xx"], want) {
-		t.Fatalf("pinned_by %v, want %v merged from every run, with no go key though tool_versions has one", rep.PinnedBy, want)
+		t.Fatalf("pinned_by %v, want %v: the environment run reported no pins, and go is never a pin", rep.PinnedBy, want)
 	}
 	if rep.ToolVersions["xx"]["go"] != "go1.26.7" {
 		t.Fatalf("tool_versions %v", rep.ToolVersions)
 	}
 }
 
-func TestFastCheckEnvironmentFailsWithItsMessage(t *testing.T) {
-	envRepo(t, "CODE-ZERO-WARNINGS")
-	code, stdout, stderr := assure("check", "--fast")
-	if code != 1 || !strings.Contains(stdout, "fail\tCODE-ZERO-WARNINGS\txx\n") || !strings.Contains(stdout, "CODE-ZERO-WARNINGS (xx): fail\n  - "+envMessage+"\n") {
-		t.Fatalf("exit %d; want CODE-ZERO-WARNINGS to fail with the environment message as its detail\n%s\n%s", code, stdout, stderr)
+func TestFastCheckWithoutTestEvidenceFails(t *testing.T) {
+	for name, evidence := range map[string]string{
+		"none":       `[]`,
+		"lint.sarif": `[{"type":"lint.sarif","path":"ev"}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			xx := passingXXResponses()
+			xx["VER-TESTS-PASS.json"] = `{"protocol":2,"evidence":` + evidence + `,"tool_versions":{"go":"go1.26.7"},"pinned_by":{}}`
+			cannedXXRepo(t, xxManifest, xx)
+			code, stdout, stderr := assure("check", "--fast")
+			want := "assure-adapter-xx run VER-TESTS-PASS produced no test.junit evidence"
+			if code != 1 || !strings.Contains(stdout, "fail\tVER-TESTS-PASS\txx\n") || !strings.Contains(stdout, want) {
+				t.Fatalf("exit %d; want VER-TESTS-PASS to fail closed with %q: a run that wrote no JUnit proved nothing, and a lint.sarif entry is no longer evidence for any objective\n%s\n%s", code, want, stdout, stderr)
+			}
+		})
 	}
-	if !strings.Contains(stdout, "pass\tVER-TESTS-PASS\txx\n") {
-		t.Fatalf("VER-TESTS-PASS should pass:\n%s", stdout)
+}
+
+func TestFastCheckEnvironmentFailsWithItsMessage(t *testing.T) {
+	envRepo(t, "VER-TESTS-PASS")
+	code, stdout, stderr := assure("check", "--fast")
+	if code != 1 || !strings.Contains(stdout, "fail\tVER-TESTS-PASS\txx\n") || !strings.Contains(stdout, "VER-TESTS-PASS (xx): fail\n  - "+envMessage+"\n") {
+		t.Fatalf("exit %d; want VER-TESTS-PASS to fail with the environment message as its detail, since a run that could not get its tools proved nothing\n%s\n%s", code, stdout, stderr)
+	}
+	if strings.Contains(stdout, "VER-MUTATION-CHANGED") {
+		t.Fatalf("the fast check ran VER-MUTATION-CHANGED, which the adapter does not mark fast:\n%s", stdout)
 	}
 }

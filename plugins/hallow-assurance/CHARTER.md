@@ -27,7 +27,7 @@ model**, not their paperwork.
 
 1. **`assure`** — a Go CLI and deterministic evaluator. Reads a repo's manifest, a versioned
    objectives catalog, normalized evidence, waivers, and provenance; decides pass/fail per
-   objective; enforces a ratchet baseline.
+   objective.
 2. **Language adapters** — external executables (`assure-adapter-<lang>`) speaking a small JSON
    protocol. They classify files, run tools, and emit normalized evidence. They never decide
    pass/fail.
@@ -52,7 +52,7 @@ model**, not their paperwork.
 4. **Adapters emit evidence; the evaluator decides.** No thresholds live in adapters.
 5. **Fail closed.** Missing or malformed evidence fails the objective unless a valid waiver covers it.
 6. **Agents cannot move the goalposts.** Agents may not edit the catalog, thresholds, manifest
-   levels, waivers, baselines, provenance, formal-model challenge files, or gate config. Enforced
+   levels, waivers, provenance, formal-model challenge files, or gate config. Enforced
    locally by `assure guard` and the Stop drift check. `assure evaluate` reports every
    protected-file change; under `authority: ci`, at
    levels the base manifest marks `human_review: required`, it also needs an approving review from
@@ -62,7 +62,7 @@ model**, not their paperwork.
    in the catalog.
 8. **Reproducible.** Every result is tied to a commit SHA and toolchain versions.
 9. **Hooks are fast.** Per-edit hooks < 3s p95. Stop-hook fast check < 2 min p95 on the pilot repo.
-10. **Standard formats first.** JUnit XML, LCOV/Cobertura, SARIF, and the Stryker
+10. **Standard formats first.** JUnit XML, LCOV/Cobertura, and the Stryker
     mutation-testing-report schema before anything custom.
 
 ## Scope (v0 → v1)
@@ -88,6 +88,9 @@ In scope:
 - Supporting agent harnesses other than Claude Code in the plugin (the CLI and evaluator stay
   harness-neutral, so others can integrate later)
 - Python/Rust adapters before the TypeScript adapter proves the design
+- Code-shape rules (lint, complexity, unsafe use, dropped errors). `assure` judges behaviour
+  evidence and the integrity of that evidence, never how code is written; the adopting repo's own
+  lint owns code shape.
 
 ## Success criteria
 
@@ -140,10 +143,9 @@ plugins/hallow-assurance/
   internal/
     core/                        # language-neutral: manifest, catalog, waivers, classify, evaluate
     hookio/                      # ONLY place that knows Claude Code hook JSON
-    evidence/                    # parsers: JUnit, LCOV, SARIF, mutation report
+    evidence/                    # parsers: JUnit, LCOV, mutation report
     adapterproto/                # adapter protocol client
     provenance/
-    baseline/
   adapters/
     go/assure-adapter-go/        # assure-adapter-go (separate binary; dir named after the binary)
     typescript/…                 # assure-adapter-typescript (v1)
@@ -232,23 +234,11 @@ missing evidence only when `scope` matches every changed file at a level where t
 applies. Any expired waiver fails `assure evaluate`, whatever its scope; the Stop fast check ignores
 expired waivers because an agent cannot fix a protected file.
 
-**Baseline** — `.assure/baseline.json` (human-only, written by `assure baseline`):
-
-```json
-{"version":0,"entries":[{"objective":"CODE-RESOURCE-BOUNDS","rule":"noctx","path":"internal/app/check.go","message":"os/exec.Command must not be called. use os/exec.CommandContext","count":1}]}
-```
-
-The ratchet for old code. A located `lint.sarif` finding matches an entry on objective, rule, path,
-and message (never line); an entry suppresses at most `count` matches. Entries with fewer matches
-than `count` are reported as removable. Schema: `schemas/baseline.schema.json`.
-
 **Report** — `.assure/state/report.json`, written by `assure evaluate` (schema
 `schemas/report.schema.json`): commit, base ref and SHA, evaluation date, catalog version, adapter
 tool versions, and one status per applicable objective and language (`pass`, `fail`,
-`advisory-fail`, `waived`), with details, applied waivers, and counts of baselined and
-under-threshold results. The markdown summary is rendered from the report alone, so a stored
-report reproduces it. For `lint.sarif`, catalog thresholds are ceilings on a result's
-`properties.metric`.
+`advisory-fail`, `waived`), with details and applied waivers. The markdown summary is rendered from the report alone, so a
+stored report reproduces it.
 
 **Mutation** — `mutation.report` evidence is a Stryker mutation-testing report. `Killed` and
 `Timeout` mutants are detected; `Survived` and `NoCoverage` are undetected; compile and runtime
@@ -336,16 +326,15 @@ than in CI.
 **Adapter protocol v0** — subprocess, JSON on stdin/stdout:
 
 ```
-assure-adapter-go describe            → {protocol:1, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{<id>:{tool, fast?}}, reference?:"go"}
+assure-adapter-go describe            → {protocol:2, languages:["go"], claims:[..], patterns:{test:[..], generated:[..], fuzz_corpus:[..], config:[..]}, objectives:{<id>:{tool, fast?}}, reference?:"go"}
 assure-adapter-go classify  <paths>   → {protocol:0, files:[{path, language, role}]}
-assure-adapter-go lint      <paths>   → SARIF
-assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:1, evidence:[{type, path}], tool_versions:{...}, pinned_by:{...}, environment?:{message}}
-assure-adapter-go tools --root <dir>  → {protocol:1, tools:[{name, version, pinned_by, install}], environment?:{message}}
+assure-adapter-go run <objective> --changed-from <ref> --out <dir> → {protocol:2, evidence:[{type, path}], tool_versions:{...}, pinned_by:{...}, environment?:{message}}
+assure-adapter-go tools --root <dir>  → {protocol:2, tools:[{name, version, pinned_by, install}], environment?:{message}}
 assure-adapter-go reference          → Markdown (the testing reference named by describe.reference)
 ```
 
-Every response except `lint` and `reference` is an object carrying an integer `protocol`, and each
-message is versioned on its own: `classify` carries `0`; `describe`, `run`, and `tools` carry `1`.
+Every response except `reference` is an object carrying an integer `protocol`, and each
+message is versioned on its own: `classify` carries `0`; `describe`, `run`, and `tools` carry `2`.
 `assure` and its adapters are installed from the same release; a mismatch is an error naming both
 numbers.
 `pinned_by` maps each resolved tool to where its version was pinned (a repo-relative pin file, or
@@ -364,17 +353,12 @@ in the order `generated`, `fuzz_corpus`, `test`, `config`, and otherwise `source
 `fast: true` marks an objective cheap enough for the Stop-hook fast check. Cost belongs to the tool
 the adapter picks, so it lives here, not in the catalog. `run` exits 0 whenever it produced a valid
 response, including when the tools found failures.
-Schemas: `schemas/adapter-{describe,classify,run,tools}.schema.json`; `lint` is validated against SARIF 2.1.0.
+Schemas: `schemas/adapter-{describe,classify,run,tools}.schema.json`.
 
 ## Starter catalog (v0)
 
 | ID | Intent | A | B | C | D |
 |---|---|---|---|---|---|
-| CODE-ZERO-WARNINGS | Compiler/vet/linters clean (ratcheted for old code) | req | req | req | adv |
-| CODE-RESOURCE-BOUNDS | Bounded reads, retries, loops, buffers (P10-2, P10-3) | req | req | adv | – |
-| CODE-CHECK-RETURNS | No dropped errors/promises (P10-7) | req | req | req | adv |
-| CODE-COMPLEXITY | Cyclomatic complexity ≤ 15 per function (P10-4) | req | req | adv | – |
-| CODE-NO-UNSAFE | No unsafe/reflect/eval outside allow-list (P10-8, P10-9) | req | req | adv | – |
 | VER-TESTS-PASS | Tests pass with race/shuffle where supported | req | req | req | req |
 | VER-MUTATION-CHANGED | Mutation threshold on changed code | req | req | adv | – |
 | VER-FAIL-ON-BASE | Bugfix tests fail on base commit | req | req | req | adv |
@@ -435,7 +419,6 @@ keep local behavior as close to fail-closed as the harness allows:
 | SessionStart | – | `context` | Injects level map + applicable objectives for the working area |
 | SessionStart | – | `guard --snapshot` | Records protected-file hashes for the Stop drift check |
 | PreToolUse | `Edit\|Write\|NotebookEdit` | `guard` | Blocks protected files; enforces subagent role rules keyed on the hook input's `agent_type` (e.g. verifier can't edit source) |
-| PostToolUse | `Edit\|Write` | `lint` | Fast per-file rule-pack findings fed back to the agent |
 | PostToolUse | `Edit\|Write\|NotebookEdit` | `record` | With `provenance: true`, appends provenance (never blocks; a failure is a CI gap); otherwise silent |
 | Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail or protected files drifted; retry cap (own counter + `stop_hook_active`) then escalate |
 | SubagentStop | `^hallow-assurance:verifier$` | `check --role verifier` | Verifier must leave passing tests (`VER-TESTS-PASS` only) |
@@ -484,17 +467,18 @@ never reassigned, and new work takes a letter suffix.
   changed packages)
 - Retry cap / escalation for Stop
 - Pulled forward from M3 so the Stop check has evidence to decide from: JUnit and SARIF parsers
-  (minimal), Go adapter `run` for `VER-TESTS-PASS` and `CODE-ZERO-WARNINGS`, `describe` `fast`
+  (minimal), Go adapter `run` for `VER-TESTS-PASS` and the compiler/linter objective, `describe` `fast`
 - Install in the pilot repo (this repo first), report-only in CI
 - ✅ Latency within invariant 9 on the pilot repo
 - ✅ Manual session: agent edits a protected file → blocked; agent stops with failing test → blocked
 
 **M3a — Evaluator, waivers, baseline**
 - JUnit keeps failure text; SARIF results carry an optional numeric `properties.metric`
-- Go adapter `run` for the other `CODE-*` objectives: rule packs with adapter-written lint config,
-  complexity as raw metrics; `CODE-ZERO-WARNINGS` reports every finding (the ratchet is the baseline)
+- Go adapter `run` for the other lint objectives: rule packs with adapter-written lint config,
+  complexity as raw metrics; the compiler/linter objective reports every finding (the ratchet is the baseline)
 - `assure evaluate` → `report.json` + markdown job summary; waivers with expiry; baseline ratchet;
   `assure baseline`; the fast check applies the baseline and active waivers
+- Lint objectives, SARIF, and the baseline were later removed by `drop-code-lint`
 - CI runs `assure evaluate` (fails the job, not yet a required check)
 - ✅ Fail-closed: missing evidence fails; expired waiver fails
 
@@ -535,8 +519,7 @@ never reassigned, and new work takes a letter suffix.
   ref with no manifest uses the default, so the adopting PR needs no special order
 - `provenance-opt-in`: manifest key `provenance` (default `false`); off, the hooks record nothing and
   IND-VERIFIER-DISTINCT is not applicable, read from the base manifest
-- `assure-init`: prints a suggested manifest (packages, `inputs: true` candidates, baseline counts per
-  objective); never writes protected files and never proposes `formal:`
+- `assure-init`: prints a suggested manifest (packages and `inputs: true` candidates); never writes protected files and never proposes `formal:`
 - ✅ `hello-world-bfree/g` adopts at level B with no second reviewer and no `human_review` key
 
 **M4d — Evidence loops**
@@ -548,7 +531,7 @@ never reassigned, and new work takes a letter suffix.
 
 **M5 — Qualification**
 - `qualification/go/`: seeded-bug fixtures with expected outcomes (mutants that must be killed,
-  known coverage, known lint findings)
+  known coverage)
 - Qualification gates every tag: the adapter must pass it in CI before release. M5 lands before
   `release-channel` (listed under M4c), so the first published tag is already qualified.
 - ✅ A deliberately broken adapter build fails qualification

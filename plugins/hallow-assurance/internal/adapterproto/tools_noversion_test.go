@@ -38,7 +38,7 @@ func TestRunToolsReadsAbsentVersionAsNotInstalled(t *testing.T) {
 	dir := t.TempDir()
 	rapid.Check(t, func(rt *rapid.T) {
 		n := rapid.IntRange(1, 4).Draw(rt, "n")
-		names := []string{"vitest", "eslint", "typescript", "gremlins"}[:n]
+		names := []string{"vitest", "fast-check", "@stryker-mutator/core", "gremlins"}[:n]
 		var entries []map[string]any
 		var want []Tool
 		emptyAt := -1

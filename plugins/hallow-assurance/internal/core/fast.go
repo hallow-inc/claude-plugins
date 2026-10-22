@@ -15,14 +15,10 @@ const (
 )
 
 type Finding struct {
-	Level     Level
-	Located   bool
-	Path      string
-	Rule      string
-	Message   string
-	Metric    float64
-	HasMetric bool
-	Text      string
+	Level   Level
+	Located bool
+	Path    string
+	Text    string
 }
 
 type TestFailure struct {
@@ -34,7 +30,6 @@ type Evidence struct {
 	Problems   []string
 	Errs       []error
 	Failing    []TestFailure
-	Findings   []Finding
 	Mutation   bool
 	Mutants    []Mutant
 	Base       *BaseRun
@@ -83,14 +78,11 @@ func Applicable(o Objective, changed []ChangedFile) bool {
 }
 
 type Outcome struct {
-	ID             string
-	Status         Status
-	Details        []string
-	Waivers        []Waiver
-	Baselined      int
-	UnderThreshold int
-	BaselineUsed   map[Fingerprint]int
-	Resolutions    []Resolution
+	ID          string
+	Status      Status
+	Details     []string
+	Waivers     []Waiver
+	Resolutions []Resolution
 }
 
 func changedStatus(o Objective, changed []ChangedFile) (req, adv bool, applicable []string) {
@@ -116,12 +108,11 @@ func DecideFast(o Objective, changed []Level, ev Evidence) Outcome {
 	for i, l := range changed {
 		files[i] = ChangedFile{Level: l}
 	}
-	return DecideObjective(o, files, ev, nil, nil, "")
+	return DecideObjective(o, files, ev, nil, "")
 }
 
 func compareFindings(a, b Finding) int {
-	return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Rule, b.Rule), cmp.Compare(a.Message, b.Message),
-		cmp.Compare(a.Text, b.Text), cmp.Compare(a.Level, b.Level), cmp.Compare(a.Metric, b.Metric))
+	return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Text, b.Text), cmp.Compare(a.Level, b.Level))
 }
 
 func compareWaivers(a, b Waiver) int {
@@ -158,30 +149,12 @@ func coveringWaiver(active []Waiver, applicable []string) (Waiver, bool) {
 	return Waiver{}, false
 }
 
-func (o Objective) UnderThreshold(f Finding) bool {
-	th, ok := o.Threshold[f.Level]
-	return ok && f.HasMetric && f.Metric <= th
-}
-
-func split(o Objective, ev Evidence) (unlocated []string, located []Finding, under int) {
-	unlocated = slices.Clone(ev.Problems)
+func unlocatedFailures(ev Evidence) []string {
+	unlocated := slices.Clone(ev.Problems)
 	for _, f := range ev.Failing {
 		unlocated = append(unlocated, f.Text)
 	}
-	findings := slices.Clone(ev.Findings)
-	slices.SortFunc(findings, compareFindings)
-	for _, f := range findings {
-		if !f.Located {
-			unlocated = append(unlocated, f.Text)
-			continue
-		}
-		if o.UnderThreshold(f) {
-			under++
-			continue
-		}
-		located = append(located, f)
-	}
-	return unlocated, located, under
+	return unlocated
 }
 
 func (d *decision) unlocated(texts []string, req bool, cover Waiver, covered bool) {
@@ -224,17 +197,13 @@ func (d *decision) status() Status {
 	return Pass
 }
 
-func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waiver, baseline map[Fingerprint]int, date string) Outcome {
+func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waiver, date string) Outcome {
 	req, adv, applicable := changedStatus(o, changed)
 	active := activeFor(ws, o.ID, date)
 	slices.SortFunc(active, compareWaivers)
 	cover, covered := coveringWaiver(active, applicable)
-	unlocated, located, under := split(o, ev)
-	kept, used := matchBaseline(baseline, o.ID, located)
-	out := Outcome{ID: o.ID, UnderThreshold: under, BaselineUsed: used}
-	for _, n := range used {
-		out.Baselined += n
-	}
+	unlocated := unlocatedFailures(ev)
+	out := Outcome{ID: o.ID}
 	d := &decision{}
 	pending := pendingMutants(ev.Mutants)
 	if ev.Base != nil {
@@ -251,7 +220,6 @@ func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waive
 		}
 		out.Resolutions = d.fileRules(o, changed, ev, req, active)
 	}
-	d.located(o, kept, req, active)
 	out.Details = slices.Concat(d.details, d.excused, d.notes)
 	out.Waivers = d.applied
 	out.Status = d.status()
