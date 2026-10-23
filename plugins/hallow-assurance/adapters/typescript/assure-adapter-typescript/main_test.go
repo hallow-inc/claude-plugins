@@ -323,3 +323,21 @@ func TestReferencePrintsEmbeddedFile(t *testing.T) {
 		t.Fatalf("reference printed %d bytes that differ from reference.md (%d bytes); assure reference typescript must show the shipped guidance from any directory", out.Len(), len(want))
 	}
 }
+
+func TestVitestSetupFileIsConfig(t *testing.T) {
+	t.Chdir(t.TempDir())
+	rapid.Check(t, func(t *rapid.T) {
+		dirs := rapid.SliceOfN(rapid.OneOf(segGen, rapid.SampledFrom([]string{"src", "packages", "test"})), 0, 3).Draw(t, "dirs")
+		ext := rapid.SampledFrom(specConfigExts).Draw(t, "ext")
+		p := strings.Join(append(dirs, "vitest.setup."+ext), "/")
+		want := []entry{{Path: p, Language: "typescript", Role: "config"}}
+		if got := classifyAll(t, p); !slices.Equal(got, want) {
+			t.Fatalf("classify %q = %v, want role config; reference.md tells adopters to create vitest.setup.<ext> and load it through setupFiles, so as source it puts a non-product file under mutation, coverage, and lint and fails the adoption PR", p, got)
+		}
+	})
+	for _, p := range []string{"src/vitest.setup.helpers.ts", "src/setup.ts", "vitest.setupx.ts", "src/myvitest.setup.ts", "vitest.setup.tsx"} {
+		if got := classifyAll(t, p); len(got) != 1 || got[0].Role != "source" {
+			t.Errorf("classify %q = %v, want role source; only the exact vitest.setup.<ext> name is config, and widening it exempts product code from the source objectives", p, got)
+		}
+	}
+}
