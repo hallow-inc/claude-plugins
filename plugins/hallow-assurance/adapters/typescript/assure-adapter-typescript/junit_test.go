@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"pgregory.net/rapid"
 
@@ -178,11 +179,7 @@ func checkSuites(t fataler, j ev.JUnit, want []wantSuite) {
 }
 
 func TestCapTextKeepsATrimmedPrefix(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		s := rapid.String().Draw(t, "s")
-		if rapid.Bool().Draw(t, "long") {
-			s = strings.Repeat(s+"x", rapid.IntRange(maxOutput/2, maxOutput*2).Draw(t, "n")/(len(s)+1)+1)
-		}
+	check := func(t fataler, s string) {
 		got, trimmed := capText([]byte(s)), strings.TrimSpace(s)
 		if trimmed == "" {
 			if got != "no output" {
@@ -190,9 +187,29 @@ func TestCapTextKeepsATrimmedPrefix(t *testing.T) {
 			}
 			return
 		}
-		if want := trimmed[:min(len(trimmed), 16<<10)]; got != want {
-			t.Fatalf("capText = %d bytes, want the first %d bytes of the trimmed output; tool output is capped at 16 KiB so one runaway test cannot bloat the evidence, and below the cap nothing is lost", len(got), len(want))
+		if !utf8.ValidString(got) {
+			t.Fatalf("capText = %d bytes ending %q, not valid UTF-8; the text lands in junit.xml failure messages, and a split rune corrupts the evidence", len(got), got[max(0, len(got)-4):])
 		}
+		if len(got) > 16<<10 || !strings.HasPrefix(trimmed, got) {
+			t.Fatalf("capText = %d bytes, want a prefix of the trimmed output of at most %d bytes; tool output is capped at 16 KiB so one runaway test cannot bloat the evidence", len(got), 16<<10)
+		}
+		if len(trimmed) <= 16<<10 {
+			if got != trimmed {
+				t.Fatalf("capText = %d bytes, want all %d bytes of the trimmed output; below the cap nothing is lost", len(got), len(trimmed))
+			}
+		} else if len(got) < 16<<10-(utf8.UTFMax-1) {
+			t.Fatalf("capText = %d bytes, want at least %d; above the cap only the bytes of one split rune may be dropped", len(got), 16<<10-(utf8.UTFMax-1))
+		}
+	}
+
+	check(t, "a"+strings.Repeat("é", maxOutput/2))
+
+	rapid.Check(t, func(t *rapid.T) {
+		s := rapid.String().Draw(t, "s")
+		if rapid.Bool().Draw(t, "long") {
+			s = strings.Repeat(s+"x", rapid.IntRange(maxOutput/2, maxOutput*2).Draw(t, "n")/(len(s)+1)+1)
+		}
+		check(t, s)
 	})
 }
 

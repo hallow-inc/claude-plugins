@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 type xmlText struct {
@@ -38,7 +39,11 @@ const maxOutput = 16 << 10
 func capText(b []byte) string {
 	s := strings.TrimSpace(string(b))
 	if len(s) > maxOutput {
-		s = s[:maxOutput]
+		n := maxOutput
+		for n > 0 && !utf8.RuneStart(s[n]) {
+			n--
+		}
+		s = s[:n]
 	}
 	if s == "" {
 		s = "no output"
