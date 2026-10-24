@@ -71,7 +71,7 @@ func specConfig(base string) bool {
 		return true
 	}
 	for _, e := range specConfigExts {
-		if base == "vitest.config."+e || base == "eslint.config."+e {
+		if base == "vitest.config."+e || base == "vitest.setup."+e || base == "eslint.config."+e {
 			return true
 		}
 	}
@@ -103,7 +103,7 @@ var segGen = rapid.StringMatching(`[a-z]{1,5}`)
 
 var nameGen = rapid.Custom(func(t *rapid.T) string {
 	stem := rapid.OneOf(segGen, rapid.SampledFrom([]string{"vitest", "eslint", "tsconfig", "package", "pnpm", "yarn", "index"})).Draw(t, "stem")
-	mid := rapid.SampledFrom([]string{"", ".test", ".spec", ".fuzz.test", ".d", ".config", ".base", "-lock", ".config.test", ".d.test"}).Draw(t, "mid")
+	mid := rapid.SampledFrom([]string{"", ".test", ".spec", ".fuzz.test", ".d", ".config", ".setup", ".base", "-lock", ".config.test", ".setup.test", ".d.test"}).Draw(t, "mid")
 	ext := rapid.SampledFrom([]string{"ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "json", "yaml", "lock", "md"}).Draw(t, "ext")
 	return stem + mid + "." + ext
 })
