@@ -40,7 +40,6 @@ type EvalReport struct {
 	ChangedFrom          ChangedFrom                  `json:"changed_from"`
 	Date                 string                       `json:"date"`
 	Catalog              string                       `json:"catalog"`
-	Authority            core.Authority               `json:"authority"`
 	ChangedFiles         int                          `json:"changed_files"`
 	ToolVersions         map[string]map[string]string `json:"tool_versions"`
 	PinnedBy             map[string]map[string]string `json:"pinned_by"`
@@ -123,10 +122,6 @@ type evalResult struct {
 }
 
 func Evaluate(m *core.Manifest, ref, date string) (EvalReport, error) {
-	return EvaluateWith(m, ref, date, nil)
-}
-
-func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (EvalReport, error) {
 	ws, err := core.LoadWaivers(m.Root)
 	if err != nil {
 		return EvalReport{}, err
@@ -144,7 +139,6 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 		ChangedFrom:    ChangedFrom{Ref: ref, SHA: base},
 		Date:           date,
 		Catalog:        m.Catalog.Version,
-		Authority:      m.Authority,
 		ToolVersions:   map[string]map[string]string{},
 		PinnedBy:       map[string]map[string]string{},
 		UntrackedPins:  map[string][]string{},
@@ -175,17 +169,13 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 	for i, j := range jobs {
 		wg.Go(func() {
 			ev, run := collect(m, j, ref, EvaluateTimeout)
-			decided := ev
-			decided.Problems = slices.Concat(ev.Problems, core.UntrackedPinProblems(m.Authority, run.Untracked, run.PinnedBy))
-			out := core.DecideObjective(j.obj, j.files, decided, ws, date)
+			out := core.DecideObjective(j.obj, j.files, ev, ws, date)
 			results[i] = evalResult{entry: entryOf(j.lang, out), ev: ev, run: run}
 		})
 	}
 	wg.Wait()
 	rep.fold(jobs, results)
-	all := allChanged(m, changed, fix)
-	in := newBuiltinInputs(m.Root, base, withRoles(m, all, &rep), reviews != nil && reviews.Approved())
-	rep.decideUnlisted(m, rest, in, ws, date)
+	rep.decideUnlisted(rest, allChanged(m, changed, fix), ws, date)
 	slices.SortFunc(rep.Objectives, func(a, b Entry) int {
 		return cmp.Or(cmp.Compare(a.Objective, b.Objective), cmp.Compare(a.Language, b.Language))
 	})
@@ -193,19 +183,10 @@ func EvaluateWith(m *core.Manifest, ref, date string, reviews *core.Reviews) (Ev
 	return rep, nil
 }
 
-func (rep *EvalReport) decideUnlisted(m *core.Manifest, rest []core.Objective, in builtinInputs, ws []core.Waiver, date string) {
+func (rep *EvalReport) decideUnlisted(rest []core.Objective, changed []core.ChangedFile, ws []core.Waiver, date string) {
 	for _, o := range rest {
-		if o.Evidence == provenanceEvidence && !in.provenance {
-			continue
-		}
 		ev := core.Evidence{Problems: []string{"no adapter lists " + o.ID}}
-		switch o.Evidence {
-		case provenanceEvidence:
-			ev = provenanceEvidenceFor(in)
-		case protectedEvidence:
-			ev = protectedEvidenceFor(m, in)
-		}
-		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, in.changed, ev, ws, date)))
+		rep.Objectives = append(rep.Objectives, entryOf("", core.DecideObjective(o, changed, ev, ws, date)))
 	}
 }
 
@@ -379,30 +360,10 @@ func removableResolutions(root string, results []evalResult, rep *EvalReport) []
 	return slices.Compact(out)
 }
 
-func withRoles(m *core.Manifest, files []core.ChangedFile, rep *EvalReport) []core.ChangedFile {
-	roles, failures, _ := LoadRoles(m)
-	if len(failures) > 0 {
-		rep.Problems = append(rep.Problems, "cannot determine file roles: "+JoinErrors(failures))
-	}
-	out := slices.Clone(files)
-	for i := range out {
-		role, err := roles.Of(out[i].Path)
-		if err != nil {
-			rep.Problems = append(rep.Problems, err.Error())
-		}
-		out[i].Role = role
-	}
-	return out
-}
-
 func adapterObjective(m *core.Manifest, byID map[string]core.Objective, lang, id string, rep *EvalReport) (core.Objective, bool) {
 	o, ok := byID[id]
-	switch {
-	case !ok:
+	if !ok {
 		rep.Problems = append(rep.Problems, fmt.Sprintf("%s lists %s, but catalog %s has no such objective", adapterproto.Executable(lang), id, m.Catalog.Version))
-	case builtin(o):
-		rep.Problems = append(rep.Problems, fmt.Sprintf("%s lists %s, whose evidence %s comes from assure itself; ignored", adapterproto.Executable(lang), id, o.Evidence))
-		ok = false
 	}
 	return o, ok
 }

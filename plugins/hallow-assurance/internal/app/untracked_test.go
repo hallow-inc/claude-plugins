@@ -17,7 +17,7 @@ import (
 
 var untrackedPinOrigins = []string{"mise.local.toml", "package-lock.json", "default"}
 
-func TestResolveToolsRefusesUntrackedPinsOnlyUnderCI(t *testing.T) {
+func TestResolveToolsListsUntrackedPinsWithoutRefusing(t *testing.T) {
 	bin := t.TempDir()
 	resp := filepath.Join(bin, "tools.json")
 	script := "#!/bin/sh\n[ \"$1\" = tools ] || exit 1\ncat '" + resp + "'\n"
@@ -27,21 +27,15 @@ func TestResolveToolsRefusesUntrackedPinsOnlyUnderCI(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
 	root := t.TempDir()
 	rapid.Check(t, func(rt *rapid.T) {
-		authority := rapid.SampledFrom([]core.Authority{core.AuthorityLocal, core.AuthorityCI}).Draw(rt, "authority")
 		tools := writeToolsResponse(rt, resp)
-		m := &core.Manifest{Root: root, Languages: []string{"xx"}, Authority: authority}
+		m := &core.Manifest{Root: root, Languages: []string{"xx"}}
 		langs, problems := ResolveTools(m)
-		anyUntracked := slices.ContainsFunc(tools, func(x adapterproto.Tool) bool { return x.Untracked })
-		if authority == core.AuthorityLocal || !anyUntracked {
-			if len(problems) > 0 {
-				rt.Fatalf("authority %s, tools %+v: problems %q; under local an untracked pin is listed, not refused", authority, tools, problems)
-			}
-			if len(langs) != 1 || langs[0].Lang != "xx" || !slices.Equal(langs[0].Tools, tools) {
-				rt.Fatalf("listed %+v, want xx with %+v", langs, tools)
-			}
-			return
+		if len(problems) > 0 {
+			rt.Fatalf("tools %+v: problems %q; an untracked pin is listed, never refused", tools, problems)
 		}
-		requireUntrackedProblems(rt, tools, problems)
+		if len(langs) != 1 || langs[0].Lang != "xx" || !slices.Equal(langs[0].Tools, tools) {
+			rt.Fatalf("listed %+v, want xx with %+v", langs, tools)
+		}
 	})
 }
 
@@ -69,16 +63,6 @@ func writeToolsResponse(rt *rapid.T, resp string) []adapterproto.Tool {
 	return tools
 }
 
-func requireUntrackedProblems(rt *rapid.T, tools []adapterproto.Tool, problems []string) {
-	for _, tool := range tools {
-		if tool.Untracked && !slices.ContainsFunc(problems, func(p string) bool {
-			return strings.Contains(p, tool.Name) && strings.Contains(p, tool.PinnedBy) && strings.Contains(p, "CI cannot see")
-		}) {
-			rt.Fatalf("authority ci: no problem names %s with its pin file %s and says CI cannot see it:\n%s", tool.Name, tool.PinnedBy, strings.Join(problems, "\n"))
-		}
-	}
-}
-
 const untrackedPinAdapter = `#!/bin/sh
 case "$1" in
 describe) printf '%%s' '{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"vitest","fast":true}}}' ;;
@@ -92,82 +76,77 @@ run)
 esac
 `
 
-func TestEvaluateFailsUntrackedPinsOnlyUnderCI(t *testing.T) {
-	bin, root := verifierRepo(t)
-	for _, key := range []string{"", "local", "ci"} {
-		for _, untracked := range []bool{false, true} {
-			name := fmt.Sprintf("authority %q untracked %v", key, untracked)
-			extra := ""
-			if untracked {
-				extra = `,"untracked":["vitest"]`
-			}
-			if err := os.WriteFile(filepath.Join(bin, "assure-adapter-xx"), fmt.Appendf(nil, untrackedPinAdapter, extra), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			manifest := "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\n"
-			if key != "" {
-				manifest += "authority: " + key + "\n"
-			}
-			putFile(t, root, "assurance.yaml", manifest)
-			gitIn(t, root, "add", "assurance.yaml")
-			gitIn(t, root, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", name)
-			putFile(t, root, "a.xx", name+"\n")
-			m, err := ManifestFor(root)
-			if err != nil {
-				t.Fatalf("%s: %v", name, err)
-			}
-			rep, err := Evaluate(m, "HEAD", "2026-10-17")
-			if err != nil {
-				t.Fatalf("%s: %v", name, err)
-			}
-			checkUntrackedPinReport(t, name, rep, key == "ci", untracked)
+func untrackedPinRepo(t *testing.T) (bin, root string) {
+	t.Helper()
+	bin = t.TempDir()
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
+	isolateGit(t)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, root, "init", "-q", "-b", "main")
+	putFile(t, root, ".gitignore", ".assure/state/\n")
+	putFile(t, root, "a.xx", "base\n")
+	gitIn(t, root, "add", "-A")
+	gitIn(t, root, "commit", "-qm", "base")
+	return bin, root
+}
+
+func TestEvaluateRecordsUntrackedPinsWithoutFailing(t *testing.T) {
+	bin, root := untrackedPinRepo(t)
+	for _, untracked := range []bool{false, true} {
+		name := fmt.Sprintf("untracked %v", untracked)
+		extra := ""
+		if untracked {
+			extra = `,"untracked":["vitest"]`
 		}
+		if err := os.WriteFile(filepath.Join(bin, "assure-adapter-xx"), fmt.Appendf(nil, untrackedPinAdapter, extra), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		putFile(t, root, "assurance.yaml", "version: 0\ncatalog: v0\nlanguages: [xx]\ndefault_level: B\ncomponents: []\n")
+		gitIn(t, root, "add", "assurance.yaml")
+		gitIn(t, root, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", name)
+		putFile(t, root, "a.xx", name+"\n")
+		m, err := ManifestFor(root)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		rep, err := Evaluate(m, "HEAD", "2026-10-17")
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		checkUntrackedPinReport(t, name, rep, untracked)
 	}
 }
 
-func checkUntrackedPinReport(t *testing.T, name string, rep EvalReport, ci, untracked bool) {
+func checkUntrackedPinReport(t *testing.T, name string, rep EvalReport, untracked bool) {
 	t.Helper()
-	want := core.AuthorityLocal
-	if ci {
-		want = core.AuthorityCI
-	}
-	if rep.Authority != want {
-		t.Fatalf("%s: report authority %q, want %q; an absent key means local", name, rep.Authority, want)
-	}
 	if rep.PinnedBy["xx"]["vitest"] != "package-lock.json" {
 		t.Fatalf("%s: pinned_by %v", name, rep.PinnedBy)
 	}
 	if got := rep.UntrackedPins["xx"]; untracked != slices.Equal(got, []string{"vitest"}) || (!untracked && len(rep.UntrackedPins) != 0) {
 		t.Fatalf("%s: untracked_pins %v; the report is the only record of which pins CI could not reproduce", name, rep.UntrackedPins)
 	}
-	checkUntrackedPinObjective(t, name, rep, ci, untracked)
-	checkUntrackedPinSummary(t, name, rep, ci, untracked)
+	checkUntrackedPinObjective(t, name, rep)
+	checkUntrackedPinSummary(t, name, rep, untracked)
 }
 
-func checkUntrackedPinObjective(t *testing.T, name string, rep EvalReport, ci, untracked bool) {
+func checkUntrackedPinObjective(t *testing.T, name string, rep EvalReport) {
 	t.Helper()
 	i := slices.IndexFunc(rep.Objectives, func(e Entry) bool { return e.Objective == "VER-TESTS-PASS" && e.Language == "xx" })
 	if i < 0 {
 		t.Fatalf("%s: no VER-TESTS-PASS entry in %+v", name, rep.Objectives)
 	}
 	e := rep.Objectives[i]
-	if fail := ci && untracked; (e.Status == core.Fail) != fail || (!fail && e.Status != core.Pass) {
-		t.Fatalf("%s: VER-TESTS-PASS %s %q; a pin CI cannot see fails its objective under authority: ci and changes nothing under local", name, e.Status, e.Details)
-	}
-	if ci && untracked && !slices.ContainsFunc(e.Details, func(d string) bool {
-		return strings.Contains(d, "vitest") && strings.Contains(d, "package-lock.json")
-	}) {
-		t.Fatalf("%s: details %q do not name vitest and package-lock.json", name, e.Details)
+	if e.Status != core.Pass {
+		t.Fatalf("%s: VER-TESTS-PASS %s %q; an untracked pin is informational and changes no objective", name, e.Status, e.Details)
 	}
 }
 
-func checkUntrackedPinSummary(t *testing.T, name string, rep EvalReport, ci, untracked bool) {
+func checkUntrackedPinSummary(t *testing.T, name string, rep EvalReport, untracked bool) {
 	t.Helper()
 	summary := rep.Summary()
-	first, _, _ := strings.Cut(summary, "\n")
-	if strings.Contains(first, "self-attested") == ci {
-		t.Fatalf("%s: summary first line %q", name, first)
-	}
 	if at := strings.Index(strings.ToLower(summary), "untracked"); untracked && (at < 0 || !strings.Contains(summary[at:], "vitest")) {
 		t.Fatalf("%s: summary does not list vitest as untracked:\n%s", name, summary)
 	}

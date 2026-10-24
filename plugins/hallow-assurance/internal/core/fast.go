@@ -27,16 +27,14 @@ type TestFailure struct {
 }
 
 type Evidence struct {
-	Problems   []string
-	Errs       []error
-	Failing    []TestFailure
-	Mutation   bool
-	Mutants    []Mutant
-	Base       *BaseRun
-	Fuzz       *FuzzRun
-	Coverage   *Coverage
-	Provenance *Provenance
-	Protected  *ProtectedDiff
+	Problems []string
+	Errs     []error
+	Failing  []TestFailure
+	Mutation bool
+	Mutants  []Mutant
+	Base     *BaseRun
+	Fuzz     *FuzzRun
+	Coverage *Coverage
 }
 
 type ChangedFile struct {
@@ -229,16 +227,6 @@ func DecideObjective(o Objective, changed []ChangedFile, ev Evidence, ws []Waive
 func (d *decision) fileRules(o Objective, changed []ChangedFile, ev Evidence, req bool, active []Waiver) []Resolution {
 	if ev.Fuzz != nil {
 		d.located(o, fuzzFindings(o, changed, *ev.Fuzz), req, active)
-	}
-	if ev.Provenance != nil {
-		fs, notes := independenceFindings(o, changed, *ev.Provenance)
-		d.located(o, fs, req, active)
-		d.notes = append(d.notes, notes...)
-	}
-	if ev.Protected != nil {
-		fs, notes := protectedFindings(o, *ev.Protected)
-		d.located(o, fs, req, active)
-		d.notes = append(d.notes, notes...)
 	}
 	if ev.Coverage == nil {
 		return nil

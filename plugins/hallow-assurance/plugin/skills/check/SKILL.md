@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 1. Run `assure check --fast` from the repository. Report each objective's status and, for every
    `fail`, the details it prints. Say which failures are outside the agent's reach (a missing
-   adapter, a protected file) and what the human must do about them.
+   adapter, tools not installed) and what the human must do about them.
 2. Offer the full evaluation. It runs every applicable objective, including mutation testing, and
    can take several minutes. If the human accepts:
    1. Find the merge-base with the default branch:

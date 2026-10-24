@@ -19,33 +19,9 @@
       "type": "array",
       "items": { "$ref": "#/$defs/component" }
     },
-    "protected": {
-      "type": "array",
-      "items": { "$ref": "common.schema.json#/$defs/repoPath" }
-    },
-    "human_review": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "A": { "$ref": "#/$defs/review" },
-        "B": { "$ref": "#/$defs/review" },
-        "C": { "$ref": "#/$defs/review" },
-        "D": { "$ref": "#/$defs/review" }
-      }
-    },
-    "provenance": { "type": "boolean" },
-    "require_fix_test": { "type": "boolean" },
-    "authority": { "enum": ["local", "ci"] }
-  },
-  "if": {
-    "required": ["authority"],
-    "properties": { "authority": { "const": "local" } }
-  },
-  "then": {
-    "properties": { "human_review": false }
+    "require_fix_test": { "type": "boolean" }
   },
   "$defs": {
-    "review": { "enum": ["required", "optional"] },
     "component": {
       "type": "object",
       "additionalProperties": false,

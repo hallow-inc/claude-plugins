@@ -8,11 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
-
-	"pgregory.net/rapid"
 )
 
 func shim(t *testing.T, dir, path, stdin string) (int, string, string) {
@@ -79,26 +76,10 @@ func TestShimIsInertWithoutManifest(t *testing.T) {
 	}
 }
 
-func TestShimBlocksWhenAssureMissing(t *testing.T) {
-	code, _, errb := shimEvent(t, "pre-tool-use", adoptedDir(t), "/usr/bin:/bin", "{}")
-	if code != 2 || !strings.Contains(errb, "not on PATH") {
-		t.Fatalf("got %d %q", code, errb)
-	}
-	checkRealInstallAdvice(t, errb)
-}
-
-func TestShimBlocksOnProtocolMismatch(t *testing.T) {
-	path := fakeAssure(t, `[ "$1 $2" = "hook protocol" ] && echo 7`)
-	code, _, errb := shimEvent(t, "session-start", adoptedDir(t), path, "{}")
-	if code != 2 || !strings.Contains(errb, "protocol 2") || !strings.Contains(errb, "'7'") {
-		t.Fatalf("got %d %q", code, errb)
-	}
-}
-
 func TestShimExecsAssureWithStdin(t *testing.T) {
-	path := fakeAssure(t, `if [ "$1 $2" = "hook protocol" ]; then echo 2; exit 0; fi
+	path := fakeAssure(t, `if [ "$1 $2" = "hook protocol" ]; then echo 3; exit 0; fi
 echo "args=$*"; cat; exit 2`)
-	for _, event := range []string{"stop", "subagent-stop"} {
+	for _, event := range []string{"session-start", "stop"} {
 		code, out, _ := shimEvent(t, event, adoptedDir(t), path, `{"hook_event_name":"X"}`)
 		if code != 2 || out != "args=hook "+event+"\n{\"hook_event_name\":\"X\"}" {
 			t.Fatalf("%s: got %d %q", event, code, out)
@@ -126,10 +107,7 @@ func TestHooksJSONDeclaresEveryHookWithATimeout(t *testing.T) {
 		timeout      int
 	}{
 		"SessionStart": {"", "session-start", 30},
-		"PreToolUse":   {"Edit|Write|NotebookEdit", "pre-tool-use", 10},
-		"PostToolUse":  {"Edit|Write|NotebookEdit", "post-tool-use", 10},
 		"Stop":         {"", "stop", 180},
-		"SubagentStop": {"^hallow-assurance:verifier$", "subagent-stop", 180},
 	}
 	if len(cfg.Hooks) != len(want) {
 		t.Fatalf("events %v, want exactly %v", cfg.Hooks, want)
@@ -143,31 +121,6 @@ func TestHooksJSONDeclaresEveryHookWithATimeout(t *testing.T) {
 		if groups[0].Matcher != w.matcher || h.Type != "command" || h.Command != "${CLAUDE_PLUGIN_ROOT}/bin/assure-hook" ||
 			len(h.Args) != 1 || h.Args[0] != w.arg || h.Timeout != w.timeout {
 			t.Errorf("%s: got matcher %q %+v; a hook without an explicit timeout waits 600 s and then fails open", event, groups[0].Matcher, h)
-		}
-	}
-	if pre, post := cfg.Hooks["PreToolUse"], cfg.Hooks["PostToolUse"]; len(pre) != 1 || len(post) != 1 || pre[0].Matcher != post[0].Matcher {
-		t.Errorf("PostToolUse matcher must equal PreToolUse matcher: a tool the guard sees but record does not leaves every such edit a provenance gap")
-	}
-	checkSubagentMatcher(t, cfg.Hooks["SubagentStop"][0].Matcher)
-}
-
-func checkSubagentMatcher(t *testing.T, matcher string) {
-	t.Helper()
-	re, err := regexp.Compile(matcher)
-	if err != nil {
-		t.Fatalf("SubagentStop matcher %q: %v", matcher, err)
-	}
-	roles := []string{"hallow-assurance:verifier"}
-	near := rapid.SampledFrom(append([]string{"verifier", "inspector", "hallow-assurance:implementer", "hallow-assurance:pruner", "hallow-assurance:inspector", "general-purpose"}, roles...))
-	rapid.Check(t, func(rt *rapid.T) {
-		s := rapid.StringMatching(`[a-z:-]{0,3}`).Draw(rt, "prefix") + near.Draw(rt, "agent") + rapid.StringMatching(`[a-z:-]{0,3}`).Draw(rt, "suffix")
-		if re.MatchString(s) != slices.Contains(roles, s) {
-			rt.Fatalf("matcher %q on %q: matched=%v; an unanchored matcher runs role checks on other subagents", matcher, s, re.MatchString(s))
-		}
-	})
-	for _, s := range []string{"verifier", "hallow-assurance:implementer", "hallow-assurance:inspector", "x-hallow-assurance:verifier"} {
-		if re.MatchString(s) {
-			t.Errorf("SubagentStop matcher matches %q", s)
 		}
 	}
 }
@@ -193,13 +146,13 @@ func stopMessage(t *testing.T, code int, out string) string {
 		SystemMessage string `json:"systemMessage"`
 	}
 	if code != 0 || json.Unmarshal([]byte(out), &o) != nil || o.SystemMessage == "" {
-		t.Fatalf("stop must allow with a JSON systemMessage: got %d %q", code, out)
+		t.Fatalf("the shim must exit 0 with a JSON systemMessage: got %d %q", code, out)
 	}
 	return o.SystemMessage
 }
 
-func TestShimAllowsStopWhenAssureMissing(t *testing.T) {
-	for _, event := range []string{"stop", "subagent-stop"} {
+func TestShimReportsMissingAssureWithoutBlocking(t *testing.T) {
+	for _, event := range []string{"session-start", "stop"} {
 		code, out, _ := shimEvent(t, event, adoptedDir(t), "/usr/bin:/bin", "{}")
 		msg := stopMessage(t, code, out)
 		if !strings.Contains(msg, "not on PATH") {
@@ -246,7 +199,7 @@ func strictStopMessage(t *testing.T, code int, out string) string {
 	dec := json.NewDecoder(strings.NewReader(out))
 	var o map[string]any
 	if err := dec.Decode(&o); err != nil || code != 0 {
-		t.Fatalf("stop must exit 0 with one JSON object: got %d %q (%v)", code, out, err)
+		t.Fatalf("the shim must exit 0 with one JSON object: got %d %q (%v)", code, out, err)
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		t.Fatalf("stdout holds more than one JSON value: %q", out)
@@ -273,12 +226,7 @@ func unavailableCases() []unavailableCase {
 func shimMessages(t *testing.T, shimPath string, c unavailableCase) map[string]string {
 	t.Helper()
 	msgs := map[string]string{}
-	code, out, errb := shimAt(t, shimPath, "pre-tool-use", adoptedDir(t), c.path(t), "{}")
-	if code != 2 || out != "" {
-		t.Fatalf("%s pre-tool-use: got %d %q %q; PreToolUse must keep denying while assure is unavailable", c.name, code, out, errb)
-	}
-	msgs["pre-tool-use"] = errb
-	for _, event := range []string{"stop", "subagent-stop"} {
+	for _, event := range []string{"session-start", "stop"} {
 		code, out, _ := shimAt(t, shimPath, event, adoptedDir(t), c.path(t), "{}")
 		msgs[event] = strictStopMessage(t, code, out)
 	}
@@ -383,11 +331,11 @@ func TestMarketplaceEntryCarriesNoVersion(t *testing.T) {
 	}
 }
 
-func TestShimAllowsStopOnProtocolMismatch(t *testing.T) {
+func TestShimReportsProtocolMismatchWithoutBlocking(t *testing.T) {
 	path := fakeAssure(t, `[ "$1 $2" = "hook protocol" ] && echo 7`)
-	for _, event := range []string{"stop", "subagent-stop"} {
+	for _, event := range []string{"session-start", "stop"} {
 		code, out, _ := shimEvent(t, event, adoptedDir(t), path, "{}")
-		if msg := stopMessage(t, code, out); !strings.Contains(msg, "protocol 2") || !strings.Contains(msg, "speaks 7") {
+		if msg := stopMessage(t, code, out); !strings.Contains(msg, "protocol 3") || !strings.Contains(msg, "speaks 7") {
 			t.Fatalf("%s: message %q does not name both protocols", event, msg)
 		}
 	}

@@ -6,25 +6,9 @@ import (
 	"strings"
 )
 
-func (m *Manifest) ProtectedList() []string {
-	out := []string{ManifestName, ".assure/**"}
-	for _, c := range m.Components {
-		if c.Formal {
-			out = append(out, c.Challenge)
-		}
-	}
-	for _, g := range m.Protected {
-		out = append(out, g.String())
-	}
-	return out
-}
-
-func writeObjectives(b *strings.Builder, objs []Objective, level Level, appliesTo string, provenance bool) {
+func writeObjectives(b *strings.Builder, objs []Objective, level Level, appliesTo string) {
 	for _, status := range []string{"required", "advisory"} {
 		for _, o := range objs {
-			if o.Evidence == ProvenanceEvidence && !provenance {
-				continue
-			}
 			if (o.AppliesTo == appliesTo || appliesTo == "" && o.AppliesTo == "fix") && o.Levels[level] == status {
 				title := o.Title
 				if o.AppliesTo == "fix" {
@@ -90,13 +74,12 @@ func RenderContext(m *Manifest, only []string) string {
 			b.WriteString(componentLine(c))
 		}
 	}
-	fmt.Fprintf(&b, "Protected (agents may not edit): %s\n", strings.Join(m.ProtectedList(), ", "))
 	for _, l := range levels {
 		if !levelsSeen[l] {
 			continue
 		}
 		fmt.Fprintf(&b, "\nObjectives at level %s:\n", l)
-		writeObjectives(&b, m.Catalog.Objectives, l, "", m.Provenance)
+		writeObjectives(&b, m.Catalog.Objectives, l, "")
 	}
 	for i, c := range m.Components {
 		if !comps[i] {
@@ -108,7 +91,7 @@ func RenderContext(m *Manifest, only []string) string {
 		}{{c.Formal, "formal"}, {c.Inputs, "inputs"}} {
 			if block.on {
 				fmt.Fprintf(&b, "\nObjectives for %s (%s, level %s):\n", c.Glob, block.name, c.Level)
-				writeObjectives(&b, m.Catalog.Objectives, c.Level, block.name, m.Provenance)
+				writeObjectives(&b, m.Catalog.Objectives, c.Level, block.name)
 			}
 		}
 	}

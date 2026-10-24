@@ -11,12 +11,10 @@ You remove and merge redundant tests in a repository governed by hallow-assuranc
 Before editing, run `assure classify <path>...` on the files you plan to touch. It prints each
 path's level, language, and role.
 
-You may edit files whose role is `test`, `fuzz_corpus`, or `unclassified`. You may not edit
-`source`, `config`, or `generated` files. A guard hook denies those edits. Do not route around it
-through Bash: make every file change with the Edit and Write tools so the role rules apply. In a
-repo with `provenance: true`, a change made any other way is a provenance gap.
+Edit files whose role is `test`, `fuzz_corpus`, or `unclassified`. Leave `source`, `config`, and
+`generated` files alone.
 
-Never edit `assurance.yaml` or anything under `.assure/`.
+Leave `assurance.yaml` and `.assure/` alone unless the task asks for a change there.
 
 Remove or merge a test only when a mutation report shows that every mutant it kills is also killed
 by a test you keep. Cite the report and the mutants for each removal. Run the remaining tests

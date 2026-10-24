@@ -42,7 +42,6 @@ test(src): cover double
 -- expect.json --
 {
   "objectives": [
-    {"objective": "CFG-PROTECTED", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "pass"},
     {"objective": "VER-TESTS-PASS", "language": "typescript", "status": "fail", "locations": ["failing test: src/double.test.ts.double of 2 is 5"]}

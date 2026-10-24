@@ -14,9 +14,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
-const waiversExceptM3b1 = `- {objective: IND-VERIFIER-DISTINCT, scope: '**', rationale: provenance arrives in milestone M4, approver: owner, expires: 2099-01-01}
-- {objective: CFG-PROTECTED, scope: '**', rationale: provenance arrives in milestone M4, approver: owner, expires: 2099-01-01}
-- {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in M3b-2, approver: owner, expires: 2099-01-01}
+const waiversExceptM3b1 = `- {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in M3b-2, approver: owner, expires: 2099-01-01}
 `
 
 const lastSrc = "package p\n\nfunc Last(xs []int) int {\n\treturn xs[len(xs)-2]\n}\n"

@@ -170,7 +170,7 @@ func TestToolsReadsTrackedAncestorPin(t *testing.T) {
 		t.Fatalf("tools = %+v env %+v, want %+v; pinned_by is relative to the git top-level, so a pin above the manifest directory still names its file, and the installed 0.6.1 is not tools' concern", resp.Tools, resp.Environment, want)
 	}
 	if u := toolsUntracked(t, raw); len(u) != 0 {
-		t.Fatalf("tools entries carry untracked %v for a tracked pin; absent means tracked, and a spurious mark fails the objective under authority: ci", u)
+		t.Fatalf("tools entries carry untracked %v for a tracked pin; absent means tracked, and a spurious mark reports a tracked pin as untracked", u)
 	}
 }
 
@@ -209,10 +209,10 @@ func TestUntrackedMiseOverrideResolvesMarkedUntracked(t *testing.T) {
 	resp, raw := toolsRawIn(t, dir)
 	want := []toolEntry{{Name: "gremlins", Version: "0.6.0", PinnedBy: "mise.local.toml", Install: gremlinsMiseInstall}}
 	if resp.Environment != nil || !reflect.DeepEqual(resp.Tools, want) {
-		t.Fatalf("tools = %+v env %+v, want %+v; without authority: ci the developer's untracked pin is honoured and reported, not refused", resp.Tools, resp.Environment, want)
+		t.Fatalf("tools = %+v env %+v, want %+v; the developer's untracked pin is honoured and reported, not refused", resp.Tools, resp.Environment, want)
 	}
 	if u := toolsUntracked(t, raw); !reflect.DeepEqual(u, map[string]string{"gremlins": "true"}) {
-		t.Fatalf("tools untracked marks = %v, want gremlins: true; the evaluator fails exactly the marked pins under authority: ci\n%s", u, raw)
+		t.Fatalf("tools untracked marks = %v, want gremlins: true; the report lists exactly the marked pins\n%s", u, raw)
 	}
 	r, rawRun, stderr, code := runRawIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", filepath.Join(t.TempDir(), "ev"))
 	if code != 0 || r.Environment != nil || r.ToolVersions["gremlins"] != "0.6.0" || r.PinnedBy["gremlins"] != "mise.local.toml" {

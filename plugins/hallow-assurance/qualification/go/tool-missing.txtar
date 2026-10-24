@@ -34,7 +34,6 @@ test(p): cover Double
 -- expect.json --
 {
   "objectives": [
-    {"objective": "CFG-PROTECTED", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["gremlins: gremlins is not on PATH"]},
     {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}

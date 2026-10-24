@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/decode"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/hookio"
 )
@@ -52,7 +51,7 @@ func agentFiles(t *testing.T) map[string]agentFile {
 	return out
 }
 
-func TestAgentFilesMatchTheGuard(t *testing.T) {
+func TestAgentFilesAreOptionalHelpers(t *testing.T) {
 	var got []string
 	for p, a := range agentFiles(t) {
 		name, _ := a.front["name"].(string)
@@ -63,9 +62,9 @@ func TestAgentFilesMatchTheGuard(t *testing.T) {
 		if d, _ := a.front["description"].(string); len(strings.Fields(d)) < 5 {
 			t.Errorf("%s: description %q does not say when to delegate", p, d)
 		}
-		for _, k := range []string{"hooks", "mcpServers", "permissionMode", "isolation"} {
+		for _, k := range []string{"hooks", "mcpServers", "permissionMode"} {
 			if _, ok := a.front[k]; ok {
-				t.Errorf("%s sets %s: Claude Code ignores the first three for plugin agents, and a worktree writes provenance outside the PR", p, k)
+				t.Errorf("%s sets %s, which Claude Code ignores for plugin agents", p, k)
 			}
 		}
 		checkRoleContract(t, p, name, a)
@@ -74,13 +73,12 @@ func TestAgentFilesMatchTheGuard(t *testing.T) {
 				t.Errorf("%s: tools list lacks %s; every role edits files and runs tests", p, tool)
 			}
 		}
-		checkMayEdit(t, p, name, a.body)
+		checkEditGuidance(t, p, name, a.body)
 	}
-	want := []string{core.Implementer, core.Verifier, core.Pruner}
+	want := []string{"hallow-assurance:implementer", "hallow-assurance:pruner", "hallow-assurance:verifier"}
 	slices.Sort(got)
-	slices.Sort(want)
 	if !slices.Equal(got, want) {
-		t.Fatalf("agent types %v, want exactly the guard's %v", got, want)
+		t.Fatalf("agent types %v, want exactly %v", got, want)
 	}
 }
 
@@ -93,17 +91,29 @@ func checkRoleContract(t *testing.T, p, name string, a agentFile) {
 	}
 }
 
-func checkMayEdit(t *testing.T, p, name, body string) {
+var agentEdits = map[string][]string{
+	"implementer": {"source", "config"},
+	"verifier":    {"test", "fuzz_corpus"},
+	"pruner":      {"test", "fuzz_corpus"},
+}
+
+func checkEditGuidance(t *testing.T, p, name, body string) {
 	t.Helper()
-	mayEdit, _, ok := strings.Cut(body, "You may not")
+	_, rest, ok := strings.Cut(body, "Edit files whose role is")
+	sentence, _, _ := strings.Cut(rest, ".")
 	if !ok {
-		t.Errorf("%s: prompt never says which roles it may not edit", p)
+		t.Errorf("%s: prompt never says which roles it edits", p)
 		return
 	}
-	for _, r := range []core.Role{core.Source, core.Config, core.Test, core.FuzzCorpus, core.Generated} {
-		allowed, _ := core.Decide("hallow-assurance:"+name, "D", r, false)
-		if allowed != strings.Contains(mayEdit, "`"+string(r)+"`") {
-			t.Errorf("%s: prompt's may-edit sentence and guard disagree on %s (guard allows at D: %v)", p, r, allowed)
+	for _, r := range []string{"source", "config", "test", "fuzz_corpus"} {
+		if want := slices.Contains(agentEdits[name], r); strings.Contains(sentence, "`"+r+"`") != want {
+			t.Errorf("%s: edit guidance %q names `%s` = %v, want %v", p, sentence, r, !want, want)
+		}
+	}
+	lower := strings.ToLower(body)
+	for _, word := range []string{"guard", "provenance", "denies", "denied", "you may not"} {
+		if strings.Contains(lower, word) {
+			t.Errorf("%s: prompt says %q; nothing enforces the role any more, so the prompt must not claim it does", p, word)
 		}
 	}
 }
@@ -116,9 +126,9 @@ func TestShimSpeaksTheBinarysHookProtocol(t *testing.T) {
 		t.Fatalf("shim expects %v, assure implements hook protocol %d", m, hookio.Protocol)
 	}
 	path := fakeAssure(t, `if [ "$1 $2" = "hook protocol" ]; then echo 0; exit 0; fi
-echo ran; exit 0`)
-	code, out, errb := shimEvent(t, "post-tool-use", adoptedDir(t), path, "{}")
-	if code != 2 || strings.Contains(out, "ran") || !strings.Contains(errb, "'0'") {
-		t.Fatalf("an assure without post-tool-use was run: %d %q %q", code, out, errb)
+echo EXECUTED; exit 0`)
+	code, out, errb := shimEvent(t, "stop", adoptedDir(t), path, "{}")
+	if code != 0 || strings.Contains(out, "EXECUTED") || !strings.Contains(out, "speaks 0") {
+		t.Fatalf("an assure speaking another hook protocol was run, or the mismatch was not reported: %d %q %q", code, out, errb)
 	}
 }

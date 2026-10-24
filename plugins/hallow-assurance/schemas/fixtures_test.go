@@ -81,9 +81,6 @@ func checkInvalid(fsys fs.FS, v validator, k Kind) []string {
 		got := make([]string, 0, len(vs))
 		for _, x := range vs {
 			e := expectation{Location: x.Location, Keyword: x.Keyword}
-			if k == Provenance {
-				e.Line = x.Line
-			}
 			got = append(got, e.String())
 		}
 		wantS := make([]string, 0, len(want))

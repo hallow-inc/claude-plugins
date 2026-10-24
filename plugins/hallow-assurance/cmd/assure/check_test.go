@@ -52,6 +52,24 @@ func TestCheckWithoutFastExitsTwo(t *testing.T) {
 	}
 }
 
+func TestHookRemovedEventExitsTwoWithUsage(t *testing.T) {
+	for _, event := range []string{"pre-tool-use", "post-tool-use", "subagent-stop"} {
+		code, stdout, stderr := assure("hook", event)
+		if code != 2 || stdout != "" || !strings.Contains(stderr, "usage: assure hook session-start|stop|protocol") {
+			t.Errorf("hook %s: exit %d stdout %q stderr %q; a removed event is a usage error, never a silent allow", event, code, stdout, stderr)
+		}
+	}
+}
+
+func TestCheckRoleFlagExitsTwo(t *testing.T) {
+	newRepo(t, levelB)
+	for _, args := range [][]string{{"check", "--role", "verifier"}, {"check", "--fast", "--role", "verifier"}} {
+		if code, _, stderr := assure(args...); code != 2 {
+			t.Fatalf("%v: exit %d %q; the verifier role check is removed, so its flag is a usage error", args, code, stderr)
+		}
+	}
+}
+
 func TestCheckNothingChangedRunsNoAdapter(t *testing.T) {
 	r := newRepo(t, levelB)
 	fake := t.TempDir()
@@ -100,40 +118,5 @@ func TestCheckOutsideGitFailsClosed(t *testing.T) {
 	code, stdout, _ := assure("check", "--fast")
 	if code != 1 || !strings.Contains(stdout, "fail\tchanged-files") {
 		t.Fatalf("got %d %q", code, stdout)
-	}
-}
-
-func TestSnapshotThenDrift(t *testing.T) {
-	r := newRepo(t, levelB)
-	r.write(".assure/waivers.yaml", "[]\n")
-	if code, _, stderr := assure("guard", "--snapshot", "--session", "s1"); code != 0 {
-		t.Fatalf("snapshot: %d %s", code, stderr)
-	}
-	if code, stdout, _ := assure("guard", "--drift", "--session", "s1"); code != 0 || stdout != "" {
-		t.Fatalf("clean drift: %d %q", code, stdout)
-	}
-	r.write("src/x.go", "package x\n")
-	if code, _, _ := assure("guard", "--drift", "--session", "s1"); code != 0 {
-		t.Fatal("unprotected edit reported as drift")
-	}
-	r.write(".assure/waivers.yaml", "[] # edited through Bash\n")
-	code, stdout, _ := assure("guard", "--drift", "--session", "s1")
-	if code != 1 || !strings.Contains(stdout, "changed .assure/waivers.yaml") {
-		t.Fatalf("got %d %q", code, stdout)
-	}
-	if code, stdout, _ := assure("guard", "--drift", "--session", "s2"); code != 1 || !strings.Contains(stdout, "snapshot missing") {
-		t.Fatalf("missing snapshot: %d %q", code, stdout)
-	}
-}
-
-func TestSnapshotRejectsBadSessionAndWritesNothing(t *testing.T) {
-	r := newRepo(t, levelB)
-	for _, id := range []string{"../x", "a/b", ""} {
-		if code, _, _ := assure("guard", "--snapshot", "--session", id); code != 2 {
-			t.Errorf("session %q: exit %d, want 2", id, code)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(r.root, ".assure")); err == nil {
-		t.Fatal("bad session wrote state")
 	}
 }

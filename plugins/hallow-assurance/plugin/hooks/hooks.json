@@ -7,34 +7,10 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/assure-hook", "args": ["pre-tool-use"], "timeout": 10 }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/assure-hook", "args": ["post-tool-use"], "timeout": 10 }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
           { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/assure-hook", "args": ["stop"], "timeout": 180 }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "^hallow-assurance:verifier$",
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/assure-hook", "args": ["subagent-stop"], "timeout": 180 }
         ]
       }
     ]

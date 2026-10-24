@@ -16,7 +16,6 @@ var constraintKeywords = []string{
 }
 
 var equivalentMutants = map[string]string{
-	"provenance.schema.json#/type":            "the JSONL decoder already rejects any line that is not an object",
 	"common.schema.json#/$defs/repoPath/type": "not:{pattern} also rejects non-strings, because the inner pattern passes them vacuously",
 }
 

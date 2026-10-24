@@ -51,20 +51,20 @@ func TestScopedWaiverSuppressesALocatedFinding(t *testing.T) {
 }
 
 func TestPartialScopeDoesNotCoverMissingEvidence(t *testing.T) {
-	o := Objective{ID: "IND-VERIFIER-DISTINCT", Levels: map[Level]string{"A": "required", "B": "required"}}
-	ws := mustWaivers(t, waiverYAML("IND-VERIFIER-DISTINCT", "internal/**", "2026-12-31"))
+	o := Objective{ID: "VER-COVERAGE-RESOLUTION", Levels: map[Level]string{"A": "required", "B": "required"}}
+	ws := mustWaivers(t, waiverYAML("VER-COVERAGE-RESOLUTION", "internal/**", "2026-12-31"))
 	changed := []ChangedFile{{Path: "internal/core/fast.go", Level: "B"}, {Path: "cmd/assure/main.go", Level: "B"}}
-	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, ws, "2026-09-27")
+	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists VER-COVERAGE-RESOLUTION"}}, ws, "2026-09-27")
 	if got.Status != Fail {
 		t.Fatalf("got %+v; a narrow waiver must not hide a failure that also covers cmd/", got)
 	}
 }
 
 func TestRepoWideWaiverCoversMissingEvidence(t *testing.T) {
-	o := Objective{ID: "IND-VERIFIER-DISTINCT", Levels: map[Level]string{"A": "required", "B": "required"}}
-	ws := mustWaivers(t, waiverYAML("IND-VERIFIER-DISTINCT", "**", "2026-12-31"))
+	o := Objective{ID: "VER-COVERAGE-RESOLUTION", Levels: map[Level]string{"A": "required", "B": "required"}}
+	ws := mustWaivers(t, waiverYAML("VER-COVERAGE-RESOLUTION", "**", "2026-12-31"))
 	changed := []ChangedFile{{Path: "internal/core/fast.go", Level: "B"}, {Path: "cmd/assure/main.go", Level: "B"}}
-	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, ws, "2026-09-27")
+	got := DecideObjective(o, changed, Evidence{Problems: []string{"no adapter lists VER-COVERAGE-RESOLUTION"}}, ws, "2026-09-27")
 	if got.Status != Waived {
 		t.Fatalf("got %+v", got)
 	}
@@ -124,8 +124,8 @@ func TestFormalObjectivesNeedAFormalComponent(t *testing.T) {
 }
 
 func TestObjectiveNoAdapterProducesFails(t *testing.T) {
-	o := Objective{ID: "IND-VERIFIER-DISTINCT", Levels: map[Level]string{"A": "required", "B": "required"}}
-	got := DecideObjective(o, []ChangedFile{{Path: "a.go", Level: "B"}}, Evidence{Problems: []string{"no adapter lists IND-VERIFIER-DISTINCT"}}, nil, "2026-09-27")
+	o := Objective{ID: "VER-COVERAGE-RESOLUTION", Levels: map[Level]string{"A": "required", "B": "required"}}
+	got := DecideObjective(o, []ChangedFile{{Path: "a.go", Level: "B"}}, Evidence{Problems: []string{"no adapter lists VER-COVERAGE-RESOLUTION"}}, nil, "2026-09-27")
 	if got.Status != Fail || !strings.Contains(strings.Join(got.Details, "\n"), "no adapter lists") {
 		t.Fatalf("got %+v; missing evidence must fail closed", got)
 	}

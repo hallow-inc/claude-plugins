@@ -13,26 +13,14 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
-const unbuiltWaivers = `- {objective: IND-VERIFIER-DISTINCT, scope: '**', rationale: provenance arrives in milestone M4, approver: owner, expires: 2099-01-01}
-- {objective: CFG-PROTECTED, scope: '**', rationale: provenance arrives in milestone M4, approver: owner, expires: 2099-01-01}
-- {objective: VER-MUTATION-CHANGED, scope: '**', rationale: mutation runner arrives in M3b, approver: owner, expires: 2099-01-01}
+const unbuiltWaivers = `- {objective: VER-MUTATION-CHANGED, scope: '**', rationale: mutation runner arrives in M3b, approver: owner, expires: 2099-01-01}
 - {objective: VER-FAIL-ON-BASE, scope: '**', rationale: fail-on-base runner arrives in M3b, approver: owner, expires: 2099-01-01}
 - {objective: VER-ROBUST-FUZZ, scope: '**', rationale: fuzz evidence arrives in milestone M3b, approver: owner, expires: 2099-01-01}
 `
 
-const levelBReviewed = levelB + "authority: ci\nhuman_review: {B: required}\nprovenance: true\n"
-
-func reviewedGoRepo(t *testing.T) repo {
-	t.Helper()
-	r := goRepo(t)
-	r.write("assurance.yaml", levelBReviewed)
-	r.git("commit", "-qam", "require review")
-	return r
-}
-
 func waivedGoRepo(t *testing.T) repo {
 	t.Helper()
-	r := reviewedGoRepo(t)
+	r := goRepo(t)
 	r.write(".assure/waivers.yaml", unbuiltWaivers)
 	r.git("add", "-A")
 	r.git("commit", "-qm", "waivers")
@@ -83,7 +71,7 @@ func TestEvaluateWithoutRefExitsTwo(t *testing.T) {
 }
 
 func TestEvaluateBothRefFlagsExitTwo(t *testing.T) {
-	f := provBase(t, xxManifestOff, nil)
+	f := xxBase(t, xxManifest, nil)
 	handEdit(f)
 	f.commit()
 	if code, _, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01"); code == 2 {
@@ -109,7 +97,7 @@ func revParse(t *testing.T, root, rev string) string {
 }
 
 func TestEvaluateMergeBaseIsTheChangedFromPoint(t *testing.T) {
-	f := provBase(t, xxManifestOff, nil)
+	f := xxBase(t, xxManifest, nil)
 	fork := f.head()
 	f.git("checkout", "-qb", "moved-on", "main")
 	f.write("q/a.xx", "upstream a\n")
@@ -144,9 +132,9 @@ func TestEvaluateMergeBaseIsTheChangedFromPoint(t *testing.T) {
 }
 
 func TestEvaluateUnresolvableMergeBaseExitsTwoWithHint(t *testing.T) {
-	cases := map[string]func(f provFixture){
-		"absent ref": func(provFixture) {},
-		"unrelated history": func(f provFixture) {
+	cases := map[string]func(f xxFixture){
+		"absent ref": func(xxFixture) {},
+		"unrelated history": func(f xxFixture) {
 			f.git("checkout", "-q", "--orphan", "elsewhere")
 			f.git("commit", "-qm", "unrelated")
 			f.git("update-ref", "refs/remotes/upstream/main", "HEAD")
@@ -155,7 +143,7 @@ func TestEvaluateUnresolvableMergeBaseExitsTwoWithHint(t *testing.T) {
 	}
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {
-			f := provBase(t, xxManifestOff, nil)
+			f := xxBase(t, xxManifest, nil)
 			handEdit(f)
 			f.commit()
 			setup(f)
@@ -173,8 +161,8 @@ func TestEvaluateUnresolvableMergeBaseExitsTwoWithHint(t *testing.T) {
 	}
 }
 
-func TestEvaluateRefusesExcludedManifestUnderCentralAuthority(t *testing.T) {
-	f := provBase(t, xxManifest+"authority: ci\n", func(f provFixture) {
+func TestEvaluateUntrackedManifestEvaluates(t *testing.T) {
+	f := xxBase(t, xxManifest, func(f xxFixture) {
 		f.write(".git/info/exclude", "assurance.yaml\n")
 	})
 	handEdit(f)
@@ -182,9 +170,23 @@ func TestEvaluateRefusesExcludedManifestUnderCentralAuthority(t *testing.T) {
 	if out, err := exec.CommandContext(t.Context(), "git", "-C", f.root, "ls-files", "assurance.yaml").Output(); err != nil || len(out) != 0 {
 		t.Fatalf("fixture: assurance.yaml is tracked (%q, %v)", out, err)
 	}
-	code, _, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01")
-	if code != 2 || !strings.Contains(stderr, "CI could not read") || !strings.Contains(stderr, "assurance.yaml") {
-		t.Fatalf("got %d %q; under authority: ci a manifest kept out of git is one CI never sees, so evaluate must refuse", code, stderr)
+	code, stdout, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01")
+	if code != 0 {
+		t.Fatalf("got %d\n%s\n%s; a solo contributor keeps the manifest out of git, and every objective here passes or is waived", code, stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, app.ReportFile)); err != nil {
+		t.Fatalf("no report: %v", err)
+	}
+}
+
+func TestEvaluateReviewsFlagExitsTwo(t *testing.T) {
+	f := xxBase(t, xxManifest, nil)
+	handEdit(f)
+	f.commit()
+	f.write("r.json", "{}\n")
+	code, _, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01", "--reviews", "r.json")
+	if code != 2 {
+		t.Fatalf("got %d %q; reviews are removed, so the flag is a usage error", code, stderr)
 	}
 	noReport(t, f.repo)
 }
@@ -216,9 +218,8 @@ func TestEvaluateNothingChangedExitsZeroWithEmptyReport(t *testing.T) {
 func TestEvaluateUnproducedObjectiveFailsWithoutWaiver(t *testing.T) {
 	r := goRepo(t)
 	r.write("assurance.yaml", "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents:\n"+
-		"  - {path: 'p/**', level: B, formal: {model: formal/P, challenge: formal/P/C.lean, link: drt}}\n"+
-		"authority: ci\nhuman_review: {B: required}\nprovenance: true\n")
-	r.git("commit", "-qam", "formal component, require review")
+		"  - {path: 'p/**', level: B, formal: {model: formal/P, challenge: formal/P/C.lean, link: drt}}\n")
+	r.git("commit", "-qam", "formal component")
 	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int { return b + a }\n")
 	if code, _, _ := assure("evaluate", "--changed-from", "HEAD"); code != 1 {
 		t.Fatalf("exit %d, want 1: missing evidence must block", code)
@@ -227,10 +228,6 @@ func TestEvaluateUnproducedObjectiveFailsWithoutWaiver(t *testing.T) {
 	e, ok := entry(rep, "FM-COMPLETE", "")
 	if !ok || e.Status != "advisory-fail" || len(e.Details) != 1 || e.Details[0] != "no adapter lists FM-COMPLETE" {
 		t.Fatalf("FM-COMPLETE (advisory at B, no adapter lists it): %+v %v", e, ok)
-	}
-	ind, ok := entry(rep, "IND-VERIFIER-DISTINCT", "")
-	if !ok || ind.Status != "fail" || len(ind.Details) != 1 || !strings.HasPrefix(ind.Details[0], "p/p.go: gap") {
-		t.Fatalf("IND-VERIFIER-DISTINCT must be decided from provenance, not reported as unlisted: %+v %v", ind, ok)
 	}
 }
 
@@ -249,9 +246,9 @@ func TestEvaluateCleanChangePassesWithWaivers(t *testing.T) {
 		if strings.HasPrefix(e.Objective, "CODE-") {
 			t.Errorf("report decides %s; no code-shape objective is in the catalog", e.Objective)
 		}
-	}
-	if e, _ := entry(rep, "IND-VERIFIER-DISTINCT", ""); e.Status != "waived" || len(e.Waivers) != 1 {
-		t.Errorf("IND-VERIFIER-DISTINCT: %+v", e)
+		if strings.HasPrefix(e.Objective, "IND-") || strings.HasPrefix(e.Objective, "CFG-") {
+			t.Errorf("report decides %s; the independence and protected-file objectives are removed from the catalog", e.Objective)
+		}
 	}
 	if rep.ToolVersions["go"]["go"] == "" {
 		t.Errorf("tool_versions: %v", rep.ToolVersions)

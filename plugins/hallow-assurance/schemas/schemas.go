@@ -27,19 +27,15 @@ const (
 	Manifest        Kind = "manifest"
 	Catalog         Kind = "catalog"
 	Waivers         Kind = "waivers"
-	Provenance      Kind = "provenance"
 	AdapterDescribe Kind = "adapter-describe"
 	AdapterClassify Kind = "adapter-classify"
 	AdapterRun      Kind = "adapter-run"
 	AdapterTools    Kind = "adapter-tools"
 	AdapterCache    Kind = "adapter-cache"
-	Snapshot        Kind = "snapshot"
 	StopState       Kind = "stop-state"
 	Report          Kind = "report"
 	MutationReport  Kind = "mutation-report"
 	Resolutions     Kind = "coverage-resolutions"
-	Reviews         Kind = "reviews"
-	Pending         Kind = "pending"
 	QualExpect      Kind = "qualification-expect"
 )
 
@@ -52,7 +48,6 @@ type syntax int
 const (
 	yamlDoc syntax = iota
 	jsonDoc
-	jsonLines
 )
 
 var kinds = map[Kind]struct {
@@ -62,19 +57,15 @@ var kinds = map[Kind]struct {
 	Manifest:        {base + "manifest.schema.json", yamlDoc},
 	Catalog:         {base + "catalog.schema.json", yamlDoc},
 	Waivers:         {base + "waivers.schema.json", yamlDoc},
-	Provenance:      {base + "provenance.schema.json", jsonLines},
 	AdapterDescribe: {base + "adapter-describe.schema.json", jsonDoc},
 	AdapterClassify: {base + "adapter-classify.schema.json", jsonDoc},
 	AdapterRun:      {base + "adapter-run.schema.json", jsonDoc},
 	AdapterTools:    {base + "adapter-tools.schema.json", jsonDoc},
 	AdapterCache:    {base + "adapter-cache.schema.json", jsonDoc},
-	Snapshot:        {base + "snapshot.schema.json", jsonDoc},
 	StopState:       {base + "stop-state.schema.json", jsonDoc},
 	Report:          {base + "report.schema.json", jsonDoc},
 	MutationReport:  {strykerID, jsonDoc},
 	Resolutions:     {base + "coverage-resolutions.schema.json", yamlDoc},
-	Reviews:         {base + "reviews.schema.json", jsonDoc},
-	Pending:         {base + "pending.schema.json", jsonDoc},
 	QualExpect:      {"https://assure.invalid/schemas/v0/qualification-expect.schema.json", jsonDoc},
 }
 
@@ -188,22 +179,12 @@ func (v validator) validate(k Kind, data []byte) ([]Violation, error) {
 			return nil, err
 		}
 		return violations(sch, doc, 0), nil
-	case jsonDoc:
+	default:
 		doc, err := decode.JSON(data)
 		if err != nil {
 			return nil, err
 		}
 		return violations(sch, doc, 0), nil
-	default:
-		docs, err := decode.JSONLines(data)
-		if err != nil {
-			return nil, err
-		}
-		var out []Violation
-		for i, doc := range docs {
-			out = append(out, violations(sch, doc, i+1)...)
-		}
-		return out, nil
 	}
 }
 

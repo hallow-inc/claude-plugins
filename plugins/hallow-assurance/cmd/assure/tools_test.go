@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -17,7 +16,7 @@ const (
 	untrackedPin    = `{"protocol":2,"tools":[{"name":"gremlins","version":"0.6.0","pinned_by":"mise.local.toml","untracked":true,"install":"mise install go:github.com/go-gremlins/gremlins/cmd/gremlins@0.6.0"}]}`
 )
 
-func TestToolsUntrackedPinUnderLocalAuthority(t *testing.T) {
+func TestToolsListsUntrackedPin(t *testing.T) {
 	newRepo(t, twoLangManifest)
 	cannedAdapters(t, map[string]map[string]string{"yy": {"tools.json": `{"protocol":2,"tools":[]}`}, "xx": {"tools.json": untrackedPin}})
 	code, stdout, stderr := assure("tools")
@@ -81,22 +80,10 @@ func drawToolResponses(rt *rapid.T, bin string, langs ...string) (want []toolLin
 }
 
 func TestToolsPrintsAdapterResponsesInManifestOrder(t *testing.T) {
-	r := newRepo(t, twoLangManifest)
+	newRepo(t, twoLangManifest)
 	bin := cannedAdapters(t, map[string]map[string]string{"xx": {}, "yy": {}})
 	rapid.Check(t, func(rt *rapid.T) {
-		authority := rapid.SampledFrom([]string{"", "local", "ci"}).Draw(rt, "authority")
-		manifest := twoLangManifest
-		if authority != "" {
-			manifest += "authority: " + authority + "\n"
-		}
-		if err := os.WriteFile(filepath.Join(r.root, "assurance.yaml"), []byte(manifest), 0o644); err != nil {
-			rt.Fatal(err)
-		}
 		want, installs := drawToolResponses(rt, bin, "yy", "xx")
-		if authority == "ci" && slices.ContainsFunc(want, func(w toolLine) bool { return w.untracked }) {
-			checkUntrackedRefused(rt, want)
-			return
-		}
 		script := "#!/bin/sh\nset -eu\n" + installs
 		code, stdout, stderr := assure("tools", "--install-script")
 		if code != 0 || stdout != script || stderr != "" {
@@ -130,20 +117,6 @@ func toolLineMatches(line string, w toolLine) bool {
 	return f[0] == w.lang && f[1] == w.name && f[2] == w.version && origin == w.pinnedBy && marked == w.untracked
 }
 
-func checkUntrackedRefused(rt *rapid.T, want []toolLine) {
-	for _, args := range [][]string{{"tools"}, {"tools", "--install-script"}} {
-		code, stdout, stderr := assure(args...)
-		if code != 1 || stdout != "" {
-			rt.Fatalf("%v: exit %d stdout %q; under authority: ci a pin CI cannot see must fail with nothing on stdout", args, code, stdout)
-		}
-		for _, w := range want {
-			if w.untracked && !hasLine(stderr, w.name, w.pinnedBy) {
-				rt.Fatalf("%v: no stderr line names %s and %s:\n%s", args, w.name, w.pinnedBy, stderr)
-			}
-		}
-	}
-}
-
 func TestToolsFailuresPrintNothingOnStdout(t *testing.T) {
 	cases := map[string]struct {
 		manifest, tools, args string
@@ -155,8 +128,6 @@ func TestToolsFailuresPrintNothingOnStdout(t *testing.T) {
 		"adapter error":               {twoLangManifest, `{"protocol":1,"tools":[]}`, "--install-script", 1, "assure-adapter-xx tools: protocol mismatch"},
 		"missing manifest":            {"", `{"protocol":2,"tools":[]}`, "", 2, "assurance.yaml"},
 		"usage":                       {twoLangManifest, `{"protocol":2,"tools":[]}`, "--bogus", 2, "usage: assure tools"},
-		"untracked pin, ci":           {twoLangManifest + "authority: ci\n", untrackedPin, "", 1, "gremlins"},
-		"untracked pin, ci, script":   {twoLangManifest + "authority: ci\n", untrackedPin, "--install-script", 1, "mise.local.toml"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

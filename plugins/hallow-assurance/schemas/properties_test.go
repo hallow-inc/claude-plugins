@@ -65,7 +65,6 @@ var (
 	badLang  = []any{"Go", "1go", 7}
 	badEv    = []any{"Mutation", "a..b", 7}
 	badText  = []any{"", 7}
-	badBlob  = []any{"A41E", strings.Repeat("a", 39), 7}
 
 	levelGen  = rapid.SampledFrom([]string{"A", "B", "C", "D"})
 	pathGen   = rapid.StringMatching(`[a-z]{1,6}(/[a-z*]{1,6}){0,3}`)
@@ -73,7 +72,6 @@ var (
 	langGen   = rapid.StringMatching(`[a-z][a-z0-9_-]{0,8}`)
 	evGen     = rapid.StringMatching(`[a-z][a-z0-9_]{0,6}(\.[a-z0-9_]{1,6}){0,2}`)
 	textGen   = rapid.StringMatching(`[A-Za-z][A-Za-z0-9 ]{0,20}`)
-	blobGen   = rapid.OneOf(rapid.StringMatching(`[0-9a-f]{40}`), rapid.StringMatching(`[0-9a-f]{64}`))
 	levelKeys = []string{"A", "B", "C", "D"}
 	appliesTo = []string{"formal", "inputs", "fix"}
 )
@@ -115,35 +113,10 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "default_level", badLevel...)
 	r.bad("", "languages", "x", []any{}, []any{langs[0], langs[0]})
 	r.bad("", "components", "x", []any{"x"})
-	r.bad("", "protected", "x")
-	r.bad("", "human_review", "x", map[string]any{"E": "required"}, map[string]any{"a": "optional"})
-	r.bad("", "authority", "team", "CI", "", 1, true)
-	authority := authorityGen.Draw(t, "authority")
-	if authority != "" {
-		doc["authority"] = authority
-	}
-	if authority != "local" && rapid.Bool().Draw(t, "review") {
-		hr := reviewMap(t)
-		for l := range hr {
-			r.bad("/human_review", l, "off", true, 1)
-		}
-		doc["human_review"] = hr
-		r.add("human_review with authority local", "/human_review", op{key: "authority", val: "local"})
-	} else if authority == "local" {
-		r.add("human_review under local authority", "/human_review", op{key: "human_review", val: reviewMap(t)})
-	}
-	r.bad("", "provenance", "yes", 1)
-	if rapid.Bool().Draw(t, "has provenance") {
-		doc["provenance"] = rapid.Bool().Draw(t, "provenance")
-	}
-	if rapid.Bool().Draw(t, "protected") {
-		prot := []any{}
-		for i := range rapid.IntRange(0, 2).Draw(t, "nprot") {
-			prot = append(prot, pathGen.Draw(t, "prot"))
-			r.bad("/protected", idx(i), badPath...)
-		}
-		doc["protected"] = prot
-	}
+	r.add("removed key protected", "", op{key: "protected", val: []any{pathGen.Draw(t, "prot")}})
+	r.add("removed key authority", "", op{key: "authority", val: rapid.SampledFrom([]string{"local", "ci"}).Draw(t, "authority")})
+	r.add("removed key human_review", "", op{key: "human_review", val: map[string]any{levelGen.Draw(t, "hr"): "optional"}})
+	r.add("removed key provenance", "", op{key: "provenance", val: rapid.Bool().Draw(t, "provenance")})
 	comps := []any{}
 	for i := range rapid.IntRange(0, 3).Draw(t, "ncomp") {
 		p := "/components/" + idx(i)
@@ -169,51 +142,6 @@ var manifestGen = rapid.Custom(func(t *rapid.T) sample {
 	doc["components"] = comps
 	return sample{doc, r.cs}
 })
-
-var authorityGen = rapid.SampledFrom([]string{"", "local", "ci"})
-
-func reviewMap(t *rapid.T) map[string]any {
-	hr := map[string]any{}
-	for _, l := range levelKeys {
-		if rapid.Bool().Draw(t, "hr"+l) {
-			hr[l] = rapid.SampledFrom([]string{"required", "optional"}).Draw(t, "hrv")
-		}
-	}
-	return hr
-}
-
-func TestHumanReviewRejectedExactlyUnderLocalAuthority(t *testing.T) {
-	v, err := compiled()
-	if err != nil {
-		t.Fatal(err)
-	}
-	rapid.Check(t, func(t *rapid.T) {
-		doc := deepCopy(manifestGen.Draw(t, "manifest").doc).(map[string]any)
-		delete(doc, "authority")
-		delete(doc, "human_review")
-		authority := authorityGen.Draw(t, "authority")
-		if authority != "" {
-			doc["authority"] = authority
-		}
-		hasReview := rapid.Bool().Draw(t, "has human_review")
-		if hasReview {
-			doc["human_review"] = reviewMap(t)
-		}
-		vs, err := v.validate(Manifest, serialize(Manifest, doc))
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := hasReview && authority == "local"
-		if got := caughtAt(vs, "/human_review"); got != want {
-			t.Fatalf("authority=%q human_review present=%v: rejected at /human_review = %v, want %v; only explicit local contradicts review, an absent key must keep pre-authority manifests loading (violations %v)", authority, hasReview, got, want, vs)
-		}
-		for _, x := range vs {
-			if x.Location != "/human_review" {
-				t.Fatalf("authority=%q: unexpected violation %v; only /human_review may fail", authority, x)
-			}
-		}
-	})
-}
 
 var catalogGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
@@ -293,42 +221,6 @@ var waiversGen = rapid.Custom(func(t *rapid.T) sample {
 		r.bad(p, "expires", "2026-02-30", "2026-1-1", 20261231)
 	}
 	return sample{ws, r.cs}
-})
-
-var provenanceGen = rapid.Custom(func(t *rapid.T) sample {
-	r := &rec{}
-	doc := map[string]any{
-		"v":       0,
-		"session": textGen.Draw(t, "session"),
-		"tool":    rapid.SampledFrom([]string{"Edit", "Write", "NotebookEdit"}).Draw(t, "tool"),
-		"path":    pathGen.Draw(t, "path"),
-		"role":    rapid.SampledFrom([]string{"source", "test", "generated", "fuzz_corpus", "config", "unclassified"}).Draw(t, "role"),
-	}
-	switch rapid.IntRange(0, 2).Draw(t, "shape") {
-	case 0:
-		doc["pre"], doc["post"] = nil, blobGen.Draw(t, "post")
-	case 1:
-		doc["pre"], doc["post"] = blobGen.Draw(t, "pre"), nil
-	default:
-		doc["pre"], doc["post"] = blobGen.Draw(t, "pre"), blobGen.Draw(t, "post")
-	}
-	if rapid.Bool().Draw(t, "sub") {
-		doc["agent_id"] = textGen.Draw(t, "aid")
-		doc["agent_type"] = "hallow-assurance:" + textGen.Draw(t, "atype")
-	}
-	r.closed("")
-	r.required("", "v", "session", "tool", "path", "role", "pre", "post")
-	r.bad("", "v", 1, "0")
-	r.bad("", "session", badText...)
-	r.bad("", "tool", badText...)
-	r.bad("", "path", badPath...)
-	r.bad("", "role", "src", 1)
-	r.bad("", "pre", badBlob...)
-	r.bad("", "post", badBlob...)
-	r.bad("", "agent_id", badText...)
-	r.bad("", "agent_type", badText...)
-	r.add("pre and post both null", "", op{key: "pre", val: nil}, op{key: "post", val: nil})
-	return sample{doc, r.cs}
 })
 
 var describeGen = rapid.Custom(func(t *rapid.T) sample {
@@ -560,28 +452,6 @@ var cacheGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
-var snapshotGen = rapid.Custom(func(t *rapid.T) sample {
-	r := &rec{}
-	files := []any{}
-	for i := range rapid.IntRange(0, 3).Draw(t, "nfiles") {
-		p := "/files/" + idx(i)
-		files = append(files, map[string]any{"path": pathGen.Draw(t, "path"), "blob": rapid.StringMatching(`[0-9a-f]{40}`).Draw(t, "blob")})
-		r.closed(p)
-		r.required(p, "path", "blob")
-		r.bad(p, "path", badPath...)
-		r.bad(p, "blob", strings.Repeat("A", 40), strings.Repeat("a", 39), 7)
-		r.bad("/files", idx(i), "x")
-	}
-	doc := map[string]any{"version": 0, "session": rapid.StringMatching(`[A-Za-z0-9_-]{1,40}`).Draw(t, "session"), "files": files}
-	r.root("x", []any{})
-	r.closed("")
-	r.required("", "version", "session", "files")
-	r.bad("", "version", 1, "0")
-	r.bad("", "session", "", "a/b", "..", strings.Repeat("a", 129), 7)
-	r.bad("", "files", "x", map[string]any{})
-	return sample{doc, r.cs}
-})
-
 var stopStateGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
 	fps := rapid.SliceOfNDistinct(rapid.StringMatching(`[0-9a-f]{64}`), 1, 32, rapid.ID[string]).Draw(t, "fingerprints")
@@ -682,7 +552,6 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 		"changed_from":    map[string]any{"ref": textGen.Draw(t, "ref"), "sha": shaGen.Draw(t, "base")},
 		"date":            "2026-09-27",
 		"catalog":         "v" + strconv.Itoa(rapid.IntRange(0, 9).Draw(t, "cat")),
-		"authority":       rapid.SampledFrom([]string{"local", "ci"}).Draw(t, "authority"),
 		"untracked_pins":  untracked,
 		"changed_files":   rapid.IntRange(0, 50).Draw(t, "changed"),
 		"tool_versions":   tv,
@@ -694,8 +563,8 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	r.root("x", []any{})
 	r.closed("")
 	r.add("report carries a retired removable_baseline list", "", op{key: "removable_baseline", val: []any{}})
-	r.required("", "version", "commit", "changed_from", "date", "catalog", "authority", "untracked_pins", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "objectives")
-	r.bad("", "authority", "team", "", 1)
+	r.add("report carries the removed authority field", "", op{key: "authority", val: rapid.SampledFrom([]string{"local", "ci"}).Draw(t, "authority")})
+	r.required("", "version", "commit", "changed_from", "date", "catalog", "untracked_pins", "changed_files", "tool_versions", "pinned_by", "problems", "expired_waivers", "objectives")
 	r.bad("", "untracked_pins", "x", []any{})
 	r.bad("", "version", 1, "0")
 	r.bad("", "commit", badSHA...)
@@ -717,19 +586,15 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 
 var generators = map[Kind]*rapid.Generator[sample]{
 	Report:          reportGen,
-	Snapshot:        snapshotGen,
 	StopState:       stopStateGen,
 	AdapterCache:    cacheGen,
 	Manifest:        manifestGen,
 	Catalog:         catalogGen,
 	Waivers:         waiversGen,
-	Provenance:      provenanceGen,
 	AdapterDescribe: describeGen,
 	AdapterClassify: classifyGen,
 	AdapterRun:      runGen,
 	AdapterTools:    toolsGen,
-	Reviews:         reviewsGen,
-	Pending:         pendingGen,
 }
 
 func deepCopy(v any) any {
@@ -785,13 +650,10 @@ func apply(doc any, c corruption) any {
 	return doc
 }
 
-func serialize(k Kind, doc any) []byte {
+func serialize(doc any) []byte {
 	data, err := json.Marshal(doc)
 	if err != nil {
 		panic(err)
-	}
-	if k == Provenance {
-		data = append(data, '\n')
 	}
 	return data
 }
@@ -807,12 +669,12 @@ func caughtAt(vs []Violation, want string) bool {
 
 func checkSample(v validator, k Kind, s sample) []string {
 	var problems []string
-	vs, err := v.validate(k, serialize(k, s.doc))
+	vs, err := v.validate(k, serialize(s.doc))
 	if err != nil || len(vs) > 0 {
-		problems = append(problems, fmt.Sprintf("%s: generated valid document rejected: err=%v %v\n%s", k, err, vs, serialize(k, s.doc)))
+		problems = append(problems, fmt.Sprintf("%s: generated valid document rejected: err=%v %v\n%s", k, err, vs, serialize(s.doc)))
 	}
 	for _, c := range s.cs {
-		vs, err := v.validate(k, serialize(k, apply(s.doc, c)))
+		vs, err := v.validate(k, serialize(apply(s.doc, c)))
 		if err != nil && c.want == "" {
 			continue
 		}

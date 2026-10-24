@@ -71,13 +71,13 @@ func TestVersionPrintsBuildVersionAndHookProtocol(t *testing.T) {
 }
 
 func TestVersionOfReleasedBinary(t *testing.T) {
-	stubBuildInfo(t, "v0.1.0", true)
-	checkVersionLine(t, "v0.1.0 (hook protocol 2)\n")
+	stubBuildInfo(t, "v0.2.0", true)
+	checkVersionLine(t, "v0.2.0 (hook protocol 3)\n")
 }
 
 func TestVersionOfDevelBuild(t *testing.T) {
 	stubBuildInfo(t, "(devel)", true)
-	checkVersionLine(t, "(devel) (hook protocol 2)\n")
+	checkVersionLine(t, "(devel) (hook protocol 3)\n")
 }
 
 func TestVersionWithoutBuildInfoIsDevel(t *testing.T) {
@@ -86,8 +86,8 @@ func TestVersionWithoutBuildInfoIsDevel(t *testing.T) {
 }
 
 func TestUnknownCommandFails(t *testing.T) {
-	known := map[string]bool{"help": true, "--help": true, "-h": true, "version": true, "--version": true, "guard": true, "context": true, "classify": true,
-		"check": true, "evaluate": true, "hook": true, "record": true, "reference": true, "tools": true, "reviews": true}
+	known := map[string]bool{"help": true, "--help": true, "-h": true, "version": true, "--version": true, "context": true, "classify": true,
+		"check": true, "evaluate": true, "hook": true, "reference": true, "tools": true}
 	rapid.Check(t, func(t *rapid.T) {
 		cmd := rapid.String().Filter(func(s string) bool { return !known[s] }).Draw(t, "cmd")
 		var out, errOut bytes.Buffer
@@ -110,6 +110,20 @@ func TestRetiredBaselineCommandIsUnknown(t *testing.T) {
 	run([]string{"--help"}, &help, &help)
 	if strings.Contains(help.String(), "baseline") {
 		t.Fatalf("usage still offers baseline:\n%s", help.String())
+	}
+}
+
+func TestRemovedCommandsAreUnknown(t *testing.T) {
+	var help bytes.Buffer
+	run([]string{"--help"}, &help, &help)
+	for _, cmd := range []string{"guard", "record", "reviews"} {
+		var out, errOut bytes.Buffer
+		if code := run([]string{cmd}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "unknown command") {
+			t.Errorf("assure %s: exit %d, stderr %q; the guard, provenance, and reviews are removed, so the command must exit 2 as unknown", cmd, code, errOut.String())
+		}
+		if strings.Contains(help.String(), "  "+cmd+" ") {
+			t.Errorf("usage still offers %s:\n%s", cmd, help.String())
+		}
 	}
 }
 

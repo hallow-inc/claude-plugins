@@ -24,8 +24,6 @@ type Objective struct {
 	AppliesTo string
 }
 
-const ProvenanceEvidence = "provenance.chain"
-
 type Catalog struct {
 	Version    string
 	Objectives []Objective

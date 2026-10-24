@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -74,48 +72,24 @@ func TestStopAllowsCleanChange(t *testing.T) {
 	}
 }
 
-func TestStopBlocksOnDrift(t *testing.T) {
+func TestStopAllowsWaiverAndManifestEdits(t *testing.T) {
 	root := goFixture(t)
 	writeFile(t, root, ".assure/waivers.yaml", "[] # edited through Bash\n")
-	code, out := stopWith(t, root, false)
-	if reason, _ := out["reason"].(string); code != 2 || !strings.Contains(reason, "changed .assure/waivers.yaml") {
-		t.Fatalf("drift not reported: %d %v", code, out)
+	writeFile(t, root, "assurance.yaml", manifest+"# edited by the agent\n")
+	if code, out := stopWith(t, root, false); code != 0 || out != nil {
+		t.Fatalf("got %d %v; no file is protected, so an edit that breaks no objective must stop silently", code, out)
 	}
 }
 
-func TestStopAllowsMissingSnapshotWithRestartMessage(t *testing.T) {
+func TestStopReportsEscalatedFailureWithoutBlocking(t *testing.T) {
 	root := goFixture(t)
-	if err := os.Remove(filepath.Join(root, ".assure", "state", "snapshot-"+session+".json")); err != nil {
-		t.Fatal(err)
-	}
-	code, out := stopWith(t, root, false)
-	if msg, _ := out["systemMessage"].(string); code != 0 || out["decision"] != nil || !strings.Contains(msg, "no protected-file snapshot") || !strings.Contains(msg, "restart Claude Code") {
-		t.Fatalf("missing snapshot: got %d %v", code, out)
-	}
-}
-
-func TestStopBlocksMissingSnapshotMixedWithFailingTest(t *testing.T) {
-	root := goFixture(t)
-	if err := os.Remove(filepath.Join(root, ".assure", "state", "snapshot-"+session+".json")); err != nil {
-		t.Fatal(err)
-	}
 	writeFile(t, root, "p/p_test.go", "package p\n\nimport \"testing\"\n\nfunc TestOne(t *testing.T) { t.Fatal(\"no\") }\n")
-	code, out := stopWith(t, root, false)
-	reason, _ := out["reason"].(string)
-	if code != 2 || !strings.Contains(reason, "TestOne") || !strings.Contains(reason, "snapshot") {
-		t.Fatalf("mixed failures: got %d %v", code, out)
-	}
-}
-
-func TestStopReportsEscalatedDriftWithoutBlocking(t *testing.T) {
-	root := goFixture(t)
-	writeFile(t, root, ".assure/waivers.yaml", "[] # edited by the human\n")
 	for i := range 4 {
 		stopWith(t, root, i > 0)
 	}
 	for i := range 2 {
 		code, out := stopWith(t, root, false)
-		if msg, _ := out["systemMessage"].(string); code != 0 || out["decision"] != nil || !strings.Contains(msg, ".assure/waivers.yaml") {
+		if msg, _ := out["systemMessage"].(string); code != 0 || out["decision"] != nil || !strings.Contains(msg, "TestOne") {
 			t.Fatalf("prompt %d after escalation: got %d %v", i+1, code, out)
 		}
 	}
@@ -148,35 +122,27 @@ func TestStopEscalatesAfterThreeBlocks(t *testing.T) {
 	}
 }
 
-func FuzzPreToolUse(f *testing.F) {
+func FuzzStopRejectsUndecodableInput(f *testing.F) {
 	root := fixture(f)
-	writeFile(f, root, "assurance.yaml", manifest+"  - '**'\n")
-	for _, name := range []string{"pre-tool-use-edit-main", "pre-tool-use-write-main", "pre-tool-use-notebookedit-main", "pre-tool-use-edit-subagent"} {
+	for _, name := range []string{"stop-first", "stop-after-block"} {
 		f.Add(payload(f, name, root, nil))
 	}
-	f.Add([]byte(`{"hook_event_name":"PreToolUse","cwd":"` + root + `","tool_name":"Write","tool_input":{"file_path":"x"}}`))
+	f.Add([]byte(`{"session_id":`))
+	f.Add([]byte(`{"hook_event_name":"Stop","cwd":"relative","session_id":"s"}`))
+	f.Add([]byte(`{"hook_event_name":"Stop","cwd":"` + root + `","session_id":"a/b"}`))
 	f.Fuzz(func(t *testing.T, data []byte) {
+		in, err := parse(bytes.NewReader(data))
+		if err == nil {
+			err = validate("stop", in)
+		}
+		if err == nil {
+			return
+		}
 		var out, errb bytes.Buffer
-		Run("pre-tool-use", bytes.NewReader(data), &out, &errb)
-		if out.Len() > 0 && strings.Contains(out.String(), `"deny"`) {
-			return
-		}
-		var in input
-		if json.Unmarshal(data, &in) != nil || in.HookEventName != "PreToolUse" {
-			t.Fatalf("undecodable input allowed: %q -> %q", data, out.String())
-		}
-		if !guardedTools[in.ToolName] {
-			return
-		}
-		p := in.ToolInput.FilePath
-		if in.ToolName == "NotebookEdit" {
-			p = in.ToolInput.NotebookPath
-		}
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(in.Cwd, p)
-		}
-		if _, ok, _ := adopted(filepath.Dir(p)); ok {
-			t.Fatalf("edit inside the all-protected repo allowed: %q -> %q", data, out.String())
+		code := Run("stop", bytes.NewReader(data), &out, &errb)
+		var o map[string]any
+		if code != 2 || json.Unmarshal(out.Bytes(), &o) != nil || o["decision"] != "block" {
+			t.Fatalf("Stop input %q failed validation (%v) but got exit %d, output %q; it must block, never allow silently", data, err, code, out.String())
 		}
 	})
 }
@@ -209,13 +175,6 @@ func stopInputGen(t *rapid.T) stopInput {
 		in.rep.Results = append(in.rep.Results, res)
 	}
 	in.rep.Changed = 1
-	in.drifted = rapid.SliceOfN(rapid.SampledFrom([]string{"changed a", "added b", "removed c"}), 0, 2).Draw(t, "drifted")
-	switch rapid.IntRange(0, 2).Draw(t, "drift err") {
-	case 1:
-		in.driftErr = fmt.Errorf("%w: gone", core.ErrSnapshotMissing)
-	case 2:
-		in.driftErr = fmt.Errorf("walk failed")
-	}
 	in.active = rapid.Bool().Draw(t, "active")
 	return in
 }
@@ -228,7 +187,7 @@ func TestNoSilentAllowOfAFailingStop(t *testing.T) {
 		}
 		in := stopInputGen(t)
 		_, resp := decideStop(in, state)
-		if !in.rep.Blocking() && len(in.drifted) == 0 && in.driftErr == nil {
+		if !in.rep.Blocking() {
 			if resp.out != nil {
 				t.Fatalf("passing stop produced output %+v", resp.out)
 			}
@@ -246,11 +205,6 @@ func TestNoSilentAllowOfAFailingStop(t *testing.T) {
 		for _, res := range in.rep.Results {
 			if res.Status == core.Fail && !strings.Contains(text, res.ID) {
 				t.Fatalf("message does not name failing %s:\n%s", res.ID, text)
-			}
-		}
-		for _, d := range in.drifted {
-			if !strings.Contains(text, d) {
-				t.Fatalf("message does not name drift %q:\n%s", d, text)
 			}
 		}
 	})

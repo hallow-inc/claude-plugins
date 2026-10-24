@@ -42,7 +42,6 @@ fix(src): double correctly
 -- expect.json --
 {
   "objectives": [
-    {"objective": "CFG-PROTECTED", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
     {"objective": "VER-FAIL-ON-BASE", "language": "typescript", "status": "fail", "locations": ["passes on base: src/double.test.ts.double of 2 is 4"]},
     {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "pass"},

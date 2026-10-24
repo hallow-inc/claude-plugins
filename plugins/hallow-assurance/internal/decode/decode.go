@@ -228,25 +228,3 @@ func uniqueKeys(dec *json.Decoder, ptr string) error {
 	_, err = dec.Token()
 	return err
 }
-
-func JSONLines(data []byte) ([]Doc, error) {
-	if len(data) == 0 {
-		return nil, nil
-	}
-	if data[len(data)-1] != '\n' {
-		return nil, &Error{Line: bytes.Count(data, []byte("\n")) + 1, Column: 1, Msg: "partial final line (no trailing newline)"}
-	}
-	lines := bytes.Split(data[:len(data)-1], []byte("\n"))
-	docs := make([]Doc, 0, len(lines))
-	for i, line := range lines {
-		d, err := JSON(line)
-		if err != nil {
-			return nil, &Error{Line: i + 1, Column: 1, Msg: err.Error()}
-		}
-		if _, ok := d.Value.(map[string]any); !ok {
-			return nil, &Error{Line: i + 1, Column: 1, Msg: "line is not a JSON object"}
-		}
-		docs = append(docs, d)
-	}
-	return docs, nil
-}

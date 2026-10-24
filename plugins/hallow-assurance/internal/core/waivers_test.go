@@ -58,3 +58,13 @@ func FuzzParseWaivers(f *testing.F) {
 		}
 	})
 }
+
+func writeFile(t interface{ Fatalf(string, ...any) }, root, rel, body string) {
+	p := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatalf("%v", err)
+	}
+}

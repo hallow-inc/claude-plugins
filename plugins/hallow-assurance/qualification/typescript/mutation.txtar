@@ -54,7 +54,6 @@ feat(src): add clamp
 -- expect.json --
 {
   "objectives": [
-    {"objective": "CFG-PROTECTED", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "fail", "locations": ["level B: 0 of 11 mutants detected", "src/clamp.ts:2 ", "src/clamp.ts:5 "]},
     {"objective": "VER-TESTS-PASS", "language": "typescript", "status": "pass"}

@@ -44,7 +44,6 @@ test(src): cover double
 -- expect.json --
 {
   "objectives": [
-    {"objective": "CFG-PROTECTED", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "fail", "locations": ["@stryker-mutator/core: not installed in node_modules of . or any parent up to the git top-level"]},
     {"objective": "VER-TESTS-PASS", "language": "typescript", "status": "pass"}

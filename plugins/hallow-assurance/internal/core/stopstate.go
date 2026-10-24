@@ -4,10 +4,18 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"time"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
+
+const StateDir = ".assure/state"
+
+var sessionID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+func ValidSession(id string) bool { return sessionID.MatchString(id) }
 
 const (
 	StopCap          = 3
@@ -86,16 +94,8 @@ func stopStatePath(root, session string) string {
 	return filepath.Join(root, StateDir, "stop-"+session+".json")
 }
 
-func subagentStopStatePath(root, session, agent string) string {
-	return filepath.Join(root, StateDir, "subagent-stop-"+session+"-"+agent+".json")
-}
-
 func ReadStopState(root, session string) StopState {
 	return readStopState(stopStatePath(root, session))
-}
-
-func ReadSubagentStopState(root, session, agent string) StopState {
-	return readStopState(subagentStopStatePath(root, session, agent))
 }
 
 func readStopState(file string) StopState {
@@ -117,14 +117,39 @@ func WriteStopState(root, session string, s StopState) error {
 	return writeStopState(stopStatePath(root, session), s)
 }
 
-func WriteSubagentStopState(root, session, agent string, s StopState) error {
-	return writeStopState(subagentStopStatePath(root, session, agent), s)
-}
-
 func writeStopState(file string, s StopState) error {
 	data, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
 	return writeState(file, data)
+}
+
+func writeState(file string, data []byte) error {
+	dir := filepath.Dir(file)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), file)
+}
+
+func PruneState(root string, maxAge time.Duration, now time.Time) {
+	matches, _ := filepath.Glob(filepath.Join(root, StateDir, "stop-*.json"))
+	for _, f := range matches {
+		if info, err := os.Stat(f); err == nil && now.Sub(info.ModTime()) > maxAge {
+			_ = os.Remove(f)
+		}
+	}
 }

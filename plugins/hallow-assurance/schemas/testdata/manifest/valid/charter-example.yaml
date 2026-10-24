@@ -17,5 +17,3 @@ components:
       link: conformance
       code: [internal/ledger/**]
 default_level: C
-protected:
-  - .github/workflows/**

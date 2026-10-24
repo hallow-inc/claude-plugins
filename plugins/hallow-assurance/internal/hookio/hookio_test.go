@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterproto"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
@@ -39,7 +41,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-const manifest = "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents:\n  - {path: 'tools/**', level: D}\nprotected: ['.github/workflows/**']\n"
+const manifest = "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents:\n  - {path: 'tools/**', level: D}\n"
 
 const session = "00000000-0000-4000-8000-000000000001"
 
@@ -99,17 +101,6 @@ func payload(t testing.TB, name, root string, edit func(map[string]any)) []byte 
 	return out
 }
 
-func toolFile(path string) func(map[string]any) {
-	return func(m map[string]any) {
-		ti := m["tool_input"].(map[string]any)
-		if _, ok := ti["notebook_path"]; ok {
-			ti["notebook_path"] = path
-		} else {
-			ti["file_path"] = path
-		}
-	}
-}
-
 func hook(event string, in []byte) (int, map[string]any, string) {
 	var out, errb bytes.Buffer
 	code := Run(event, bytes.NewReader(in), &out, &errb)
@@ -124,7 +115,7 @@ func hook(event string, in []byte) (int, map[string]any, string) {
 }
 
 func eventFor(name string) string {
-	for _, e := range []string{"session-start", "pre-tool-use", "post-tool-use", "subagent-stop", "stop"} {
+	for _, e := range []string{"session-start", "stop"} {
 		if name == e || strings.HasPrefix(name, e+"-") {
 			return e
 		}
@@ -157,136 +148,95 @@ func TestRecordedPayloadsDecode(t *testing.T) {
 	}
 }
 
-func decision(out map[string]any) (string, string) {
-	hso, _ := out["hookSpecificOutput"].(map[string]any)
-	d, _ := hso["permissionDecision"].(string)
-	r, _ := hso["permissionDecisionReason"].(string)
-	return d, r
-}
-
-func TestPreToolUseGolden(t *testing.T) {
-	cases := []struct {
-		name, payload, path, agent, reasonHas string
-		deny                                  bool
-	}{
-		{"protected waiver", "pre-tool-use-edit-main", ".assure/waivers.yaml", "", "invariant 6", true},
-		{"verifier edits source", "pre-tool-use-edit-subagent", "x.go", core.Verifier, "may not edit source", true},
-		{"local settings", "pre-tool-use-write-main", ".claude/settings.local.json", "", "invariant 6", true},
-		{"project settings via notebook tool", "pre-tool-use-notebookedit-main", ".claude/settings.json", "", "invariant 6", true},
-		{"allowed edit", "pre-tool-use-edit-main", "notes.txt", "", "", false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			root := fixture(t)
-			in := payload(t, c.payload, root, func(m map[string]any) {
-				toolFile(filepath.Join(root, c.path))(m)
-				if c.agent != "" {
-					m["agent_type"] = c.agent
-				}
-			})
-			code, out, stderr := hook("pre-tool-use", in)
-			if !c.deny {
-				if code != 0 || out != nil {
-					t.Fatalf("want silent allow, got %d %v", code, out)
-				}
-				return
-			}
-			d, reason := decision(out)
-			hso, _ := out["hookSpecificOutput"].(map[string]any)
-			if code != 2 || d != "deny" || hso["hookEventName"] != "PreToolUse" || !strings.Contains(reason, c.reasonHas) || !strings.Contains(stderr, c.reasonHas) {
-				t.Fatalf("got %d %v stderr=%q", code, out, stderr)
-			}
-		})
-	}
-}
-
-func TestWorktreeManifestGovernsTheEdit(t *testing.T) {
+func TestWorktreeCwdManifestGoverns(t *testing.T) {
 	outer, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	setPath(t)
+	t.Setenv("CLAUDE_PROJECT_DIR", outer)
 	wt := filepath.Join(outer, "wt")
 	writeFile(t, wt, "assurance.yaml", manifest)
-	in := payload(t, "pre-tool-use-edit-main", outer, toolFile(filepath.Join(wt, ".assure", "waivers.yaml")))
-	if code, out, _ := hook("pre-tool-use", in); code != 2 {
-		t.Fatalf("worktree waiver edit allowed: %v", out)
+	if code, out, _ := hook("session-start", payload(t, "session-start-startup", outer, nil)); code != 0 || out != nil {
+		t.Fatalf("session root has no manifest, yet SessionStart there produced %d %v", code, out)
+	}
+	code, out, _ := hook("session-start", payload(t, "session-start-startup", wt, nil))
+	ctx, _ := out["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+	if code != 0 || !strings.Contains(ctx, "Default level: B") {
+		t.Fatalf("cwd inside a worktree with a manifest: got %d %v; the worktree's manifest must govern even though CLAUDE_PROJECT_DIR is the session root", code, out)
 	}
 }
 
 func TestNotAdoptedIsSilent(t *testing.T) {
 	root, _ := filepath.EvalSymlinks(t.TempDir())
 	setPath(t)
-	for _, name := range []string{"pre-tool-use-edit-main", "session-start-startup", "stop-first"} {
+	for _, name := range []string{"session-start-startup", "stop-first"} {
 		if code, out, _ := hook(eventFor(name), payload(t, name, root, nil)); code != 0 || out != nil {
 			t.Errorf("%s: got %d %v", name, code, out)
 		}
 	}
-	in := payload(t, "subagent-stop", root, func(m map[string]any) { m["agent_type"] = core.Verifier })
-	if code, out, _ := hook("subagent-stop", in); code != 0 || out != nil {
-		t.Errorf("verifier stop outside an adopted repo: got %d %v", code, out)
-	}
 }
 
-func TestSessionStartInjectsContextAndSnapshots(t *testing.T) {
+func TestSessionStartInjectsContextAndWritesNoState(t *testing.T) {
 	root := fixture(t)
 	code, out, _ := hook("session-start", payload(t, "session-start-startup", root, nil))
 	ctx, _ := out["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
 	if code != 0 || !strings.Contains(ctx, "Default level: B") {
 		t.Fatalf("got %d %v", code, out)
 	}
-	if strings.Contains(ctx, "IND-VERIFIER-DISTINCT") {
-		t.Fatalf("manifest has no provenance key, yet SessionStart context lists IND-VERIFIER-DISTINCT, which evaluate cannot decide without the provenance chain:\n%s", ctx)
-	}
-	if _, err := os.Stat(core.SnapshotPath(root, session)); err != nil {
-		t.Fatalf("no snapshot: %v", err)
+	var written []string
+	_ = filepath.WalkDir(filepath.Join(root, core.StateDir), func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && p != filepath.Join(root, adapterproto.CacheFile) {
+			written = append(written, p)
+		}
+		return nil
+	})
+	if len(written) > 0 {
+		t.Fatalf("SessionStart wrote %v; apart from the adapter describe cache it has nothing to record, and session state outlives a branch switch", written)
 	}
 }
 
-func TestContextFailureStillSnapshots(t *testing.T) {
+func TestContextFailureIsAWarning(t *testing.T) {
 	root := fixture(t)
 	t.Setenv("PATH", "/usr/bin:/bin")
-	_, out, _ := hook("session-start", payload(t, "session-start-startup", root, nil))
+	code, out, _ := hook("session-start", payload(t, "session-start-startup", root, nil))
 	ctx := out["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
-	if !strings.Contains(ctx, "warning") || !strings.Contains(ctx, "assure-adapter-go") {
-		t.Fatalf("missing adapter not reported: %q", ctx)
-	}
-	if _, err := os.Stat(core.SnapshotPath(root, session)); err != nil {
-		t.Fatalf("no snapshot: %v", err)
+	if code != 0 || !strings.Contains(ctx, "warning") || !strings.Contains(ctx, "assure-adapter-go") {
+		t.Fatalf("missing adapter not reported as a warning: %d %q", code, ctx)
 	}
 }
 
-func TestCompactDoesNotReplaceTheSnapshot(t *testing.T) {
-	root := fixture(t)
-	hook("session-start", payload(t, "session-start-startup", root, nil))
-	writeFile(t, root, ".assure/waivers.yaml", "[] # edited through Bash\n")
-	hook("session-start", payload(t, "session-start-startup", root, func(m map[string]any) { m["source"] = "compact" }))
-	m, err := core.LoadManifest(filepath.Join(root, "assurance.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d, err := drift(m, session); err != nil || len(d) != 1 || !strings.Contains(d[0], ".assure/waivers.yaml") {
-		t.Fatalf("drift after compact = %v", d)
-	}
-}
-
-func TestMalformedStdinDenies(t *testing.T) {
-	code, out, _ := hook("pre-tool-use", []byte(`{"tool_name":`))
-	if d, reason := decision(out); code != 2 || d != "deny" || !strings.Contains(reason, "failed closed") {
+func TestMalformedStopStdinBlocks(t *testing.T) {
+	code, out, _ := hook("stop", []byte(`{"session_id":`))
+	if reason, _ := out["reason"].(string); code != 2 || out["decision"] != "block" || !strings.Contains(reason, "failed closed") {
 		t.Fatalf("got %d %v", code, out)
 	}
-	code, out, _ = hook("subagent-stop", []byte(`{"agent_type":`))
-	if reason, _ := out["reason"].(string); code != 2 || out["decision"] != "block" || !strings.Contains(reason, "failed closed") {
-		t.Fatalf("subagent-stop: got %d %v", code, out)
-	}
 	root := fixture(t)
-	for _, bad := range []map[string]any{{"agent_id": "../escape"}, {"agent_id": ""}, {"session_id": "a/b"}, {"cwd": "relative"}, {"hook_event_name": "Stop"}} {
-		in := payload(t, "subagent-stop", root, func(m map[string]any) {
-			m["agent_type"] = core.Verifier
-			maps.Copy(m, bad)
-		})
-		if code, out, _ := hook("subagent-stop", in); code != 2 || out["decision"] != "block" || !strings.Contains(out["reason"].(string), "failed closed") {
-			t.Errorf("verifier stop with %v: got %d %v; an id that could escape the state directory must block as malformed input, before any state is read or written", bad, code, out)
+	for _, bad := range []map[string]any{{"session_id": "a/b"}, {"session_id": ""}, {"cwd": "relative"}, {"hook_event_name": "SessionStart"}} {
+		in := payload(t, "stop-first", root, func(m map[string]any) { maps.Copy(m, bad) })
+		if code, out, _ := hook("stop", in); code != 2 || out["decision"] != "block" || !strings.Contains(out["reason"].(string), "failed closed") {
+			t.Errorf("stop with %v: got %d %v; a session id that could escape the state directory must block as malformed input, before any state is read or written", bad, code, out)
+		}
+	}
+}
+
+func TestMalformedSessionStartStdinIsContext(t *testing.T) {
+	code, out, _ := hook("session-start", []byte(`{"session_id":`))
+	ctx, _ := out["hookSpecificOutput"].(map[string]any)["additionalContext"].(string)
+	if code != 0 || !strings.Contains(ctx, "failed closed") {
+		t.Fatalf("got %d %v; a SessionStart failure is reported as context, never a block", code, out)
+	}
+}
+
+func TestRemovedEventsAreNotEvents(t *testing.T) {
+	for _, e := range []string{"pre-tool-use", "post-tool-use", "subagent-stop"} {
+		if IsEvent(e) {
+			t.Errorf("%s is still a hook event; a v0.1 plugin calling it must get usage and exit 2", e)
+		}
+	}
+	for _, e := range []string{"session-start", "stop"} {
+		if !IsEvent(e) {
+			t.Errorf("%s is not a hook event", e)
 		}
 	}
 }
@@ -295,22 +245,33 @@ func TestPanicFailsClosed(t *testing.T) {
 	orig := handler
 	t.Cleanup(func() { handler = orig })
 	handler = func(string, io.Reader) response { panic("boom") }
-	if code, out, _ := hook("pre-tool-use", nil); code != 2 {
-		t.Fatalf("pre-tool-use panic: %d %v", code, out)
-	}
 	code, out, _ := hook("stop", nil)
 	if code != 2 || out["decision"] != "block" || !strings.Contains(out["reason"].(string), "boom") {
 		t.Fatalf("stop panic: %d %v", code, out)
 	}
-	code, out, _ = hook("subagent-stop", nil)
-	if reason, _ := out["reason"].(string); code != 2 || out["decision"] != "block" || !strings.Contains(reason, "boom") {
-		t.Fatalf("subagent-stop panic: %d %v", code, out)
+	code, out, _ = hook("session-start", nil)
+	if ctx, _ := out["hookSpecificOutput"].(map[string]any)["additionalContext"].(string); code != 0 || !strings.Contains(ctx, "boom") {
+		t.Fatalf("session-start panic: %d %v", code, out)
 	}
 }
 
-func TestWrongEventInputDenies(t *testing.T) {
+func TestWrongEventInputBlocksStop(t *testing.T) {
 	root := fixture(t)
-	if code, _, _ := hook("pre-tool-use", payload(t, "stop-first", root, nil)); code != 2 {
-		t.Fatal("stop payload accepted as pre-tool-use")
+	if code, out, _ := hook("stop", payload(t, "session-start-startup", root, nil)); code != 2 || out["decision"] != "block" {
+		t.Fatalf("session-start payload accepted as stop: %d %v", code, out)
+	}
+}
+
+func TestBrokenManifestAtStopAllowsWithMessage(t *testing.T) {
+	root := fixture(t)
+	writeFile(t, root, "assurance.yaml", manifest+"authority: ci\n")
+	_, loadErr := core.LoadManifest(filepath.Join(root, "assurance.yaml"))
+	if loadErr == nil {
+		t.Fatal("fixture manifest loads; the case needs one that does not")
+	}
+	code, out, _ := hook("stop", payload(t, "stop-first", root, nil))
+	msg, _ := out["systemMessage"].(string)
+	if code != 0 || out["decision"] != nil || !strings.Contains(msg, "authority") {
+		t.Fatalf("got %d %v; the retry cap's state lives under the manifest root, so a block here would repeat with no cap: allow, and name the manifest error", code, out)
 	}
 }

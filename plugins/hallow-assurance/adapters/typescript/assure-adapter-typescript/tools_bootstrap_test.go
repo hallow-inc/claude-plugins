@@ -44,7 +44,7 @@ func checkUntracked(t fataler, r toolsReply, untracked bool) {
 	for _, e := range r.entries {
 		u, has := e["untracked"]
 		if has != untracked || (has && string(u) != "true") {
-			t.Fatalf("entry %s has untracked %s (present %v), want present %v; every tool is pinned by the one lockfile, so all carry untracked: true or none does, and the evaluator fails exactly the marked pins under authority: ci", e["name"], u, has, untracked)
+			t.Fatalf("entry %s has untracked %s (present %v), want present %v; every tool is pinned by the one lockfile, so all carry untracked: true or none does, and the report lists exactly the marked pins", e["name"], u, has, untracked)
 		}
 	}
 }

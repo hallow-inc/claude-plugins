@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   evaluate:
@@ -97,16 +96,9 @@ jobs:
           fi
           assure tools --install-script | sh
 
-      - name: Fetch reviews
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-        run: assure reviews --pr "$PR" > "$RUNNER_TEMP/reviews.json"
-
       - name: Evaluate
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          assure evaluate --merge-base-with "origin/$BASE_REF" --reviews "$RUNNER_TEMP/reviews.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          assure evaluate --merge-base-with "origin/$BASE_REF" | tee -a "$GITHUB_STEP_SUMMARY"
