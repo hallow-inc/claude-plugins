@@ -44,7 +44,6 @@ feat(p): add Clamp
 -- expect.json --
 {
   "objectives": [
-    {"objective": "CFG-PROTECTED", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["level B: 0 of 4 mutants detected", "p/clamp.go:4 ", "p/clamp.go:7 "]},
     {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}

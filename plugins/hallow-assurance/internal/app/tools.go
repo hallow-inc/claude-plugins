@@ -25,10 +25,6 @@ func ResolveTools(m *core.Manifest) ([]LangTools, []string) {
 		case t.Environment != nil:
 			problems = append(problems, fmt.Sprintf("%s tools: %s", adapterproto.Executable(lang), t.Environment.Message))
 		default:
-			if p := untrackedToolProblems(m.Authority, lang, t.Tools); len(p) > 0 {
-				problems = append(problems, p...)
-				continue
-			}
 			out = append(out, LangTools{Lang: lang, Tools: t.Tools})
 		}
 	}
@@ -63,20 +59,4 @@ func InstallScript(langs []LangTools) string {
 		}
 	}
 	return b.String()
-}
-
-func untrackedToolProblems(a core.Authority, lang string, tools []adapterproto.Tool) []string {
-	var untracked []string
-	pinnedBy := map[string]string{}
-	for _, t := range tools {
-		if t.Untracked {
-			untracked = append(untracked, t.Name)
-			pinnedBy[t.Name] = t.PinnedBy
-		}
-	}
-	var out []string
-	for _, p := range core.UntrackedPinProblems(a, untracked, pinnedBy) {
-		out = append(out, fmt.Sprintf("%s tools: %s", adapterproto.Executable(lang), p))
-	}
-	return out
 }

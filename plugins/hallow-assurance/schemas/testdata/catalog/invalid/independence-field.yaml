@@ -1,6 +1,6 @@
-- id: IND-VERIFIER-DISTINCT
-  title: Tests are written by a verifier distinct from the implementer
+- id: VER-TESTS-PASS
+  title: Tests pass
   source: [DO-178C Table A-7]
   levels: { B: required }
   independence: { B: tier1 }
-  evidence: provenance.chain
+  evidence: test.junit

@@ -20,8 +20,7 @@ func runEvaluate(args []string, stdout, stderr io.Writer) int {
 	mergeWith := fs.String("merge-base-with", "", "git ref whose merge base with HEAD is the changed-from point")
 	report := fs.String("report", "", "report path (default <root>/"+app.ReportFile+")")
 	date := fs.String("date", time.Now().UTC().Format(time.DateOnly), "evaluation date, YYYY-MM-DD, for waiver expiry")
-	reviewsFile := fs.String("reviews", "", "JSON file of the PR author, head commit, and reviews; a non-author approval on head excuses gaps and protected-file changes")
-	const use = "usage: assure evaluate (--changed-from <ref> | --merge-base-with <ref>) [--report <path>] [--date YYYY-MM-DD] [--reviews <file>]"
+	const use = "usage: assure evaluate (--changed-from <ref> | --merge-base-with <ref>) [--report <path>] [--date YYYY-MM-DD]"
 	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || (*ref == "") == (*mergeWith == "") {
 		_, _ = fmt.Fprintln(stderr, use)
 		return 2
@@ -39,16 +38,7 @@ func runEvaluate(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
 		return 2
 	}
-	var reviews *core.Reviews
-	if *reviewsFile != "" {
-		r, err := app.LoadReviews(m, *reviewsFile)
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
-			return 2
-		}
-		reviews = r
-	}
-	rep, err := app.EvaluateWith(m, from, *date, reviews)
+	rep, err := app.Evaluate(m, from, *date)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "assure: %v\n", err)
 		return 2
@@ -68,9 +58,6 @@ func runEvaluate(args []string, stdout, stderr io.Writer) int {
 }
 
 func changedFrom(m *core.Manifest, ref, mergeWith string) (string, error) {
-	if m.Authority == core.AuthorityCI && !app.ManifestTracked(m.Root) {
-		return "", fmt.Errorf("authority is ci, but git does not track %s, so CI could not read the manifest; commit it or remove authority: ci", core.ManifestName)
-	}
 	if mergeWith == "" {
 		return ref, nil
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"pgregory.net/rapid"
 )
@@ -173,46 +174,50 @@ func TestBlockBudgetEndsExactlyAtStopCap(t *testing.T) {
 	}
 }
 
-func stateFiles(t *rapid.T, root string) []string {
-	var out []string
-	err := filepath.WalkDir(filepath.Join(root, StateDir), func(p string, d os.DirEntry, err error) error {
-		if err == nil && !d.IsDir() {
-			rel, _ := filepath.Rel(filepath.Join(root, StateDir), p)
-			out = append(out, filepath.ToSlash(rel))
-		}
-		return err
-	})
-	if err != nil {
-		t.Fatalf("%v", err)
+func TestPruneStateRemovesOnlyOldStopFiles(t *testing.T) {
+	root := t.TempDir()
+	old := time.Now().Add(-15 * 24 * time.Hour)
+	files := map[string]struct {
+		old, kept bool
+	}{
+		"stop-old.json":      {old: true, kept: false},
+		"stop-new.json":      {old: false, kept: true},
+		"adapters.json":      {old: true, kept: true},
+		"report.json":        {old: true, kept: true},
+		"stop-old.json.keep": {old: true, kept: true},
 	}
-	return out
+	for f, c := range files {
+		writeFile(t, root, filepath.Join(StateDir, f), "{}")
+		if c.old {
+			if err := os.Chtimes(filepath.Join(root, StateDir, f), old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	PruneState(root, 14*24*time.Hour, time.Now())
+	for f, c := range files {
+		if _, err := os.Stat(filepath.Join(root, StateDir, f)); (err == nil) != c.kept {
+			t.Errorf("%s exists=%v, want %v; only expired stop retry state is pruned, never the describe cache or the report", f, err == nil, c.kept)
+		}
+	}
 }
 
-func TestSubagentStateLivesInItsOwnFilePerSessionAndAgent(t *testing.T) {
-	base := t.TempDir()
-	rapid.Check(t, func(t *rapid.T) {
-		root, err := os.MkdirTemp(base, "r")
-		if err != nil {
-			t.Fatalf("%v", err)
+func TestPruneStateKeepsAFileForTheWholeMaxAge(t *testing.T) {
+	root := t.TempDir()
+	maxAge := 14 * 24 * time.Hour
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	ages := map[string]time.Duration{"stop-edge.json": maxAge, "stop-over.json": maxAge + time.Second}
+	for f, age := range ages {
+		writeFile(t, root, filepath.Join(StateDir, f), "{}")
+		if err := os.Chtimes(filepath.Join(root, StateDir, f), now.Add(-age), now.Add(-age)); err != nil {
+			t.Fatal(err)
 		}
-		session := rapid.StringMatching(`[A-Za-z0-9_]{1,12}`).Draw(t, "session")
-		agent := rapid.StringMatching(`[a-z0-9]{1,17}`).Draw(t, "agent")
-		want := StopState{Version: stopStateVersion, Blocks: rapid.IntRange(1, StopCap).Draw(t, "blocks"), Fingerprints: []FingerprintBlocks{{Fingerprint: fpPool(1)[0], Blocks: 1}}}
-		if err := WriteSubagentStopState(root, session, agent, want); err != nil {
-			t.Fatalf("%v", err)
+	}
+	PruneState(root, maxAge, now)
+	for f, age := range ages {
+		_, err := os.Stat(filepath.Join(root, StateDir, f))
+		if want := age <= maxAge; (err == nil) != want {
+			t.Errorf("%s aged %v with max age %v: exists=%v, want %v; state younger than or exactly max age belongs to a session that may still resume", f, age, maxAge, err == nil, want)
 		}
-		stateName := "subagent-stop-" + session + "-" + agent + ".json"
-		if got := stateFiles(t, root); len(got) != 1 || got[0] != stateName {
-			t.Fatalf("state files %v, want only %s: the parent's stop-%s.json must not hold a subagent's retry count", got, stateName, session)
-		}
-		if got := ReadSubagentStopState(root, session, agent); got.Blocks != want.Blocks || len(got.Fingerprints) != 1 || got.Fingerprints[0] != want.Fingerprints[0] {
-			t.Fatalf("round trip got %+v, want %+v", got, want)
-		}
-		if got := ReadStopState(root, session); got.Blocks != 0 || got.Fingerprints != nil {
-			t.Fatalf("the parent session read the subagent's state: %+v", got)
-		}
-		if got := ReadSubagentStopState(root, session, agent+"x"); got.Blocks != 0 {
-			t.Fatalf("another agent in the same session read %+v; each subagent has its own count", got)
-		}
-	})
+	}
 }

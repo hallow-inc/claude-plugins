@@ -234,27 +234,6 @@ func TestJSONKeepsNumbersExact(t *testing.T) {
 	}
 }
 
-func TestJSONLinesErrorsCarryLineNumbers(t *testing.T) {
-	cases := []struct {
-		name, src string
-		line      int
-	}{
-		{"truncated final line", "{\"v\":0}\n{\"v\":0,\"session\":\"s1\"", 2},
-		{"blank line", "{\"v\":0}\n\n{\"v\":0}\n", 2},
-		{"not an object", "{\"v\":0}\n[1]\n", 2},
-		{"garbage", "nope\n", 1},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			_, err := JSONLines([]byte(c.src))
-			var de *Error
-			if !errors.As(err, &de) || de.Line != c.line {
-				t.Fatalf("got %v, want error at line %d", err, c.line)
-			}
-		})
-	}
-}
-
 type jsonObject struct {
 	ptr string
 	m   map[string]any
@@ -346,22 +325,4 @@ func TestJSONRejectsADuplicateKeyAtAnyDepth(t *testing.T) {
 			t.Fatalf("error %q does not name key %q and pointer %s", err, key, wantPtr)
 		}
 	})
-}
-
-func TestJSONLinesRejectsARepeatedKeyOnItsLine(t *testing.T) {
-	_, err := JSONLines([]byte("{\"v\":0}\n{\"v\":0,\"session\":\"s1\"}\n{\"v\":0,\"session\":\"s1\",\"session\":\"s2\"}\n"))
-	var de *Error
-	if !errors.As(err, &de) {
-		t.Fatalf("got %v, want *Error for the repeated key on line 3", err)
-	}
-	if de.Line != 3 || !strings.Contains(de.Error(), "line 3") || !strings.Contains(de.Msg, "session") {
-		t.Fatalf("error %q (line %d) does not name line 3 and key session", de, de.Line)
-	}
-}
-
-func TestJSONLinesAcceptsObjects(t *testing.T) {
-	docs, err := JSONLines([]byte("{\"a\":1}\n{\"b\":2}\n"))
-	if err != nil || len(docs) != 2 {
-		t.Fatalf("got %d docs, err %v", len(docs), err)
-	}
 }

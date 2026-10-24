@@ -28,9 +28,8 @@ func fpEvidence(t *rapid.T) Evidence {
 }
 
 type fpInput struct {
-	ids     []string
-	evs     []Evidence
-	drifted []string
+	ids []string
+	evs []Evidence
 }
 
 func fpInputGen(t *rapid.T) fpInput {
@@ -39,7 +38,6 @@ func fpInputGen(t *rapid.T) fpInput {
 	for range in.ids {
 		in.evs = append(in.evs, fpEvidence(t))
 	}
-	in.drifted = rapid.SliceOfN(fpName, 0, 3).Draw(t, "drifted")
 	return in
 }
 
@@ -48,7 +46,7 @@ func (in fpInput) fingerprint() string {
 	for i, id := range in.ids {
 		fs[i] = FailureKey{Objective: id, Lang: "l", Keys: in.evs[i].Keys()}
 	}
-	return StopFingerprint(fs, in.drifted)
+	return StopFingerprint(fs)
 }
 
 func perm[S ~[]E, E any](t *rapid.T, s S, label string) S {
@@ -89,7 +87,6 @@ func TestFingerprintIgnoresOrderAndMessageText(t *testing.T) {
 			re.ids = append(re.ids, in.ids[i])
 			re.evs = append(re.evs, rewordEvidence(t, in.evs[i]))
 		}
-		re.drifted = perm(t, in.drifted, "d")
 		if in.fingerprint() != re.fingerprint() {
 			t.Fatal("reordering inputs or rewording messages changed the fingerprint")
 		}
@@ -100,14 +97,12 @@ func TestFingerprintTracksFailureIdentity(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		in := fpInputGen(t)
 		before := in.fingerprint()
-		grown := fpInput{ids: slices.Clone(in.ids), evs: slices.Clone(in.evs), drifted: slices.Clone(in.drifted)}
-		what := rapid.SampledFrom([]string{"objective", "test", "mutant", "drifted"}).Draw(t, "what")
+		grown := fpInput{ids: slices.Clone(in.ids), evs: slices.Clone(in.evs)}
+		what := rapid.SampledFrom([]string{"objective", "test", "mutant"}).Draw(t, "what")
 		switch what {
 		case "objective":
 			grown.ids = append(grown.ids, "NEW")
 			grown.evs = append(grown.evs, Evidence{})
-		case "drifted":
-			grown.drifted = append(grown.drifted, "new-path")
 		default:
 			if len(in.ids) == 0 {
 				t.Skip("no objective to extend")
@@ -156,7 +151,7 @@ func TestBaseRunKeysNameEachWayAFixFailsToProveItself(t *testing.T) {
 func TestFingerprintKeepsFailuresThatDifferInAnyField(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		a := FailureKey{Objective: "O", Lang: "go", Keys: []string{"test:T"}}
-		if StopFingerprint([]FailureKey{a, a}, nil) != StopFingerprint([]FailureKey{a}, nil) {
+		if StopFingerprint([]FailureKey{a, a}) != StopFingerprint([]FailureKey{a}) {
 			t.Fatal("an identical failure listed twice changed the fingerprint")
 		}
 		b := FailureKey{Objective: a.Objective, Lang: a.Lang, Keys: slices.Clone(a.Keys)}
@@ -168,7 +163,7 @@ func TestFingerprintKeepsFailuresThatDifferInAnyField(t *testing.T) {
 		default:
 			b.Keys = []string{"test:U"}
 		}
-		if StopFingerprint([]FailureKey{a, b}, nil) == StopFingerprint([]FailureKey{a}, nil) {
+		if StopFingerprint([]FailureKey{a, b}) == StopFingerprint([]FailureKey{a}) {
 			t.Fatalf("a second failure differing only in %v was merged into the first, so they would share a block budget", b)
 		}
 	})

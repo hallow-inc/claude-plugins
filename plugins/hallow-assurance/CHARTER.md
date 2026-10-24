@@ -189,8 +189,6 @@ components:
       link: conformance                            # conformance | drt | none
       code: [internal/ledger/**]                   # optional; changes here bring FM-LINK into scope
 default_level: C
-protected:                                         # optional: extra paths guard denies to agents
-  - .github/workflows/**
 ```
 
 Path → level resolution: a path takes the level of the matching glob with the most literal
@@ -364,8 +362,6 @@ Schemas: `schemas/adapter-{describe,classify,run,tools}.schema.json`.
 | VER-FAIL-ON-BASE | Bugfix tests fail on base commit | req | req | req | adv |
 | VER-ROBUST-FUZZ | Fuzz targets exist and ran for input-handling code | req | req | adv | – |
 | VER-COVERAGE-RESOLUTION | Uncovered code has an approved resolution (missing test / missing req / dead / deactivated) | req | adv | – | – |
-| IND-VERIFIER-DISTINCT | Verification authored by a different agent/human than implementation | req | req | – | – |
-| CFG-PROTECTED | No agent-authored changes to protected files | req | req | req | req |
 | FM-COMPLETE | Lean model builds with `--wfail`; zero `sorry`; axiom-audit reports no violations | req | req | adv | – |
 | FM-AXIOMS | Axioms used ⊆ {propext, Classical.choice, Quot.sound}; native-evaluation axioms need a waiver | req | req | adv | – |
 | FM-RECHECK | Independent kernel re-check passes (`leanchecker` at every level; `lake comparator` later, once Lean ≥ 4.35 runs on Linux) | req | req | adv | – |

@@ -10,13 +10,12 @@ import (
 )
 
 var (
-	ErrSnapshotMissing    = errors.New("protected-file snapshot missing or invalid")
 	ErrAdapterUnstartable = errors.New("adapter cannot be started")
 	ErrToolEnvironment    = errors.New("adapter could not get its tools")
 )
 
 func OutsideReach(err error) bool {
-	return errors.Is(err, ErrSnapshotMissing) || errors.Is(err, ErrAdapterUnstartable) || errors.Is(err, ErrToolEnvironment)
+	return errors.Is(err, ErrAdapterUnstartable) || errors.Is(err, ErrToolEnvironment)
 }
 
 func (ev Evidence) Keys() []string {
@@ -65,7 +64,7 @@ func sortedSet(s []string) []string {
 	return slices.Compact(s)
 }
 
-func StopFingerprint(failures []FailureKey, drifted []string) string {
+func StopFingerprint(failures []FailureKey) string {
 	fs := make([]FailureKey, len(failures))
 	for i, f := range failures {
 		fs[i] = FailureKey{Objective: f.Objective, Lang: f.Lang, Keys: sortedSet(f.Keys)}
@@ -86,10 +85,6 @@ func StopFingerprint(failures []FailureKey, drifted []string) string {
 		for _, k := range f.Keys {
 			field(k)
 		}
-	}
-	for _, p := range sortedSet(drifted) {
-		field("drifted")
-		field(p)
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

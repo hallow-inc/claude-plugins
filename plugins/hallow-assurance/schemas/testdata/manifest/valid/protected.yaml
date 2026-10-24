@@ -1,7 +1,0 @@
-version: 0
-catalog: v0
-languages: [go, typescript]
-default_level: B
-components: []
-protected:
-  - .github/workflows/**

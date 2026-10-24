@@ -17,11 +17,7 @@ func cell(s string) string {
 
 func (r EvalReport) Summary() string {
 	var b strings.Builder
-	b.WriteString("## assure evaluate")
-	if r.Authority != core.AuthorityCI {
-		b.WriteString(" (verdict self-attested: authority is local)")
-	}
-	b.WriteString("\n\n")
+	b.WriteString("## assure evaluate\n\n")
 	fmt.Fprintf(&b, "Commit `%s`, %d changed files since `%s` (`%s`), catalog %s, date %s.\n",
 		shortSHA(r.Commit), r.ChangedFiles, cell(r.ChangedFrom.Ref), shortSHA(r.ChangedFrom.SHA), r.Catalog, r.Date)
 	if len(r.Objectives) > 0 {

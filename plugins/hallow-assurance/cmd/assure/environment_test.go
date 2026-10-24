@@ -93,7 +93,7 @@ func cannedXXRepo(t *testing.T, manifest string, xx map[string]string) repo {
 }
 
 func TestEvaluatePinOriginsAreMergedFromEveryRun(t *testing.T) {
-	r := cannedXXRepo(t, xxManifestOff, passingXXResponses())
+	r := cannedXXRepo(t, xxManifest, passingXXResponses())
 	code, stdout, stderr := assure("evaluate", "--changed-from", "main", "--date", "2026-10-01")
 	if code == 2 {
 		t.Fatalf("exit 2:\n%s\n%s", stdout, stderr)

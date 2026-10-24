@@ -161,7 +161,7 @@ func TestRunToolsKeepsOrderAndRejectsDuplicateNames(t *testing.T) {
 		case env != (got.Environment != nil) || (env && got.Environment.Message != "loose pin"):
 			rt.Fatalf("environment %v not surfaced as a result: %+v", env, got)
 		case !slices.Equal(got.Tools, tools):
-			rt.Fatalf("tools reordered or altered: got %+v want %+v; an entry marked untracked: true must reach assure tools as untracked, or under authority: ci a pin CI cannot see is listed as if it were tracked", got.Tools, tools)
+			rt.Fatalf("tools reordered or altered: got %+v want %+v; an entry marked untracked: true must reach assure tools as untracked, or a pin the next clone will not see is listed as if it were tracked", got.Tools, tools)
 		}
 	})
 }

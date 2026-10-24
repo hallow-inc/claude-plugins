@@ -265,7 +265,7 @@ func TestRunTestsReplaysRecordedVitest(t *testing.T) {
 		t.Fatalf("environment %q; Stryker and fast-check are not installed but VER-TESTS-PASS uses only vitest, and an unused tool must not block it", resp.Environment.Message)
 	}
 	if u, ok := runUntracked(t, raw); ok {
-		t.Fatalf("untracked %v with a tracked lockfile; absent means every pin is tracked, and a spurious mark fails the objective under authority: ci", u)
+		t.Fatalf("untracked %v with a tracked lockfile; absent means every pin is tracked, and a spurious mark reports a tracked pin as untracked", u)
 	}
 	if want := map[string]string{"node": fakeNodeVersion, "vitest": "5.0.4"}; !maps.Equal(resp.ToolVersions, want) {
 		t.Fatalf("tool_versions %v, want %v; they record node and exactly the tools this objective ran", resp.ToolVersions, want)
@@ -369,7 +369,7 @@ func TestRunUntrackedLockfilesResolveMarkedOnce(t *testing.T) {
 	out := t.TempDir()
 	resp, raw := runInRaw(t, "VER-TESTS-PASS", out)
 	if resp.Environment != nil {
-		t.Fatalf("environment %q; without authority: ci an untracked lockfile is reported, not refused", resp.Environment.Message)
+		t.Fatalf("environment %q; an untracked lockfile is reported, not refused", resp.Environment.Message)
 	}
 	if j := junitIn(t, out, resp); j.Cases != 0 {
 		t.Fatalf("%d cases from empty reports", j.Cases)
@@ -378,7 +378,7 @@ func TestRunUntrackedLockfilesResolveMarkedOnce(t *testing.T) {
 		t.Fatalf("tool_versions %v pinned_by %v; the untracked lockfiles still pin vitest and are recorded", resp.ToolVersions, resp.PinnedBy)
 	}
 	if u, ok := runUntracked(t, raw); !ok || !slices.Equal(u, []string{"vitest"}) {
-		t.Fatalf("untracked = %v (present %v), want [vitest] once; the evaluator fails each listed tool under authority: ci, and the protocol requires unique names even when several units pin the tool\n%s", u, ok, raw)
+		t.Fatalf("untracked = %v (present %v), want [vitest] once; the report lists each listed tool, and the protocol requires unique names even when several units pin the tool\n%s", u, ok, raw)
 	}
 }
 

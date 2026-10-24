@@ -17,7 +17,7 @@ import (
 func TestReportSeparatesFailuresTheAgentCannotFix(t *testing.T) {
 	errs := map[string]error{
 		"unstartable": fmt.Errorf("run: %w", core.ErrAdapterUnstartable),
-		"outside":     fmt.Errorf("guard: %w", core.ErrSnapshotMissing),
+		"environment": fmt.Errorf("run: %w", core.ErrToolEnvironment),
 		"plain":       errors.New("boom"),
 	}
 	rapid.Check(t, func(t *rapid.T) {
@@ -29,24 +29,19 @@ func TestReportSeparatesFailuresTheAgentCannotFix(t *testing.T) {
 			res := Result{Lang: rapid.SampledFrom([]string{"go", "ts"}).Draw(t, "lang"), Keys: []string{fmt.Sprintf("k%d", i)}}
 			res.ID = fmt.Sprintf("OBJ-%d", i)
 			res.Status = rapid.SampledFrom([]core.Status{core.Pass, core.Fail}).Draw(t, "status")
-			kinds := rapid.SliceOfN(rapid.SampledFrom([]string{"unstartable", "outside", "plain"}), 0, 2).Draw(t, "errs")
-			unstartable, plain := false, false
+			kinds := rapid.SliceOfN(rapid.SampledFrom([]string{"unstartable", "environment", "plain"}), 0, 2).Draw(t, "errs")
 			for _, k := range kinds {
 				res.Errs = append(res.Errs, errs[k])
-				unstartable = unstartable || k == "unstartable"
-				plain = plain || k == "plain"
 			}
 			rep.Results = append(rep.Results, res)
 			if res.Status != core.Fail {
 				continue
 			}
 			wantFail = append(wantFail, core.FailureKey{Objective: res.ID, Lang: res.Lang, Keys: res.Keys})
-			if len(kinds) == 0 || plain {
+			if len(kinds) == 0 || slices.Contains(kinds, "plain") {
 				wantOutside = false
 			}
-			if unstartable {
-				wantRemedies = append(wantRemedies, "install "+adapterproto.Executable(res.Lang)+" on PATH, then restart Claude Code")
-			}
+			wantRemedies = append(wantRemedies, remediesFor(res.Lang, kinds)...)
 		}
 		slices.Sort(wantRemedies)
 		wantRemedies = slices.Compact(wantRemedies)
@@ -65,6 +60,17 @@ func TestReportSeparatesFailuresTheAgentCannotFix(t *testing.T) {
 			t.Fatalf("Remedies() = %q, want %q", got, wantRemedies)
 		}
 	})
+}
+
+func remediesFor(lang string, kinds []string) []string {
+	var out []string
+	if slices.Contains(kinds, "unstartable") {
+		out = append(out, "install "+adapterproto.Executable(lang)+" on PATH, then restart Claude Code")
+	}
+	if slices.Contains(kinds, "environment") {
+		out = append(out, "install the pinned tools with `assure tools --install-script | sh`, then restart Claude Code")
+	}
+	return out
 }
 
 func TestRenderSaysNoChangedFilesOnlyWhenNothingChangedAndNothingRan(t *testing.T) {

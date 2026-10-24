@@ -55,7 +55,6 @@ feat(src): add initial
 -- expect.json --
 {
   "objectives": [
-    {"objective": "CFG-PROTECTED", "status": "pass"},
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
     {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "fail", "locations": ["assure-adapter-typescript run: exit status 1; stderr: assure-adapter-typescript: run VER-MUTATION-CHANGED: stryker run in .: exit status 1"]},
     {"objective": "VER-ROBUST-FUZZ", "language": "typescript", "status": "fail", "locations": ["src/initial.ts: fuzz target src/initial.fuzz.test.ts.initial never throws failed"]},

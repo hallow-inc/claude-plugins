@@ -2,8 +2,6 @@ name: hallow-assurance
 
 on:
   pull_request:
-  pull_request_review:
-    types: [submitted, dismissed]
   push:
     branches: [master]
     tags: ['plugins/hallow-assurance/v*']
@@ -48,7 +46,7 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" != pull_request ] && [ "$EVENT" != pull_request_review ]; then
+          if [ "$EVENT" != pull_request ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             case "$REF" in refs/tags/*) qualify=true ;; *) qualify=false ;; esac
             echo "qualify=$qualify" >> "$GITHUB_OUTPUT"
@@ -114,7 +112,6 @@ jobs:
     if: needs.changes.outputs.run == 'true' && github.event.pull_request
     permissions:
       contents: read
-      pull-requests: read
     uses: ./.github/workflows/assure-evaluate.yml
     with:
       working-directory: plugins/hallow-assurance
@@ -124,7 +121,6 @@ jobs:
     if: needs.changes.outputs.run == 'true' && github.event.pull_request
     permissions:
       contents: read
-      pull-requests: read
     uses: ./.github/workflows/assure-evaluate.yml
     with:
       working-directory: plugins/hallow-assurance/testdata/smoke-ts

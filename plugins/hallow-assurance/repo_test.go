@@ -117,23 +117,18 @@ func TestDogfoodManifestIsLevelB(t *testing.T) {
 	if !slices.Contains(m["languages"].([]any), any("go")) {
 		t.Fatalf("languages = %v; without go, no adapter classifies this repo's own code", m["languages"])
 	}
-	loaded, err := core.LoadManifest("assurance.yaml")
-	if err != nil {
+	if _, err := core.LoadManifest("assurance.yaml"); err != nil {
 		t.Fatal(err)
-	}
-	if loaded.Authority != core.AuthorityCI {
-		t.Fatalf("authority = %v; this repo's CI runs assure evaluate as a required check, so CI is the verdict", loaded.Authority)
 	}
 }
 
-var charterExample = regexp.MustCompile("(?s)\\*\\*(Manifest|Catalog objective|Waiver|Provenance)\\*\\*[^\\n]*\\n(?:[^\\n]+\\n)*\\n```(?:yaml|json)\\n(.*?)```")
+var charterExample = regexp.MustCompile("(?s)\\*\\*(Manifest|Catalog objective|Waiver)\\*\\*[^\\n]*\\n(?:[^\\n]+\\n)*\\n```(?:yaml|json)\\n(.*?)```")
 
 func TestCharterExamplesValidate(t *testing.T) {
 	kinds := map[string]schemas.Kind{
 		"Manifest":          schemas.Manifest,
 		"Catalog objective": schemas.Catalog,
 		"Waiver":            schemas.Waivers,
-		"Provenance":        schemas.Provenance,
 	}
 	found := map[string]bool{}
 	for _, m := range charterExample.FindAllStringSubmatch(charterSection(t, "## File formats"), -1) {

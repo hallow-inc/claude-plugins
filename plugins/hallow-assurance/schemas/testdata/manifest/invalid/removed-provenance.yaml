@@ -3,4 +3,4 @@ catalog: v0
 languages: [go]
 default_level: B
 components: []
-provenance: true
+provenance: false

@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 )
 
 var adapterBin string
@@ -67,102 +65,9 @@ func assure(args ...string) (code int, stdout, stderr string) {
 	return code, out.String(), errb.String()
 }
 
-const levelB = "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents:\n  - {path: 'low/**', level: C}\n  - {path: 'tools/**', level: D}\nprotected: ['.github/workflows/**']\n"
+const levelB = "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents:\n  - {path: 'low/**', level: C}\n  - {path: 'tools/**', level: D}\n"
 
-func decision(t *testing.T, stdout, path string) (string, string) {
-	t.Helper()
-	for line := range strings.SplitSeq(strings.TrimSpace(stdout), "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) >= 2 && f[1] == path {
-			if len(f) == 3 {
-				return f[0], f[2]
-			}
-			return f[0], ""
-		}
-	}
-	t.Fatalf("no decision for %s in %q", path, stdout)
-	return "", ""
-}
-
-func TestGuardScenarios(t *testing.T) {
-	cases := []struct {
-		name, agent, path, want, reasonHas string
-	}{
-		{"waiver file", "", ".assure/waivers.yaml", "deny", "protected"},
-		{"describe cache", core.Verifier, ".assure/state/adapters.json", "deny", "protected"},
-		{"manifest protected glob", "", ".github/workflows/ci.yml", "deny", "protected"},
-		{"main thread level-B test", "", "internal/chat/stream_test.go", "deny", "hallow-assurance:verifier"},
-		{"main thread level-C test", "", "low/a_test.go", "allow", ""},
-		{"verifier level-D source", core.Verifier, "tools/gen.go", "deny", "may not edit source"},
-		{"verifier level-B test", core.Verifier, "internal/chat/stream_test.go", "allow", ""},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			newRepo(t, levelB)
-			args := []string{"guard"}
-			if c.agent != "" {
-				args = append(args, "--agent-type", c.agent)
-			}
-			_, out, _ := assure(append(args, c.path)...)
-			got, reason := decision(t, out, c.path)
-			if got != c.want || !strings.Contains(reason, c.reasonHas) {
-				t.Fatalf("got %s %q, want %s containing %q", got, reason, c.want, c.reasonHas)
-			}
-		})
-	}
-}
-
-func TestGuardMixedDecisionExitsOne(t *testing.T) {
-	newRepo(t, strings.Replace(levelB, "default_level: B", "default_level: C", 1))
-	code, out, _ := assure("guard", "src/a.go", ".assure/waivers.yaml")
-	if a, _ := decision(t, out, "src/a.go"); a != "allow" {
-		t.Errorf("src/a.go: %s", a)
-	}
-	if d, _ := decision(t, out, ".assure/waivers.yaml"); d != "deny" {
-		t.Errorf("waivers: %s", d)
-	}
-	if code != 1 {
-		t.Errorf("exit %d, want 1", code)
-	}
-}
-
-func TestGuardUsage(t *testing.T) {
-	newRepo(t, levelB)
-	if code, _, stderr := assure("guard"); code != 2 || !strings.Contains(stderr, "usage") {
-		t.Fatalf("exit %d stderr %q", code, stderr)
-	}
-}
-
-func TestGuardDeniesWhenAdapterUnavailable(t *testing.T) {
-	newRepo(t, levelB)
-	t.Setenv("PATH", t.TempDir())
-	_, out, _ := assure("guard", "src/a.go")
-	if d, reason := decision(t, out, "src/a.go"); d != "deny" || !strings.Contains(reason, "assure-adapter-go") {
-		t.Fatalf("got %s %q", d, reason)
-	}
-}
-
-func TestGuardDeniesEverythingOnInvalidManifest(t *testing.T) {
-	newRepo(t, "version: 0\ncatalog: v0\ndefault_level: B\ncomponents: []\n")
-	code, out, _ := assure("guard", "src/a.go", "README.md")
-	for _, p := range []string{"src/a.go", "README.md"} {
-		if d, _ := decision(t, out, p); d != "deny" {
-			t.Errorf("%s: %s", p, d)
-		}
-	}
-	if code != 1 {
-		t.Errorf("exit %d", code)
-	}
-}
-
-func TestGuardDeniesWithoutManifest(t *testing.T) {
-	newRepo(t, "")
-	if _, out, _ := assure("guard", "a.go"); !strings.HasPrefix(out, "deny\ta.go\tno assurance.yaml") {
-		t.Fatalf("got %q", out)
-	}
-}
-
-func TestGuardWithFreshCacheStartsNoAdapter(t *testing.T) {
+func TestContextWithFreshCacheStartsNoAdapter(t *testing.T) {
 	r := newRepo(t, levelB)
 	bin := t.TempDir()
 	marker := filepath.Join(r.root, "runs")
@@ -172,11 +77,11 @@ func TestGuardWithFreshCacheStartsNoAdapter(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
 	for range 3 {
-		assure("guard", "src/a.go")
+		assure("context")
 	}
 	data, _ := os.ReadFile(marker)
 	if n := strings.Count(string(data), "run"); n != 1 {
-		t.Fatalf("adapter started %d times across three guard calls; want 1", n)
+		t.Fatalf("adapter started %d times across three context calls; want 1", n)
 	}
 }
 
@@ -222,9 +127,6 @@ func TestContextFormalObjectivesUnderDeclaringComponent(t *testing.T) {
 	i, j := strings.Index(out, "Objectives for ledger/**"), strings.Index(out, "FM-COMPLETE")
 	if i < 0 || j < i {
 		t.Fatalf("FM-COMPLETE not under the formal component:\n%s", out)
-	}
-	if !strings.Contains(out, "formal/L/C.lean") {
-		t.Error("challenge file missing from the protected list")
 	}
 }
 

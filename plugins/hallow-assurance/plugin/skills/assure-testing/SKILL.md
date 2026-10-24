@@ -65,8 +65,8 @@ every applicable objective and writes a report. In both:
 
 - `fail` on a required objective blocks. Fix the cause the details name.
 - `advisory-fail` does not block. Mention it in your report.
-- A failure that names an adapter missing from `PATH`, or a protected file, is outside your reach.
-  Report it to the human.
+- A failure that names an adapter missing from `PATH`, or tools not installed, is outside your
+  reach. Report it to the human.
 - `assure context <path>` lists the objectives that apply to a path at its level.
 
 ## Designing for deterministic simulation
@@ -83,5 +83,5 @@ from one seed, so any failure replays exactly.
 A component that declares `formal:` has a formal model: a small specification proved correct
 separately. The implementation is tied to it by **differential testing**: generate inputs, run both
 the model and the implementation, and require identical results. The model's theorem statements
-(`challenge`) are protected; only humans change them. `FM-LINK` counts the mismatches and the inputs
+(`challenge`) belong to humans; leave them unchanged. `FM-LINK` counts the mismatches and the inputs
 tried.

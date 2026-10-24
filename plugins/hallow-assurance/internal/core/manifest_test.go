@@ -2,8 +2,10 @@ package core
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,13 +68,9 @@ func TestSchemaValidManifestWithWellFormedGlobsLoads(t *testing.T) {
 			}
 			comps = append(comps, c+"}")
 		}
-		prov := rapid.SampledFrom([]string{"", "provenance: true\n", "provenance: false\n"}).Draw(t, "provenance")
-		m, err := parseManifest("m.yaml", []byte(manifestYAML(comps...)+prov))
+		m, err := parseManifest("m.yaml", []byte(manifestYAML(comps...)))
 		if err != nil {
 			t.Fatal(err)
-		}
-		if want := prov == "provenance: true\n"; m.Provenance != want {
-			t.Fatalf("Provenance = %v for %q, want %v; an absent key must mean off", m.Provenance, prov, want)
 		}
 		for i, want := range wantInputs {
 			if m.Components[i].Inputs != want {
@@ -82,37 +80,18 @@ func TestSchemaValidManifestWithWellFormedGlobsLoads(t *testing.T) {
 	})
 }
 
-func TestAuthorityIsExplicitOrInferredFromHumanReview(t *testing.T) {
+func TestRemovedManifestKeysAreRejected(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		key := rapid.SampledFrom([]string{"", "local", "ci"}).Draw(t, "authority")
-		review := rapid.SampledFrom([]string{"", "human_review: {}\n", "human_review: {B: optional}\n", "human_review: {A: required, C: optional}\n"}).Draw(t, "human_review")
-		src := manifestYAML()
-		if key != "" {
-			src += "authority: " + key + "\n"
+		removed := map[string][]string{
+			"protected":    {`["ci/**"]`, "[]"},
+			"authority":    {"local", "ci"},
+			"human_review": {"{B: optional}", "{}"},
+			"provenance":   {"true", "false"},
 		}
-		src += review
-		if rapid.Bool().Draw(t, "provenance") {
-			src += "provenance: true\n"
-		}
-		m, err := parseManifest("m.yaml", []byte(src))
-		if key == "local" && review != "" {
-			if !problemAt(err, "/human_review") {
-				t.Fatalf("authority: local with human_review loaded (err %v); review has no meaning under local authority and the schema rejects it\n%s", err, src)
-			}
-			return
-		}
-		if err != nil {
-			t.Fatalf("%v\n%s", err, src)
-		}
-		want := Authority(key)
-		if key == "" {
-			want = AuthorityLocal
-			if review != "" {
-				want = AuthorityCI
-			}
-		}
-		if m.Authority != want {
-			t.Fatalf("Authority = %q, want %q; explicit authority must win, else human_review implies ci so pre-authority manifests keep their review gate, and nothing else may make a repo CI-gated\n%s", m.Authority, want, src)
+		key := rapid.SampledFrom(slices.Sorted(maps.Keys(removed))).Draw(t, "key")
+		src := manifestYAML() + key + ": " + rapid.SampledFrom(removed[key]).Draw(t, "value") + "\n"
+		if _, err := parseManifest("m.yaml", []byte(src)); err == nil || !strings.Contains(err.Error(), key) {
+			t.Fatalf("manifest with removed key loaded, or the error does not name it (err %v); a silently ignored key would claim a review or a guard that no longer exists\n%s", err, src)
 		}
 	})
 }
@@ -121,34 +100,6 @@ func TestMalformedComponentGlobIsLocated(t *testing.T) {
 	_, err := parseManifest("m.yaml", []byte(manifestYAML("{path: 'internal/[billing/**', level: A}")))
 	if !problemAt(err, "/components/0/path") {
 		t.Fatalf("want problem at /components/0/path, got %v", err)
-	}
-}
-
-func TestProtectedGlobsLoadAsWritten(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		globs := rapid.SliceOfN(globGen, 0, 4).Draw(t, "protected")
-		src := manifestYAML() + "protected: ['" + strings.Join(globs, "', '") + "']\n"
-		if len(globs) == 0 {
-			src = manifestYAML() + "protected: []\n"
-		}
-		m, err := parseManifest("m.yaml", []byte(src))
-		if err != nil {
-			t.Fatalf("protected %q: %v; a manifest rejected over well-formed globs stops every hook decision", globs, err)
-		}
-		var got []string
-		for _, g := range m.Protected {
-			got = append(got, g.String())
-		}
-		if strings.Join(got, "\n") != strings.Join(globs, "\n") {
-			t.Fatalf("protected %q loaded as %q; guard would protect the wrong paths", globs, got)
-		}
-	})
-}
-
-func TestMalformedProtectedGlobIsLocated(t *testing.T) {
-	src := manifestYAML() + "protected: ['docs/**', 'internal/[billing/**']\n"
-	if _, err := parseManifest("m.yaml", []byte(src)); !problemAt(err, "/protected/1") {
-		t.Fatalf("want problem at /protected/1, got %v; a glob that cannot compile would protect nothing", err)
 	}
 }
 

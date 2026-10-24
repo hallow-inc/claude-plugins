@@ -13,11 +13,10 @@ import (
 const ManifestName = "assurance.yaml"
 
 type Component struct {
-	Glob      Glob
-	Level     Level
-	Challenge string
-	Formal    bool
-	Inputs    bool
+	Glob   Glob
+	Level  Level
+	Formal bool
+	Inputs bool
 }
 
 type Manifest struct {
@@ -25,11 +24,7 @@ type Manifest struct {
 	DefaultLevel   Level
 	Languages      []string
 	Components     []Component
-	Protected      []Glob
-	ReviewRequired map[Level]bool
-	Provenance     bool
 	RequireFixTest bool
-	Authority      Authority
 	Catalog        Catalog
 	Warnings       []schemas.Violation
 }
@@ -92,39 +87,11 @@ func parseManifest(file string, data []byte) (*Manifest, error) {
 			p.add(ptr+"/path", "glob", "%v", err)
 		}
 		comp := Component{Glob: g, Level: Level(cm["level"].(string))}
-		if f, ok := cm["formal"].(map[string]any); ok {
-			comp.Formal = true
-			comp.Challenge = f["challenge"].(string)
-		}
+		_, comp.Formal = cm["formal"]
 		_, comp.Inputs = cm["inputs"]
 		m.Components = append(m.Components, comp)
 	}
-	prot, _ := v["protected"].([]any)
-	for i, s := range prot {
-		g, err := CompileGlob(s.(string))
-		if err != nil {
-			p.add(fmt.Sprintf("/protected/%d", i), "glob", "%v", err)
-		}
-		m.Protected = append(m.Protected, g)
-	}
-	hr, _ := v["human_review"].(map[string]any)
-	for l, s := range hr {
-		if s == "required" {
-			if m.ReviewRequired == nil {
-				m.ReviewRequired = map[Level]bool{}
-			}
-			m.ReviewRequired[Level(l)] = true
-		}
-	}
-	m.Provenance, _ = v["provenance"].(bool)
 	m.RequireFixTest, _ = v["require_fix_test"].(bool)
-	m.Authority = AuthorityLocal
-	if _, ok := v["human_review"]; ok {
-		m.Authority = AuthorityCI
-	}
-	if a, ok := v["authority"].(string); ok {
-		m.Authority = Authority(a)
-	}
 	cat, err := LoadCatalog(v["catalog"].(string))
 	if err != nil {
 		p.add("/catalog", "catalog", "%v", err)

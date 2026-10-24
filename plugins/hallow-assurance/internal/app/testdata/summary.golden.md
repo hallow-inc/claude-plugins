@@ -6,7 +6,7 @@ Commit `7330276f12e1`, 3 changed files since `origin/master` (`7330276f12e1`), c
 |---|---|---|
 | VER-MUTATION-CHANGED | go | pass |
 | VER-ROBUST-FUZZ | go | fail |
-| IND-VERIFIER-DISTINCT | — | waived |
+| VER-COVERAGE-RESOLUTION | — | waived |
 | VER-TESTS-PASS | go | fail |
 | FM-COMPLETE | — | advisory-fail |
 
@@ -34,9 +34,9 @@ Commit `7330276f12e1`, 3 changed files since `origin/master` (`7330276f12e1`), c
 - internal/x19.go: fuzz target FuzzParse failed on its seed corpus
 - … 2 more
 
-### IND-VERIFIER-DISTINCT: waived
+### VER-COVERAGE-RESOLUTION: waived
 
-- waived: no adapter lists IND-VERIFIER-DISTINCT
+- waived: no adapter lists VER-COVERAGE-RESOLUTION
 
 ### VER-TESTS-PASS (go): fail
 

@@ -5,7 +5,7 @@
   "short-sha.json": [{"location": "/commit", "keyword": "pattern"}],
   "resolutions-not-array.json": [{"location": "/objectives/0/resolutions", "keyword": "type"}],
   "removable-resolutions-not-array.json": [{"location": "/removable_resolutions", "keyword": "type"}],
-  "unknown-authority.json": [{"location": "/authority", "keyword": "enum"}],
+  "removed-authority.json": [{"location": "", "keyword": "additionalProperties"}],
   "missing-untracked-pins.json": [{"location": "", "keyword": "required"}],
   "untracked-pins-empty-list.json": [{"location": "/untracked_pins/go", "keyword": "minItems"}]
 }

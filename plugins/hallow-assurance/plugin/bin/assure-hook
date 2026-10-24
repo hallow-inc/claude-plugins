@@ -1,5 +1,5 @@
 #!/bin/sh
-expected=2
+expected=3
 event=$1
 
 dir=$PWD
@@ -9,12 +9,8 @@ while [ ! -f "$dir/assurance.yaml" ]; do
 done
 
 unavailable() {
-  if [ "$event" = stop ] || [ "$event" = subagent-stop ]; then
-    printf '{"systemMessage":"assure-hook: the %s check did not run. %s"}\n' "$event" "$2"
-    exit 0
-  fi
-  echo "assure-hook: $1" >&2
-  exit 2
+  printf '{"systemMessage":"assure-hook: the %s hook did not run. %s"}\n' "$event" "$1"
+  exit 0
 }
 
 version=$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$(dirname "$0")/../.claude-plugin/plugin.json" 2>/dev/null)
@@ -30,15 +26,14 @@ else
 fi
 
 if ! command -v assure >/dev/null 2>&1; then
-  unavailable "$dir/assurance.yaml adopts hallow-assurance, but assure is not on PATH. $install" "assure is not on PATH. $install"
+  unavailable "assure is not on PATH. $install"
 fi
 
 got=$(assure hook protocol 2>/dev/null)
 if [ "$got" != "$expected" ]; then
   shown=$got
   case $shown in '' | *[!0-9]*) shown=unknown ;; esac
-  unavailable "this plugin speaks hook protocol $expected, but the assure on PATH prints '$got'. $install" \
-    "This plugin speaks hook protocol $expected, but the assure on PATH speaks $shown. $install"
+  unavailable "This plugin speaks hook protocol $expected, but the assure on PATH speaks $shown. $install"
 fi
 
 exec assure hook "$event"

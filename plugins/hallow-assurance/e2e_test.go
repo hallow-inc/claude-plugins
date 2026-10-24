@@ -25,7 +25,7 @@ func buildBinaries(t *testing.T) string {
 	return bin
 }
 
-func TestContextThenGuardEndToEnd(t *testing.T) {
+func TestContextThenClassifyEndToEnd(t *testing.T) {
 	bin := buildBinaries(t)
 	root := t.TempDir()
 	manifest := "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: C\ncomponents:\n  - {path: 'internal/chat/**', level: B}\n"
@@ -51,22 +51,9 @@ func TestContextThenGuardEndToEnd(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, ".assure/state/adapters.json")); err != nil {
 		t.Fatalf("context did not write the describe cache: %v", err)
 	}
-	test := filepath.Join(root, "internal/chat/stream_test.go")
-	cache := filepath.Join(root, ".assure/state/adapters.json")
-	if out, code := assure("guard", test); code != 1 || !strings.Contains(out, "hallow-assurance:verifier") {
-		t.Errorf("main thread editing a level-B test: exit %d %q", code, out)
-	}
-	if out, code := assure("guard", "--agent-type", "hallow-assurance:verifier", test); code != 0 {
-		t.Errorf("verifier editing a level-B test: exit %d %q", code, out)
-	}
-	for _, agent := range []string{"", "hallow-assurance:verifier"} {
-		args := []string{"guard"}
-		if agent != "" {
-			args = append(args, "--agent-type", agent)
-		}
-		if out, code := assure(append(args, cache)...); code != 1 {
-			t.Errorf("%q editing the describe cache: exit %d %q", agent, code, out)
-		}
+	out, code := assure("classify", "internal/chat/stream_test.go")
+	if f := strings.Fields(out); code != 0 || len(f) < 4 || f[0] != "internal/chat/stream_test.go" || !strings.Contains(out, "B") || f[len(f)-1] != "test" {
+		t.Errorf("classify of a level-B test: exit %d %q", code, out)
 	}
 }
 

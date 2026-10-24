@@ -56,7 +56,7 @@ func TestRunRejectsUntrackedToolWithoutPin(t *testing.T) {
 			rt.Fatalf("response %s rejected: %v; every untracked name is a pinned_by key", data, err)
 		}
 		if !slices.Equal(got.Untracked, untracked) {
-			rt.Fatalf("response %s: Untracked %v, want %v; the evaluator fails untracked pins under authority: ci only if the client carries them", data, got.Untracked, untracked)
+			rt.Fatalf("response %s: Untracked %v, want %v; the report lists untracked pins only if the client carries them", data, got.Untracked, untracked)
 		}
 	})
 }

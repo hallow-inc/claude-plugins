@@ -21,11 +21,8 @@ Commands:
   classify   Print level, language, and role for each path
   context    Print the level map and applicable objectives
   evaluate   Decide every applicable objective and write the report
-  guard      Decide whether an agent may edit each path
   hook       Handle a Claude Code hook event (JSON on stdin)
-  record     Append a provenance record for a pending file edit
   reference  Print an adapter's testing reference for a language
-  reviews    Print a pull request's reviews file from the GitHub API (needs gh)
   tools      Print each adapter's pinned tool versions, or an install script
   help       Show this help
   version    Print the assure version and hook protocol
@@ -36,16 +33,13 @@ func main() {
 }
 
 var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
-	"guard":     runGuard,
 	"context":   runContext,
 	"check":     runCheck,
 	"evaluate":  runEvaluate,
 	"hook":      runHook,
 	"classify":  runClassify,
-	"record":    runRecord,
 	"reference": runReference,
 	"tools":     runTools,
-	"reviews":   runReviews,
 }
 
 func run(args []string, stdout, stderr io.Writer) int {

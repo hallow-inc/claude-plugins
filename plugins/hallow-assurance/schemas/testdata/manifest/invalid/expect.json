@@ -10,18 +10,16 @@
   "remote-ref.yaml": [{"location": "", "keyword": "additionalProperties"}],
   "missing-languages.yaml": [{"location": "", "keyword": "required"}],
   "empty-languages.yaml": [{"location": "/languages", "keyword": "minItems"}],
-  "protected-traversal.yaml": [{"location": "/protected/0", "keyword": "not"}],
   "inputs-false.yaml": [{"location": "/components/0/inputs", "keyword": "const"}],
   "component-dst.yaml": [{"location": "/components/0", "keyword": "additionalProperties"}],
-  "human-review-unknown-level.yaml": [{"location": "/human_review", "keyword": "additionalProperties"}],
-  "human-review-off.yaml": [{"location": "/human_review/B", "keyword": "enum"}],
   "formal-spec-traversal.yaml": [{"location": "/components/0/formal/spec", "keyword": "not"}],
   "formal-code-empty.yaml": [{"location": "/components/0/formal/code", "keyword": "minItems"}],
   "formal-code-absolute.yaml": [{"location": "/components/0/formal/code/0", "keyword": "pattern"}],
   "formal-code-string.yaml": [{"location": "/components/0/formal/code", "keyword": "type"}],
-  "provenance-not-boolean.yaml": [{"location": "/provenance", "keyword": "type"}],
   "require-fix-test-not-boolean.yaml": [{"location": "/require_fix_test", "keyword": "type"}],
-  "formal-extra-key.yaml": [{"location": "/components/0/formal", "keyword": "additionalProperties"}],
-  "authority-unknown.yaml": [{"location": "/authority", "keyword": "enum"}],
-  "human-review-local.yaml": [{"location": "/human_review", "keyword": ""}]
+  "removed-protected.yaml": [{"location": "", "keyword": "additionalProperties"}],
+  "removed-authority.yaml": [{"location": "", "keyword": "additionalProperties"}],
+  "removed-human-review.yaml": [{"location": "", "keyword": "additionalProperties"}],
+  "removed-provenance.yaml": [{"location": "", "keyword": "additionalProperties"}],
+  "formal-extra-key.yaml": [{"location": "/components/0/formal", "keyword": "additionalProperties"}]
 }

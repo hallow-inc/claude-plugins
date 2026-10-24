@@ -23,16 +23,15 @@ func goldenReport() EvalReport {
 	for i := range maxDetails + 2 {
 		many = append(many, fmt.Sprintf("internal/x%02d.go: fuzz target FuzzParse failed on its seed corpus", i))
 	}
-	w := core.Waiver{Objective: "IND-VERIFIER-DISTINCT", Scope: "**", Rationale: "provenance arrives in milestone M4", Approver: "owner", Expires: "2026-12-31"}
+	w := core.Waiver{Objective: "VER-COVERAGE-RESOLUTION", Scope: "**", Rationale: "coverage resolutions arrive in a later milestone", Approver: "owner", Expires: "2026-12-31"}
 	return EvalReport{
 		Commit: sha, ChangedFrom: ChangedFrom{Ref: "origin/master", SHA: sha}, Date: "2026-09-28", Catalog: "v0", ChangedFiles: 3,
-		Authority:      core.AuthorityCI,
 		ToolVersions:   map[string]map[string]string{"go": {"go": "go1.27.1"}},
 		ExpiredWaivers: []core.Waiver{{Objective: "VER-FAIL-ON-BASE", Scope: "**", Rationale: "fail-on-base runner arrives in M3b", Approver: "owner", Expires: "2026-09-01"}},
 		Objectives: []Entry{
 			{Objective: "VER-MUTATION-CHANGED", Language: "go", Status: core.Pass},
 			{Objective: "VER-ROBUST-FUZZ", Language: "go", Status: core.Fail, Details: many},
-			{Objective: "IND-VERIFIER-DISTINCT", Status: core.Waived, Details: []string{"waived: no adapter lists IND-VERIFIER-DISTINCT"}, Waivers: []core.Waiver{w}},
+			{Objective: "VER-COVERAGE-RESOLUTION", Status: core.Waived, Details: []string{"waived: no adapter lists VER-COVERAGE-RESOLUTION"}, Waivers: []core.Waiver{w}},
 			{Objective: "VER-TESTS-PASS", Language: "go", Status: core.Fail, Details: []string{"failing test: example.com/m/p.TestX: boom\np_test.go:9: boom"}},
 			{Objective: "FM-COMPLETE", Status: core.AdvisoryFail, Details: []string{"no adapter lists FM-COMPLETE"}},
 		},
@@ -158,19 +157,12 @@ func drawUntrackedPins(t *rapid.T) map[string][]string {
 	return pins
 }
 
-func TestSummaryLabelsALocalVerdictSelfAttested(t *testing.T) {
+func TestSummaryHasNoAttestationLabel(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		rep := goldenReport()
-		rep.Authority = rapid.SampledFrom([]core.Authority{core.AuthorityLocal, core.AuthorityCI}).Draw(t, "authority")
 		rep.UntrackedPins = drawUntrackedPins(t)
-		got := rep.Summary()
-		first, _, _ := strings.Cut(got, "\n")
-		local := rep.Authority == core.AuthorityLocal
-		if strings.Contains(first, "self-attested") != local {
-			t.Fatalf("authority %s, first line %q: a local verdict must say so on its first line, since no CI rerun stands behind it", rep.Authority, first)
-		}
-		if !local && strings.Contains(got, "self-attested") {
-			t.Fatalf("authority ci, summary says self-attested:\n%s", got)
+		if got := rep.Summary(); strings.Contains(got, "self-attested") {
+			t.Fatalf("summary says self-attested; with no authority setting every run is the verdict:\n%s", got)
 		}
 	})
 }
@@ -178,7 +170,6 @@ func TestSummaryLabelsALocalVerdictSelfAttested(t *testing.T) {
 func TestSummaryListsUntrackedPins(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		rep := goldenReport()
-		rep.Authority = rapid.SampledFrom([]core.Authority{core.AuthorityLocal, core.AuthorityCI}).Draw(t, "authority")
 		rep.UntrackedPins = drawUntrackedPins(t)
 		got := rep.Summary()
 		lower := strings.ToLower(got)
@@ -196,10 +187,9 @@ func TestSummaryListsUntrackedPins(t *testing.T) {
 	})
 }
 
-func TestMarshalKeepsAuthorityAndUntrackedPins(t *testing.T) {
+func TestMarshalKeepsUntrackedPinsAndHasNoAuthority(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		rep := goldenReport()
-		rep.Authority = rapid.SampledFrom([]core.Authority{core.AuthorityLocal, core.AuthorityCI}).Draw(t, "authority")
 		rep.UntrackedPins = drawUntrackedPins(t)
 		data, err := rep.Marshal()
 		if err != nil {
@@ -209,10 +199,9 @@ func TestMarshalKeepsAuthorityAndUntrackedPins(t *testing.T) {
 		if err := json.Unmarshal(data, &raw); err != nil {
 			t.Fatal(err)
 		}
-		var authority string
 		var pins map[string][]string
-		if err := json.Unmarshal(raw["authority"], &authority); err != nil || authority != string(rep.Authority) {
-			t.Fatalf("authority stored as %s (%v), want %q", raw["authority"], err, rep.Authority)
+		if a, ok := raw["authority"]; ok {
+			t.Fatalf("report carries authority %s; the field is removed and the schema rejects it", a)
 		}
 		if err := json.Unmarshal(raw["untracked_pins"], &pins); err != nil || pins == nil {
 			t.Fatalf("untracked_pins stored as %s (%v); the key must always be an object so a consumer can tell none from not recorded", raw["untracked_pins"], err)

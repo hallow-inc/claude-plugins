@@ -52,14 +52,11 @@ func TestSessionStartWithoutWarningsIsExactlyTheContext(t *testing.T) {
 }
 
 func TestStopSummaryHeadersOnlyIntroduceContent(t *testing.T) {
-	const driftHeader, remedyHeader = "\nProtected-file drift:\n", "\nThe agent cannot fix these; a human must:\n"
+	const remedyHeader = "\nThe agent cannot fix these; a human must:\n"
 	rapid.Check(t, func(t *rapid.T) {
 		in := stopInputGen(t)
 		s := in.summary()
-		if want := len(in.drifted) > 0 || in.driftErr != nil; strings.Contains(s, driftHeader) != want {
-			t.Fatalf("drift header present = %v, want %v (drifted %v, err %v):\n%s\nan empty header tells the human to review drift that does not exist", !want, want, in.drifted, in.driftErr, s)
-		}
-		if want := len(in.rep.Remedies()) > 0 || core.OutsideReach(in.driftErr); strings.Contains(s, remedyHeader) != want {
+		if want := len(in.rep.Remedies()) > 0; strings.Contains(s, remedyHeader) != want {
 			t.Fatalf("remedy header present = %v, want %v:\n%s\nan empty header asks the human for an action nobody named", !want, want, s)
 		}
 	})

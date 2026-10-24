@@ -20,10 +20,8 @@ The PR author's approval does not count.
 
 - [ ] The PR covers one milestone, named in "What and why".
 - [ ] Protected files (invariant 6) changed only on purpose: `catalog/`, thresholds, manifest levels
-      in `assurance.yaml`, `.assure/waivers.yaml`, `.assure/baseline*`, `.assure/provenance/`,
-      formal-model challenge files, `.github/workflows/`.
-- [ ] Provenance gaps reported by CI on level A–B files were read line by line. Your approval is what
-      lets a gap pass IND-VERIFIER-DISTINCT.
+      in `assurance.yaml`, `.assure/waivers.yaml`, `.assure/baseline*`, formal-model
+      challenge files, `.github/workflows/`.
 - [ ] `plugin/` and `internal/core/` contain no language-specific logic; it lives in `adapters/`.
 - [ ] No model call takes part in a pass/fail decision.
 - [ ] Only `internal/hookio/` parses Claude Code hook JSON.
