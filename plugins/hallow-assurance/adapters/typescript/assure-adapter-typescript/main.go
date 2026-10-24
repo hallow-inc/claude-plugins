@@ -50,7 +50,7 @@ var description = describe{
 		"config": append(append([]string{
 			"**/package.json", "**/package-lock.json", "**/pnpm-lock.yaml", "**/yarn.lock",
 			"**/tsconfig.json", "**/tsconfig.*.json",
-		}, globsFor("**/vitest.config.%s", configExts)...), globsFor("**/eslint.config.%s", configExts)...),
+		}, append(globsFor("**/vitest.config.%s", configExts), globsFor("**/vitest.setup.%s", configExts)...)...), globsFor("**/eslint.config.%s", configExts)...),
 	},
 	Objectives: map[string]any{
 		"VER-TESTS-PASS":          map[string]any{"tool": "vitest", "fast": true},
