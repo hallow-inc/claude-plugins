@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 type evidence struct {
@@ -266,7 +267,11 @@ func runTests(root, _, out string, sel map[string][]string, _ map[string]string)
 func capText(b []byte) string {
 	s := strings.TrimSpace(string(b))
 	if len(s) > maxOutput {
-		s = s[:maxOutput]
+		n := maxOutput
+		for n > 0 && !utf8.RuneStart(s[n]) {
+			n--
+		}
+		s = s[:n]
 	}
 	if s == "" {
 		s = "no output"
