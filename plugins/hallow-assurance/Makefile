@@ -1,5 +1,5 @@
-PKGS := ./cmd/assure ./adapters/go/assure-adapter-go ./adapters/typescript/assure-adapter-typescript
-BINS := assure assure-adapter-go assure-adapter-typescript
+PKGS := ./cmd/assure ./adapters/go/assure-adapter-go ./adapters/typescript/assure-adapter-typescript ./adapters/python/assure-adapter-python
+BINS := assure assure-adapter-go assure-adapter-typescript assure-adapter-python
 # Hooks run with the PATH Claude Code launched with, so both the mise toolchain's GOBIN and
 # $HOME/go/bin must carry the same build; a stale copy in either one wins depending on PATH order.
 GOBINS := $(sort $(HOME)/go/bin $(shell go env GOBIN))

@@ -1,0 +1,84 @@
+A fix commit that every Python objective at level B accepts: the src-layout project is installed
+in its virtualenv in editable mode, so the fix test passes on base only if the adapter fails to put
+the base tree ahead of the editable install. src is an inputs component, the fix test fails on base,
+it kills every mutant on the changed line, and the fuzz file lives in base so the fix test is the
+only new test.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+    inputs: true
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/digits.py --
+def digit_sum(s):
+    if s == "":
+        raise ValueError("empty input")
+    n = 0
+    for c in s:
+        if c < "0" or c > "8":
+            raise ValueError("not a digit")
+        n += ord(c) - 48
+    return n
+-- base/tests/qual/test_digits_fuzz.py --
+from hypothesis import example, given, strategies as st
+
+from qual.digits import digit_sum
+
+
+@given(st.text())
+@example("")
+@example("123")
+@example("x")
+def test_digit_sum_stays_in_range_or_raises_value_error(s):
+    try:
+        n = digit_sum(s)
+    except ValueError:
+        return
+    assert 0 <= n <= 9 * len(s)
+-- head/src/qual/digits.py --
+def digit_sum(s):
+    if s == "":
+        raise ValueError("empty input")
+    n = 0
+    for c in s:
+        if c < "0" or c > "9":
+            raise ValueError("not a digit")
+        n += ord(c) - 48
+    return n
+-- head/tests/test_digits.py --
+import pytest
+
+from qual.digits import digit_sum
+
+
+def test_digit_sum_accepts_nine_and_rejects_everything_outside_0_to_9():
+    assert digit_sum("0") == 0
+    assert digit_sum("9") == 9
+    assert digit_sum("09") == 9
+    assert digit_sum("123") == 6
+    for bad in ["", "/", ":", "1a"]:
+        with pytest.raises(ValueError):
+            digit_sum(bad)
+-- head.msg --
+fix(src): accept the digit 9
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-FAIL-ON-BASE", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "pass"},
+    {"objective": "VER-ROBUST-FUZZ", "language": "python", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "pass"}
+  ]
+}

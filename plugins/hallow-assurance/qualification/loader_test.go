@@ -383,6 +383,39 @@ func TestNpmCasesCommitTheirLockfileButNotNodeModules(t *testing.T) {
 	}
 }
 
+func TestUvCasesCommitTheirLockfileAndInterpreterButNotTheVirtualenv(t *testing.T) {
+	for _, lang := range slices.Sorted(maps.Keys(caseSetup)) {
+		if caseSetup[lang][0] != "uv" {
+			continue
+		}
+		files, err := filepath.Glob(filepath.Join(lang, "*.txtar"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := parseCase(lang, strings.TrimSuffix(filepath.Base(f), ".txtar"), data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"pyproject.toml", "uv.lock"} {
+				if _, ok := c.base[name]; !ok {
+					t.Errorf("%s: base commit has no %s; uv sync --locked needs both, and an uncommitted lockfile would mark every pin untracked", f, name)
+				}
+			}
+			if v := strings.TrimSpace(string(c.base[".python-version"])); !regexp.MustCompile(`^3\.[0-9]+\.[0-9]+$`).MatchString(v) {
+				t.Errorf("%s: base .python-version is %q, want an exact CPython version; without it uv may pick a free-threaded build the tools do not support", f, v)
+			}
+			if !slices.Contains(nonEmptyLines(c.base[".gitignore"]), ".venv/") {
+				t.Errorf("%s: base .gitignore does not ignore .venv/; the installed tree would show as changed files", f)
+			}
+		}
+	}
+}
+
 func TestParseCaseRejectsSchemaInvalidExpectation(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		a := genArchiveCase(t)

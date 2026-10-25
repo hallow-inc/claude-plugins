@@ -24,10 +24,12 @@ var (
 
 var caseTools = map[string][]string{
 	"go":         {"go", "gofmt", "git", "gremlins"},
+	"python":     {"uv", "git"},
 	"typescript": {"node", "npm", "git"},
 }
 
 var caseSetup = map[string][]string{
+	"python":     {"uv", "sync", "--locked"},
 	"typescript": {"npm", "ci", "--no-audit", "--no-fund", "--prefer-offline"},
 }
 
@@ -284,7 +286,9 @@ func evaluateCase(t *testing.T, c qcase, adapter string, env []string) ([]string
 	return match(c.expect, rep), log
 }
 
-var fixedSource = map[string]string{"go": "p/p.go", "typescript": "src/double.ts"}
+var fixedSource = map[string]string{"go": "p/p.go", "python": "src/qual/double.py", "typescript": "src/double.ts"}
+
+var lineComment = map[string]string{"go": "//", "python": "#", "typescript": "//"}
 
 func TestFixChangingNoTestPassesFailOnBase(t *testing.T) {
 	for _, lang := range languages() {
@@ -305,7 +309,7 @@ func TestFixChangingNoTestPassesFailOnBase(t *testing.T) {
 				t.Skip("set ASSURE_QUALIFICATION=1 without -short to run assure evaluate")
 			}
 			maps.Copy(c.base, c.head)
-			c.head = map[string][]byte{fixedSource[lang]: append(slices.Clone(src), "\n// Kept cheap on purpose.\n"...)}
+			c.head = map[string][]byte{fixedSource[lang]: append(slices.Clone(src), "\n"+lineComment[lang]+" Kept cheap on purpose.\n"...)}
 			c.msg = "fix(p): keep double cheap\n"
 			rep, log := evaluateReport(t, c, filepath.Join(binDir, adapterName(lang)), nil)
 			var got []reportObjective

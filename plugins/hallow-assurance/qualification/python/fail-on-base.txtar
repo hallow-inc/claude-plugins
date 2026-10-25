@@ -1,0 +1,38 @@
+VER-FAIL-ON-BASE: a fix commit whose only test, test_double_of_2_is_4, calls double as it exists
+on base and passes there, so it cannot show the fix.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/double.py --
+def double(x):
+    return 2 * x
+-- head/tests/test_double.py --
+from qual.double import double
+
+
+def test_double_of_2_is_4():
+    assert double(2) == 4
+-- head.msg --
+fix(src): double correctly
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-FAIL-ON-BASE", "language": "python", "status": "fail", "locations": ["passes on base: tests/test_double.py.test_double_of_2_is_4"]},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "pass"}
+  ]
+}
