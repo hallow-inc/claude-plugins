@@ -72,8 +72,8 @@ In scope:
 - `assure` CLI: `classify`, `context`, `guard`, `lint`, `check`, `evaluate`, `hook`, `record`,
   `explain`
 - Manifest, catalog, waiver, provenance, evidence-index, and adapter-protocol schemas
-- Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test), Lean adapter (v1,
-  staged M7a–c)
+- Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test), Python adapter (v1,
+  M6a), Lean adapter (v1, staged M7a–c)
 - Claude Code plugin: hooks, three subagents, skills, commands
 - CI integration: required status check, PR report, nightly runs
 - Tool qualification fixtures (seeded-bug repos) for each adapter
@@ -87,7 +87,7 @@ In scope:
 - Dashboards; cross-repo aggregation (evidence history goes to DuckLake post-v1)
 - Supporting agent harnesses other than Claude Code in the plugin (the CLI and evaluator stay
   harness-neutral, so others can integrate later)
-- Python/Rust adapters before the TypeScript adapter proves the design
+- A Rust adapter
 - Code-shape rules (lint, complexity, unsafe use, dropped errors). `assure` judges behaviour
   evidence and the integrity of that evidence, never how code is written; the adopting repo's own
   lint owns code shape.
@@ -537,6 +537,15 @@ never reassigned, and new work takes a letter suffix.
 - ✅ **Zero diffs** to `plugin/` and `internal/core/` in the M6 PR. Any needed change is a design bug:
   fix the abstraction first in a separate PR, then land the adapter.
 
+**M6a — Python adapter**
+- `assure-adapter-python` for uv projects: pytest with pytest-randomly (`VER-TESTS-PASS`,
+  `VER-FAIL-ON-BASE`), cosmic-ray (`VER-MUTATION-CHANGED`), Hypothesis (`VER-ROBUST-FUZZ`),
+  pytest-cov (`VER-COVERAGE-RESOLUTION`); Python reference; `qualification/python/` fixtures
+- Catalog: `python: cosmic-ray` under `VER-MUTATION-CHANGED`; CI: `setup-uv` in qualification and an
+  `evaluate-python` smoke job in the gate
+- ✅ **Zero diffs** to `plugin/` and `internal/core/`, as in M6
+- ✅ A mutant whose test run exits with a usage error or internal error is never scored as killed
+
 **M7a — Lean adapter, stage 1**
 - `assure-adapter-lean`: `lake build --wfail` and axiom-audit → `lean.build` (FM-COMPLETE);
   axiom-audit `--json` → `lean.axioms` (FM-AXIOMS); `leanchecker` → `lean.recheck` (FM-RECHECK)
@@ -567,8 +576,7 @@ never reassigned, and new work takes a letter suffix.
 - Replay check: run a seed twice, compare trace digests → VER-DST-REPLAY
 - ✅ A deliberately nondeterministic harness fails VER-DST-REPLAY
 
-**Post-v1:** attestations, DuckLake evidence history, Python and
-Rust adapters, cross-repo reporting, Ziggy authoring front-end for manifest/catalog (JSON Schema
+**Post-v1:** attestations, DuckLake evidence history, a Rust adapter, cross-repo reporting, Ziggy authoring front-end for manifest/catalog (JSON Schema
 stays authoritative) once a stable Go implementation and JSON mapping exist.
 
 ## Open decisions
