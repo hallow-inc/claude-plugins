@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
+	"pgregory.net/rapid"
 )
 
 const splitBase = `def parts_ok(parts):
@@ -225,6 +227,56 @@ func TestIntegrationMutationUnparseableSyntax(t *testing.T) {
 		t.Fatalf("the refused run changed the repository\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 	t.Logf("fixture interpreter: python %s", venvPythonVersion(t))
+}
+
+// TestSyntaxGuardDecodesEveryEncodingAndNewline: the guard decodes each file
+// with its PEP 263 encoding whatever its newlines, in the oldest supported
+// interpreter, so its verdict matches the same text as plain UTF-8 with "\n"
+// newlines. The comparison is differential because parso rejects some
+// modules CPython accepts (form feeds in indentation), and reporting those is
+// the guard's job. A file it cannot decode must not crash the batch: that
+// turns every VER-MUTATION-CHANGED run touching it into an environment
+// failure.
+func TestSyntaxGuardDecodesEveryEncodingAndNewline(t *testing.T) {
+	py := filepath.Join(syncedProject(t), ".venv", "bin", "python")
+	rapid.Check(t, func(t *rapid.T) {
+		dir, err := os.MkdirTemp("", "assure-py-syntax-*")
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		defer func() { _ = os.RemoveAll(dir) }()
+		m, src := genModule(t)
+		plain := slices.Clone(m.lines)
+		if len(plain) > 0 && strings.HasPrefix(plain[0], "# -*- coding: latin-1") {
+			plain[0] = "# -*- coding: utf-8 -*-"
+		}
+		lead := rapid.IntRange(0, 3).Draw(t, "lead")
+		enc, ref, bad := filepath.Join(dir, "enc.py"), filepath.Join(dir, "ref.py"), filepath.Join(dir, "bad.py")
+		writeTree(t, dir, map[string]string{
+			"enc.py": string(src),
+			"ref.py": strings.Join(append(plain, ""), "\n"),
+			"bad.py": strings.Repeat("x = 1\n", lead) + "def broken(:\n",
+		})
+		got, err := syntaxGuard(py, dir, []string{enc, ref, bad})
+		if err != nil {
+			t.Fatalf("syntaxGuard: %v\nsource %q\none undecodable file must not fail the whole batch", err, src)
+		}
+		var encVerdict, refVerdict string
+		for line := range strings.Lines(got) {
+			if r, ok := strings.CutPrefix(line, enc); ok {
+				encVerdict = strings.TrimSpace(r)
+			}
+			if r, ok := strings.CutPrefix(line, ref); ok {
+				refVerdict = strings.TrimSpace(r)
+			}
+		}
+		if encVerdict != refVerdict {
+			t.Fatalf("verdict %q for the encoded source, %q for the same text as UTF-8 with \"\\n\" newlines\nsource %q\nparso must read the source decoded with its coding cookie, whatever its newlines", encVerdict, refVerdict, src)
+		}
+		if want := fmt.Sprintf("%s:%d:", bad, lead+1); !strings.Contains(got, want) {
+			t.Fatalf("guard output %q, want %s; an unparseable file must be named with its line so the run stops before any mutant", got, want)
+		}
+	})
 }
 
 func TestMutationToolNotInstalled(t *testing.T) {

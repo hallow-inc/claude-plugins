@@ -32,13 +32,20 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// oldestPython is the oldest interpreter the adapter supports. Tests that run
+// real Python pin it rather than letting uv pick the newest: helper.py runs in
+// the adopter's interpreter, and stdlib fixes in newer versions (3.14's
+// tokenize.detect_encoding splitting on "\r") hide helper bugs that crash on
+// older ones.
+const oldestPython = "3.11"
+
 // testPython is a real interpreter in a fresh uv virtualenv, built once per
 // process. The helper runs in the project's own interpreter, so a stand-in
 // would not prove that its ast line numbers and the text it slices agree.
 func testPython(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("uv"); err != nil {
-		t.Skip("uv is not on PATH; the ast helper needs a real interpreter (Python >= 3.11 for tomllib), which these tests build with `uv venv`")
+		t.Skip("uv is not on PATH; the ast helper needs a real interpreter, which these tests build with `uv venv` at the oldest supported Python (" + oldestPython + ", for tomllib) so version-dependent helper bugs show on every machine")
 	}
 	venvOnce.Do(func() {
 		venvDir, venvErr = os.MkdirTemp("", "assure-py-venv-*")
@@ -46,10 +53,10 @@ func testPython(t *testing.T) string {
 			return
 		}
 		dir := filepath.Join(venvDir, ".venv")
-		cmd := exec.CommandContext(context.Background(), "uv", "venv", "--no-project", "--quiet", "--python", ">=3.11", dir)
+		cmd := exec.CommandContext(context.Background(), "uv", "venv", "--no-project", "--quiet", "--python", oldestPython, dir)
 		cmd.Dir = venvDir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			venvErr = fmt.Errorf("uv venv: %w\n%s", err, out)
+			venvErr = fmt.Errorf("uv venv --python %s (the oldest supported Python, pinned so version-dependent helper bugs reproduce): %w\n%s", oldestPython, err, out)
 			return
 		}
 		venvPy = filepath.Join(dir, "bin", "python")

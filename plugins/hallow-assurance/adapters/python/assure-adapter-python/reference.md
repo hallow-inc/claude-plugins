@@ -33,7 +33,7 @@ is refused for fail-on-base and mutation, which rely on pytest's default test na
 with the adapter's seed:
 
 ```sh
-uv run pytest -p randomly -p hypothesispytest --randomly-seed=<seed> --hypothesis-seed=<seed>
+uv run pytest -p randomly -p hypothesispytest --randomly-seed=<seed> --hypothesis-seed=<seed> --hypothesis-profile=default
 ```
 
 A test that passes only in one order fails here. A test file that fails to collect (an import or
@@ -43,7 +43,9 @@ syntax error) counts as an erroring test, not as no tests.
 
 The adapter derives one seed from the `HEAD` commit, sets it as `ASSURE_SEED`, and passes it to both
 pytest-randomly and Hypothesis, so reruns on one commit order tests and generate inputs
-identically. Leave tests unseeded: no `conftest.py`, settings profile, `@seed`, or `derandomize`.
+identically. It also loads Hypothesis's `default` profile, because under `CI` Hypothesis would load
+its `ci` profile, which sets `derandomize` and ignores the seed. Leave tests unseeded: no
+`conftest.py`, settings profile, `@seed`, or `derandomize`.
 
 ## Properties with Hypothesis
 

@@ -1128,8 +1128,11 @@ func TestSeedArgsSeedBothPlugins(t *testing.T) {
 				t.Fatalf("seedArgs(%s) = %q, missing %s; test order and Hypothesis inputs must both follow the commit's seed", seed, args, flag)
 			}
 		}
-		if len(args) != 6 {
-			t.Fatalf("seedArgs(%s) = %q; want only the two plugins and the two seed flags", seed, args)
+		if !slices.Contains(args, "--hypothesis-profile=default") {
+			t.Fatalf("seedArgs(%s) = %q, missing --hypothesis-profile=default; with CI or GITHUB_ACTIONS set, Hypothesis auto-loads its ci profile (derandomize=True), which ignores --hypothesis-seed, so draws would stop following the commit's seed in CI", seed, args)
+		}
+		if len(args) != 7 {
+			t.Fatalf("seedArgs(%s) = %q; want only the two plugins, the two seed flags, and the default Hypothesis profile", seed, args)
 		}
 	})
 }

@@ -45,6 +45,12 @@ def functions(body, prefix, out):
             functions(node.body, prefix + node.name + ".", out)
 
 
+def decode(source):
+    # Before 3.14, detect_encoding reads lines split on "\n" only, so a "\r" file is one line that fails to decode.
+    encoding = tokenize.detect_encoding(iter(source.splitlines(keepends=True)).__next__)[0]
+    return source.decode(encoding)
+
+
 def describe(path):
     with open(path, "rb") as f:
         source = f.read()
@@ -54,8 +60,7 @@ def describe(path):
         return {"error": "%s:%s: %s" % (path, e.lineno, e.msg)}
     except ValueError as e:
         return {"error": "%s: %s" % (path, e)}
-    encoding = tokenize.detect_encoding(io.BytesIO(source).readline)[0]
-    lines = io.StringIO(source.decode(encoding), newline="").readlines()
+    lines = io.StringIO(decode(source), newline="").readlines()
     tests = []
     for node in scope(tree.body):
         if isinstance(node, FUNCS) and node.name.startswith("test"):
@@ -107,9 +112,8 @@ def syntax(path):
 
     with open(path, "rb") as f:
         source = f.read()
-    encoding = tokenize.detect_encoding(io.BytesIO(source).readline)[0]
     grammar = parso.load_grammar()
-    for e in grammar.iter_errors(grammar.parse(source.decode(encoding))):
+    for e in grammar.iter_errors(grammar.parse(decode(source))):
         return {"error": "%s:%s: %s" % (path, e.start_pos[0], e.message)}
     return {}
 

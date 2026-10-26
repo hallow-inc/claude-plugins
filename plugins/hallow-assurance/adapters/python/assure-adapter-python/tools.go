@@ -501,5 +501,5 @@ func assureSeed(root string) (string, error) {
 }
 
 func seedArgs(seed string) []string {
-	return []string{"-p", "randomly", "-p", "hypothesispytest", "--randomly-seed=" + seed, "--hypothesis-seed=" + seed}
+	return []string{"-p", "randomly", "-p", "hypothesispytest", "--randomly-seed=" + seed, "--hypothesis-seed=" + seed, "--hypothesis-profile=default"}
 }

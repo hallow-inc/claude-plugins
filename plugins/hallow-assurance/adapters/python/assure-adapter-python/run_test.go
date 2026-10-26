@@ -200,7 +200,7 @@ const (
 func wantPytestArgs(junit, seed string) []string {
 	return []string{"-m", "pytest", "-p", "no:cacheprovider", "--continue-on-collection-errors",
 		"--junitxml=" + junit, "-o", "junit_family=xunit1", "-q",
-		"-p", "randomly", "-p", "hypothesispytest", "--randomly-seed=" + seed, "--hypothesis-seed=" + seed}
+		"-p", "randomly", "-p", "hypothesispytest", "--randomly-seed=" + seed, "--hypothesis-seed=" + seed, "--hypothesis-profile=default"}
 }
 
 func junitArg(args []string) string {
@@ -237,7 +237,7 @@ func TestRunTestsRunsWholeUnitWithSeed(t *testing.T) {
 	seed := checkSeed(t, headOf(t, r.top))
 	junit := junitArg(c.args)
 	if !slices.Equal(c.args, wantPytestArgs(junit, seed)) {
-		t.Fatalf("pytest args\n%q\nwant\n%q\nD3/D4: no cache writes, every file collected despite one broken file, xunit1 for file= on every case, pytest-randomly and Hypothesis's plugin loaded explicitly and seeded from HEAD, and no file arguments so the whole unit suite runs", c.args, wantPytestArgs(junit, seed))
+		t.Fatalf("pytest args\n%q\nwant\n%q\nD3/D4: no cache writes, every file collected despite one broken file, xunit1 for file= on every case, pytest-randomly and Hypothesis's plugin loaded explicitly and seeded from HEAD, the default Hypothesis profile so a CI environment's ci profile cannot derandomize the draws, and no file arguments so the whole unit suite runs", c.args, wantPytestArgs(junit, seed))
 	}
 	if junit == "" || strings.HasPrefix(junit, r.top+string(filepath.Separator)) {
 		t.Fatalf("--junitxml=%q; the report goes to a temporary file outside the repository", junit)

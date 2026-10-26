@@ -52,7 +52,7 @@ func syncedProject(t *testing.T) string {
 		if uvErr = os.WriteFile(filepath.Join(uvProject, "pyproject.toml"), []byte(uvFixturePyproject), 0o644); uvErr != nil {
 			return
 		}
-		cmd := exec.CommandContext(context.Background(), "uv", "sync", "--quiet")
+		cmd := exec.CommandContext(context.Background(), "uv", "sync", "--quiet", "--python", oldestPython)
 		cmd.Dir = uvProject
 		cmd.Env = append(os.Environ(), "UV_PROJECT_ENVIRONMENT=")
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -255,13 +255,20 @@ func runLogged(t *testing.T, ref string) seededRun {
 // TestIntegrationSeedFixesOrderAndDraws checks that -p randomly and the seed
 // flags reach pytest: one commit gives one order and one set of Hypothesis
 // draws, so a failure replays; a different commit gives a different order,
-// so order-dependent tests surface.
+// so order-dependent tests surface. It runs with CI and GITHUB_ACTIONS set
+// because Hypothesis then auto-loads its ci profile, whose derandomize=True
+// ignores --hypothesis-seed; the property must hold where the gate runs.
 func TestIntegrationSeedFixesOrderAndDraws(t *testing.T) {
 	top := realPyRepo(t, orderFixture())
+	t.Setenv("CI", "true")
+	t.Setenv("GITHUB_ACTIONS", "true")
 	writeTree(t, top, map[string]string{"app/parse.py": "def parse(s):\n    return int(s, 10)\n"})
 	first, second := runLogged(t, "HEAD"), runLogged(t, "HEAD")
-	if !slices.Equal(first.order, second.order) || first.draws != second.draws {
-		t.Fatalf("two runs at one HEAD differ:\n%q\n%q\ndraws equal: %v; the order and Hypothesis inputs must follow the commit's seed so a failure replays", first.order, second.order, first.draws == second.draws)
+	if !slices.Equal(first.order, second.order) {
+		t.Fatalf("two runs at one HEAD ran different orders:\n%q\n%q\nthe order must follow the commit's seed so a failure replays", first.order, second.order)
+	}
+	if first.draws != second.draws {
+		t.Fatalf("two runs at one HEAD drew different Hypothesis inputs:\n%s\n%s\nthe draws must follow the commit's seed so a failure replays", first.draws, second.draws)
 	}
 	defined := slices.Clone(first.order)
 	slices.Sort(defined)
@@ -276,8 +283,11 @@ func TestIntegrationSeedFixesOrderAndDraws(t *testing.T) {
 	}
 	git(t, top, "commit", "-q", "-am", "next")
 	third := runLogged(t, "HEAD~1")
-	if slices.Equal(first.order, third.order) || first.draws == third.draws {
-		t.Fatalf("a new HEAD ran the same order %q (draws equal: %v); the seed must come from the commit, not a constant", third.order, first.draws == third.draws)
+	if slices.Equal(first.order, third.order) {
+		t.Fatalf("a new HEAD ran the same order %q; the seed must come from the commit, not a constant", third.order)
+	}
+	if first.draws == third.draws {
+		t.Fatalf("a new HEAD drew the same Hypothesis inputs:\n%s\nthe seed must come from the commit; with CI set, Hypothesis's ci profile derandomizes draws unless the default profile is loaded", third.draws)
 	}
 	if third.seeds[0] != checkSeed(t, headOf(t, top)) {
 		t.Fatalf("ASSURE_SEED=%q after the commit, want the new HEAD's seed", third.seeds[0])
