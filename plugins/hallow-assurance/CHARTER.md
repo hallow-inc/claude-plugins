@@ -515,7 +515,7 @@ never reassigned, and new work takes a letter suffix.
   ref with no manifest uses the default, so the adopting PR needs no special order
 - `provenance-opt-in`: manifest key `provenance` (default `false`); off, the hooks record nothing and
   IND-VERIFIER-DISTINCT is not applicable, read from the base manifest
-- `assure-init`: prints a suggested manifest (packages and `inputs: true` candidates); never writes protected files and never proposes `formal:`
+- `assure-init`: `assure init` prints an annotated manifest template to stdout (every key with its allowed values and default, objectives per level from the catalog, `languages` from the adapters on `PATH`) and writes no file. Suggesting packages and `inputs: true` candidates is not built yet. It never proposes `formal:` values
 - ✅ `hello-world-bfree/g` adopts at level B with no second reviewer and no `human_review` key
 
 **M4d — Evidence loops**

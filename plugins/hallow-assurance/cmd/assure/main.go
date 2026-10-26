@@ -21,6 +21,7 @@ Commands:
   classify   Print level, language, and role for each path
   context    Print the level map and applicable objectives
   evaluate   Decide every applicable objective and write the report
+  init       Print an annotated assurance.yaml template
   hook       Handle a Claude Code hook event (JSON on stdin)
   reference  Print an adapter's testing reference for a language
   tools      Print each adapter's pinned tool versions, or an install script
@@ -37,6 +38,7 @@ var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"check":     runCheck,
 	"evaluate":  runEvaluate,
 	"hook":      runHook,
+	"init":      runInit,
 	"classify":  runClassify,
 	"reference": runReference,
 	"tools":     runTools,
