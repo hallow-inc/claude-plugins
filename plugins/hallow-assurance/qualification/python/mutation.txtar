@@ -1,0 +1,46 @@
+VER-MUTATION-CHANGED: clamp in src/qual/clamp.py is fully covered by a test that asserts nothing,
+so every mutant on its changed lines survives. Each mutant is listed as Survived: a run that
+finishes well inside the time limit must not be reported as Timeout, which counts as detected.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/double.py --
+def double(x):
+    return 2 * x
+-- head/src/qual/clamp.py --
+def clamp(x, lo, hi):
+    if x < lo:
+        return lo
+    if x > hi:
+        return hi
+    return x
+-- head/tests/test_clamp.py --
+from qual.clamp import clamp
+
+
+def test_clamp_runs():
+    for x in [-1, 0, 5, 10, 11]:
+        clamp(x, 0, 10)
+-- head.msg --
+feat(src): add clamp
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "fail", "locations": ["level B: 0 of 12 mutants detected", "src/qual/clamp.py:2 AddNot Survived", "src/qual/clamp.py:2 ReplaceComparisonOperator_Lt_Eq Survived", "src/qual/clamp.py:2 ReplaceComparisonOperator_Lt_Gt Survived", "src/qual/clamp.py:2 ReplaceComparisonOperator_Lt_GtE Survived", "src/qual/clamp.py:2 ReplaceComparisonOperator_Lt_LtE Survived", "src/qual/clamp.py:2 ReplaceComparisonOperator_Lt_NotEq Survived", "src/qual/clamp.py:4 AddNot Survived", "src/qual/clamp.py:4 ReplaceComparisonOperator_Gt_Eq Survived", "src/qual/clamp.py:4 ReplaceComparisonOperator_Gt_GtE Survived", "src/qual/clamp.py:4 ReplaceComparisonOperator_Gt_Lt Survived", "src/qual/clamp.py:4 ReplaceComparisonOperator_Gt_LtE Survived", "src/qual/clamp.py:4 ReplaceComparisonOperator_Gt_NotEq Survived"]},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "pass"}
+  ]
+}

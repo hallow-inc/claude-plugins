@@ -12,6 +12,7 @@
   threshold: { A: 80, B: 65, C: 50 }
   implementations:
     go: gremlins
+    python: cosmic-ray
     typescript: stryker
 
 - id: VER-FAIL-ON-BASE

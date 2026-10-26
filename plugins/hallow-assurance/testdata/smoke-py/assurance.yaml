@@ -1,0 +1,7 @@
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B

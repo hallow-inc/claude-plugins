@@ -1,0 +1,18 @@
+[project]
+name = "qual"
+version = "0"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "cosmic-ray>=8.7,<9",
+    "hypothesis>=6.130,<7",
+    "pytest>=9,<10",
+    "pytest-cov>=7,<8",
+    "pytest-randomly>=5,<6",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

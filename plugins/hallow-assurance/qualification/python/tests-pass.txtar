@@ -1,0 +1,37 @@
+VER-TESTS-PASS: the test test_double_of_2_is_5 expects double(2) to be 5. Only a test changed, so
+there is no changed source to mutate and VER-MUTATION-CHANGED passes.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/double.py --
+def double(x):
+    return 2 * x
+-- head/tests/test_double.py --
+from qual.double import double
+
+
+def test_double_of_2_is_5():
+    assert double(2) == 5
+-- head.msg --
+test(src): cover double
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "fail", "locations": ["failing test: tests/test_double.py.test_double_of_2_is_5"]}
+  ]
+}

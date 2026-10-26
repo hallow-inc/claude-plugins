@@ -104,6 +104,12 @@ jobs:
           GOBIN="$RUNNER_TEMP/tools" go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
           echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.12.17
+          enable-cache: false
+
       - name: Test
         run: go test -race -shuffle=on ./...
 
@@ -124,6 +130,15 @@ jobs:
     uses: ./.github/workflows/assure-evaluate.yml
     with:
       working-directory: plugins/hallow-assurance/testdata/smoke-ts
+
+  evaluate-python:
+    needs: changes
+    if: needs.changes.outputs.run == 'true' && github.event.pull_request
+    permissions:
+      contents: read
+    uses: ./.github/workflows/assure-evaluate.yml
+    with:
+      working-directory: plugins/hallow-assurance/testdata/smoke-py
 
   release:
     needs: changes
@@ -178,6 +193,12 @@ jobs:
         with:
           node-version: '22.12'
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: 0.12.17
+          enable-cache: false
+
       - name: Setup mise
         uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca  # v5.1.1
         with:
@@ -196,7 +217,7 @@ jobs:
         run: go test -count=1 -v -timeout 28m ./qualification/...
 
   assure-gate:
-    needs: [changes, go, evaluate, evaluate-typescript, release, qualification]
+    needs: [changes, go, evaluate, evaluate-typescript, evaluate-python, release, qualification]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -214,6 +235,7 @@ jobs:
           GO: ${{ needs.go.result }}
           EVAL: ${{ needs.evaluate.result }}
           EVAL_TS: ${{ needs.evaluate-typescript.result }}
+          EVAL_PY: ${{ needs.evaluate-python.result }}
           RELEASE: ${{ needs.release.result }}
           QUALIFY: ${{ needs.changes.outputs.qualify }}
           QUAL: ${{ needs.qualification.result }}
@@ -223,8 +245,8 @@ jobs:
           if [ "$RUN" = true ] && [ -n "$PR" ]; then pr_run=true; else pr_run=false; fi
           case "$REF" in refs/tags/plugins/hallow-assurance/v*) tagged=true ;; *) tagged=false ;; esac
           if [ "$CHANGES" = success ] && ran "$GO" "$RUN" && ran "$EVAL" "$pr_run" && ran "$EVAL_TS" "$pr_run" \
-            && ran "$RELEASE" "$tagged" && ran "$QUAL" "$QUALIFY"; then
+            && ran "$EVAL_PY" "$pr_run" && ran "$RELEASE" "$tagged" && ran "$QUAL" "$QUALIFY"; then
             exit 0
           fi
-          echo "::error::assure-gate: changes=$CHANGES run=$RUN pr=${PR:-none} go=$GO evaluate=$EVAL evaluate-typescript=$EVAL_TS release=$RELEASE qualify=$QUALIFY qualification=$QUAL"
+          echo "::error::assure-gate: changes=$CHANGES run=$RUN pr=${PR:-none} go=$GO evaluate=$EVAL evaluate-typescript=$EVAL_TS evaluate-python=$EVAL_PY release=$RELEASE qualify=$QUALIFY qualification=$QUAL"
           exit 1

@@ -1,0 +1,49 @@
+VER-ROBUST-FUZZ: in the inputs component src, the Hypothesis example "" makes initial index an
+empty string and raise IndexError. The fuzz file's name starts with test_, so VER-TESTS-PASS fails
+on the same property, and the adapter refuses to mutate when the selected tests fail before
+mutation, so VER-MUTATION-CHANGED fails with the adapter's run error.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+    inputs: true
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/double.py --
+def double(x):
+    return 2 * x
+-- head/src/qual/initial.py --
+def initial(name):
+    return name.split(" ")[0][0].upper()
+-- head/tests/qual/test_initial_fuzz.py --
+from hypothesis import example, given, strategies as st
+
+from qual.initial import initial
+
+
+@given(st.text())
+@example("ada lovelace")
+@example("")
+def test_initial_never_raises(name):
+    initial(name)
+-- head.msg --
+feat(src): add initial
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "fail", "locations": ["assure-adapter-python run: exit status 1; stderr: assure-adapter-python: run VER-MUTATION-CHANGED: the selected tests of . fail before mutation (exit 1)"]},
+    {"objective": "VER-ROBUST-FUZZ", "language": "python", "status": "fail", "locations": ["src/qual/initial.py: fuzz target tests/qual/test_initial_fuzz.py.test_initial_never_raises failed"]},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "fail", "locations": ["failing test: tests/qual/test_initial_fuzz.py.test_initial_never_raises"]}
+  ]
+}

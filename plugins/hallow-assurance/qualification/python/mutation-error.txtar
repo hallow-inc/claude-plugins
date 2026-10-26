@@ -1,0 +1,44 @@
+Mutant usage error: the only changed line is DIVISOR = 1, which tests/conftest.py runs while
+it loads. The mutant DIVISOR = 0 raises ZeroDivisionError there, so pytest stops with a usage
+error (exit 4) before any test runs. That is not a test result: the run fails with pytest's
+output, and the mutant must never count as Killed.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/rates.py --
+DIVISOR = 2
+RATE = 10 / DIVISOR
+-- head/src/qual/rates.py --
+DIVISOR = 1
+RATE = 10 / DIVISOR
+-- head/tests/conftest.py --
+from qual.rates import RATE
+-- head/tests/test_rates.py --
+from qual.rates import RATE
+
+
+def test_rate_is_10():
+    assert RATE == 10
+-- head.msg --
+feat(src): divide by one
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "fail", "locations": ["assure-adapter-python run: exit status 1; stderr: assure-adapter-python: run VER-MUTATION-CHANGED: core/NumberReplacer at 1:10 of src/qual/rates.py: pytest exited 4 on a mutant: ImportError while loading conftest"]},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "pass"}
+  ]
+}

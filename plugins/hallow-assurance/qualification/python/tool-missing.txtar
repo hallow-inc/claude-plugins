@@ -1,0 +1,38 @@
+Missing tool: the no-cosmic-ray dependency set omits cosmic-ray, and parso with it (cosmic-ray is
+what brings parso). The change itself is clean, so only the objective that needs cosmic-ray fails,
+with a detail naming it.
+
+-- deps --
+no-cosmic-ray
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/double.py --
+def double(x):
+    return 2 * x
+-- head/tests/test_double.py --
+from qual.double import double
+
+
+def test_double_of_3_is_6():
+    assert double(3) == 6
+-- head.msg --
+test(src): cover double
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "fail", "locations": ["cosmic-ray: not installed in"]},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "pass"}
+  ]
+}
