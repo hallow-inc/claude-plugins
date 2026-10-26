@@ -1,5 +1,1 @@
-- objective: VER-MUTATION-CHANGED
-  scope: '**'
-  rationale: Bootstrap of the Python adapter. Every line is new, so Gremlins mutates the whole package, and at ~140 s of package tests per mutant that needs ~49 min, past EvaluateTimeout (10m). Later PRs mutate only their diffs.
-  approver: '@hello-world-bfree'
-  expires: 2026-11-02
+[]
