@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/xml"
@@ -10,7 +9,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -20,19 +18,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-)
 
-func gitBytes(dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
+)
 
 func isTestName(name, prefix string) bool {
 	if !strings.HasPrefix(name, prefix) {
@@ -83,7 +71,7 @@ func testFuncs(src []byte) (map[string]string, error) {
 }
 
 func baseTestFuncs(root, ref, dir string) (map[string]string, error) {
-	names, err := gitBytes(root, "ls-tree", "--name-only", ref, "--", "./"+path.Clean(dir)+"/")
+	names, err := adapterkit.GitBytes(root, "ls-tree", "--name-only", ref, "--", "./"+path.Clean(dir)+"/")
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +80,7 @@ func baseTestFuncs(root, ref, dir string) (map[string]string, error) {
 		if !strings.HasSuffix(n, "_test.go") {
 			continue
 		}
-		src, err := gitBytes(root, "show", ref+":./"+path.Join(dir, path.Base(n)))
+		src, err := adapterkit.GitBytes(root, "show", ref+":./"+path.Join(dir, path.Base(n)))
 		if err != nil {
 			return nil, err
 		}
@@ -153,54 +141,19 @@ func extractBase(root, ref, mod, dst string) error {
 	if mod != "." {
 		tree += mod
 	}
-	id, err := gitBytes(root, "rev-parse", "--verify", tree)
+	id, err := adapterkit.GitBytes(root, "rev-parse", "--verify", tree)
 	if err != nil {
 		return err
 	}
-	top, err := gitBytes(root, "rev-parse", "--show-toplevel")
+	top, err := adapterkit.GitBytes(root, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return err
 	}
-	data, err := gitBytes(strings.TrimSpace(string(top)), "archive", "--format=tar", strings.TrimSpace(string(id)))
+	data, err := adapterkit.GitBytes(strings.TrimSpace(string(top)), "archive", "--format=tar", strings.TrimSpace(string(id)))
 	if err != nil {
 		return err
 	}
-	tr := tar.NewReader(bytes.NewReader(data))
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !filepath.IsLocal(h.Name) {
-			return fmt.Errorf("git archive: unsafe path %q", h.Name)
-		}
-		target := filepath.Join(dst, filepath.FromSlash(h.Name))
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := writeFrom(target, tr, h.Size); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func writeFrom(target string, r io.Reader, size int64) error {
-	f, err := os.Create(target)
-	if err != nil {
-		return err
-	}
-	_, err = io.CopyN(f, r, size)
-	return errors.Join(err, f.Close())
+	return adapterkit.ExtractTar(data, dst)
 }
 
 func overlayTests(root, mod, dst string, changedTests []string) error {
@@ -234,7 +187,7 @@ func overlayTests(root, mod, dst string, changedTests []string) error {
 }
 
 func runFailOnBase(root, ref, out string, sel map[string][]string, versions map[string]string) ([]evidence, error) {
-	paths, err := changedPaths(root, ref)
+	paths, err := adapterkit.ChangedPaths(root, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +205,7 @@ func runFailOnBase(root, ref, out string, sel map[string][]string, versions map[
 	if err != nil {
 		return nil, err
 	}
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, mod := range modules(sel) {
 		dirs := selectedIn(root, mod, selected)
 		if len(dirs) == 0 {
@@ -284,7 +237,7 @@ func selectedIn(root, mod string, selected map[string][]string) map[string][]str
 	return dirs
 }
 
-func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[string][]string) ([]xmlSuite, error) {
+func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[string][]string) ([]adapterkit.XMLSuite, error) {
 	tmp, err := os.MkdirTemp("", "assure-fail-on-base-")
 	if err != nil {
 		return nil, err
@@ -301,7 +254,7 @@ func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[str
 		keys = append(keys, d)
 	}
 	sort.Strings(keys)
-	var suites []xmlSuite
+	var suites []adapterkit.XMLSuite
 	for _, dir := range keys {
 		names := dirs[dir]
 		rel := "./" + path.Clean(strings.TrimPrefix(strings.TrimPrefix(dir, mod), "/"))
@@ -325,7 +278,7 @@ func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[str
 	return suites, nil
 }
 
-func topLevelSuite(dir string, names []string, events []event, stderr string) xmlSuite {
+func topLevelSuite(dir string, names []string, events []event, stderr string) adapterkit.XMLSuite {
 	result := map[string]string{}
 	var pkgOut strings.Builder
 	for _, e := range events {
@@ -341,17 +294,17 @@ func topLevelSuite(dir string, names []string, events []event, stderr string) xm
 		}
 	}
 	appendCapped(&pkgOut, stderr)
-	s := xmlSuite{Name: dir, Cases: []xmlCase{}}
+	s := adapterkit.XMLSuite{Name: dir, Cases: []adapterkit.XMLCase{}}
 	for _, n := range names {
-		c := xmlCase{Name: n, Classname: dir}
+		c := adapterkit.XMLCase{Name: n, Classname: dir}
 		switch result[n] {
 		case "fail":
-			c.Failure = &xmlText{Message: "fails on the base commit"}
+			c.Failure = &adapterkit.XMLText{Message: "fails on the base commit"}
 		case "skip":
 			c.Skipped = &struct{}{}
 		case "pass":
 		default:
-			c.Error = &xmlText{Message: "did not run on the base commit", Body: capText([]byte(pkgOut.String()))}
+			c.Error = &adapterkit.XMLText{Message: "did not run on the base commit", Body: adapterkit.CapText([]byte(pkgOut.String()))}
 		}
 		s.Cases = append(s.Cases, c)
 	}

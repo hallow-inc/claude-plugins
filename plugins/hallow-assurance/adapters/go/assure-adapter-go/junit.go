@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"encoding/xml"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type event struct {
@@ -16,32 +17,6 @@ type event struct {
 	ImportPath  string
 	FailedBuild string
 }
-
-type xmlText struct {
-	Message string `xml:"message,attr"`
-	Body    string `xml:",chardata"`
-}
-
-type xmlCase struct {
-	Name      string    `xml:"name,attr"`
-	Classname string    `xml:"classname,attr"`
-	Failure   *xmlText  `xml:"failure"`
-	Error     *xmlText  `xml:"error"`
-	Skipped   *struct{} `xml:"skipped"`
-}
-
-type xmlSuite struct {
-	Name  string    `xml:"name,attr"`
-	Tests int       `xml:"tests,attr"`
-	Cases []xmlCase `xml:"testcase"`
-}
-
-type xmlSuites struct {
-	XMLName xml.Name   `xml:"testsuites"`
-	Suites  []xmlSuite `xml:"testsuite"`
-}
-
-const maxOutput = 16 << 10
 
 type testState struct {
 	action string
@@ -65,7 +40,7 @@ type converter struct {
 }
 
 func appendCapped(b *strings.Builder, s string) {
-	if b.Len()+len(s) <= maxOutput {
+	if b.Len()+len(s) <= adapterkit.MaxOutput {
 		b.WriteString(s)
 	}
 }
@@ -136,17 +111,17 @@ func (c *converter) add(e event) {
 	}
 }
 
-func (c *converter) suite(name string) (xmlSuite, string) {
+func (c *converter) suite(name string) (adapterkit.XMLSuite, string) {
 	p := c.pkgs[name]
-	s := xmlSuite{Name: name}
+	s := adapterkit.XMLSuite{Name: name}
 	failed := false
 	for _, tn := range p.order {
 		t := p.tests[tn]
-		tc := xmlCase{Name: tn, Classname: name}
+		tc := adapterkit.XMLCase{Name: tn, Classname: name}
 		switch t.action {
 		case "fail":
 			failed = true
-			tc.Failure = &xmlText{Message: "test failed", Body: t.out.String()}
+			tc.Failure = &adapterkit.XMLText{Message: "test failed", Body: t.out.String()}
 		case "skip":
 			tc.Skipped = &struct{}{}
 		case "pass":
@@ -160,18 +135,18 @@ func (c *converter) suite(name string) (xmlSuite, string) {
 		if b, ok := c.builds[p.failedBuild]; ok {
 			body = b.String() + body
 		}
-		s.Cases = append(s.Cases, xmlCase{Name: "(package)", Classname: name, Error: &xmlText{Message: "package failed without a failing test", Body: body}})
+		s.Cases = append(s.Cases, adapterkit.XMLCase{Name: "(package)", Classname: name, Error: &adapterkit.XMLText{Message: "package failed without a failing test", Body: body}})
 	}
 	s.Tests = len(s.Cases)
 	return s, p.failedBuild
 }
 
-func toJUnit(events []event) xmlSuites {
+func toJUnit(events []event) adapterkit.XMLSuites {
 	c := &converter{pkgs: map[string]*pkgState{}, builds: map[string]*strings.Builder{}, buildFail: map[string]bool{}}
 	for _, e := range events {
 		c.add(e)
 	}
-	out := xmlSuites{Suites: []xmlSuite{}}
+	out := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	covered := map[string]bool{}
 	for _, name := range c.order {
 		s, fb := c.suite(name)
@@ -180,13 +155,13 @@ func toJUnit(events []event) xmlSuites {
 	}
 	for _, ip := range c.buildOrder {
 		if c.buildFail[ip] && !covered[ip] {
-			out.Suites = append(out.Suites, xmlSuite{Name: ip, Tests: 1, Cases: []xmlCase{{Name: "(build)", Classname: ip,
-				Error: &xmlText{Message: "build failed", Body: c.builds[ip].String()}}}})
+			out.Suites = append(out.Suites, adapterkit.XMLSuite{Name: ip, Tests: 1, Cases: []adapterkit.XMLCase{{Name: "(build)", Classname: ip,
+				Error: &adapterkit.XMLText{Message: "build failed", Body: c.builds[ip].String()}}}})
 		}
 	}
 	return out
 }
 
-func errorSuite(name, msg string) xmlSuite {
-	return xmlSuite{Name: name, Tests: 1, Cases: []xmlCase{{Name: "(run)", Classname: name, Error: &xmlText{Message: "go test did not run", Body: msg}}}}
+func errorSuite(name, msg string) adapterkit.XMLSuite {
+	return adapterkit.XMLSuite{Name: name, Tests: 1, Cases: []adapterkit.XMLCase{{Name: "(run)", Classname: name, Error: &adapterkit.XMLText{Message: "go test did not run", Body: msg}}}}
 }

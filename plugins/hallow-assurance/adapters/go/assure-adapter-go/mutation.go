@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 // At 10 with 2 workers, internal/hookio still reported 15 false TIMED OUT that hid 9 survivors;
@@ -104,7 +106,7 @@ func (r strykerReport) addGremlins(data []byte, modRel string, source func(repoP
 }
 
 func rapidSeed(root string) (string, error) {
-	sha, err := toolOutput(root, "git", "rev-parse", "HEAD")
+	sha, err := adapterkit.ToolOutput(root, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
@@ -123,7 +125,7 @@ func gremlinsVersion() (string, error) {
 	if err != nil {
 		return "", errors.New("gremlins not found on PATH")
 	}
-	out, err := toolOutput(".", "go", "version", "-m", bin)
+	out, err := adapterkit.ToolOutput(".", "go", "version", "-m", bin)
 	if err != nil {
 		return "", err
 	}
@@ -183,7 +185,7 @@ func unleash(dir, ref, out, seed string) ([]byte, error) {
 		err = nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("gremlins unleash in %s: %w\n%s", dir, err, capText(log))
+		return nil, fmt.Errorf("gremlins unleash in %s: %w\n%s", dir, err, adapterkit.CapText(log))
 	}
 	return os.ReadFile(name)
 }

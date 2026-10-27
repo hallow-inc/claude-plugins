@@ -8,15 +8,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
-func junitOf(t fataler, suites []xmlSuite) ev.JUnit {
-	data, err := xml.MarshalIndent(xmlSuites{Suites: suites}, "", "  ")
+func junitOf(t fataler, suites []adapterkit.XMLSuite) ev.JUnit {
+	data, err := xml.MarshalIndent(adapterkit.XMLSuites{Suites: suites}, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -178,41 +178,6 @@ func checkSuites(t fataler, j ev.JUnit, want []wantSuite) {
 	}
 }
 
-func TestCapTextKeepsATrimmedPrefix(t *testing.T) {
-	check := func(t fataler, s string) {
-		got, trimmed := capText([]byte(s)), strings.TrimSpace(s)
-		if trimmed == "" {
-			if got != "no output" {
-				t.Fatalf("capText(blank) = %q, want \"no output\"; an empty error text reads as no error at all", got)
-			}
-			return
-		}
-		if !utf8.ValidString(got) {
-			t.Fatalf("capText = %d bytes ending %q, not valid UTF-8; the text lands in junit.xml failure messages, and a split rune corrupts the evidence", len(got), got[max(0, len(got)-4):])
-		}
-		if len(got) > 16<<10 || !strings.HasPrefix(trimmed, got) {
-			t.Fatalf("capText = %d bytes, want a prefix of the trimmed output of at most %d bytes; tool output is capped at 16 KiB so one runaway test cannot bloat the evidence", len(got), 16<<10)
-		}
-		if len(trimmed) <= 16<<10 {
-			if got != trimmed {
-				t.Fatalf("capText = %d bytes, want all %d bytes of the trimmed output; below the cap nothing is lost", len(got), len(trimmed))
-			}
-		} else if len(got) < 16<<10-(utf8.UTFMax-1) {
-			t.Fatalf("capText = %d bytes, want at least %d; above the cap only the bytes of one split rune may be dropped", len(got), 16<<10-(utf8.UTFMax-1))
-		}
-	}
-
-	check(t, "a"+strings.Repeat("é", maxOutput/2))
-
-	rapid.Check(t, func(t *rapid.T) {
-		s := rapid.String().Draw(t, "s")
-		if rapid.Bool().Draw(t, "long") {
-			s = strings.Repeat(s+"x", rapid.IntRange(maxOutput/2, maxOutput*2).Draw(t, "n")/(len(s)+1)+1)
-		}
-		check(t, s)
-	})
-}
-
 func drawReportFile(t *rapid.T, dir, root, state string) (string, []wantSuite) {
 	f, err := os.CreateTemp(dir, "report-*.json")
 	if err != nil {
@@ -301,7 +266,7 @@ func writeReport(t *rapid.T, dir string, r vitestReport) string {
 	return f.Name()
 }
 
-func runSuites(suites []xmlSuite) int {
+func runSuites(suites []adapterkit.XMLSuite) int {
 	n := 0
 	for _, s := range suites {
 		for _, c := range s.Cases {

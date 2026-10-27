@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type evidence struct {
@@ -101,16 +103,16 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if !onPath("node") {
 		return environment("node is not on PATH; install the Node version the repository's CI uses"), nil
 	}
-	nodeVersion, err := toolOutput(c.root, "node", "--version")
+	nodeVersion, err := adapterkit.ToolOutput(c.root, "node", "--version")
 	if err != nil {
 		return runResponse{}, err
 	}
-	top, err := gitOutput(c.root, "rev-parse", "--show-toplevel")
+	top, err := adapterkit.ToolOutput(c.root, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return runResponse{}, err
 	}
 	c.top = realPath(top)
-	paths, err := changedPaths(c.root, ref)
+	paths, err := adapterkit.ChangedPaths(c.root, ref)
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -169,28 +171,6 @@ func onPath(name string) bool {
 	return err == nil
 }
 
-func toolOutput(dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), name, args...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-
-func changedPaths(root, ref string) ([]string, error) {
-	diff, err := gitPaths(root, "diff", "--name-only", "--relative", ref, "--")
-	if err != nil {
-		return nil, err
-	}
-	untracked, err := gitPaths(root, "ls-files", "--others", "--exclude-standard")
-	if err != nil {
-		return nil, err
-	}
-	return append(diff, untracked...), nil
-}
-
 func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int, err error) {
 	return runToolEnv(dir, nil, name, args...)
 }
@@ -228,7 +208,7 @@ func runTests(c runContext) ([]evidence, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for i, unit := range slices.Sorted(maps.Keys(c.sel)) {
 		if len(c.sel[unit]) == 0 {
 			continue
@@ -239,7 +219,7 @@ func runTests(c runContext) ([]evidence, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
-		suites.Suites = append(suites.Suites, vitestSuites(c.root, relSlash(c.top, unit), report, append(stdout, stderr...), code)...)
+		suites.Suites = append(suites.Suites, vitestSuites(c.root, adapterkit.RelSlash(c.top, unit), report, append(stdout, stderr...), code)...)
 	}
 	data, err := xml.MarshalIndent(suites, "", "  ")
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -513,7 +514,7 @@ func TestRunMutationRunsStrykerOnChangedLines(t *testing.T) {
 	if !slices.Equal(c.config.Mutate, []string{"src/x.ts:2-2"}) {
 		t.Fatalf("mutate %q, want only the changed line of src/x.ts; the generated src/gen.ts, the untracked src/new.ts and the test file are never mutated", c.config.Mutate)
 	}
-	sha, err := gitOutput(r.top, "rev-parse", "HEAD")
+	sha, err := adapterkit.ToolOutput(r.top, "git", "rev-parse", "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,7 +548,7 @@ func TestRunMutationStrykerFailureIsError(t *testing.T) {
 		replay(t, r.unitData, "stryker", bad)
 		out := t.TempDir()
 		code, stdout, stderr := runRaw("VER-MUTATION-CHANGED", out)
-		if code != 1 || len(stdout) != 0 || exists(filepath.Join(out, "mutation.json")) {
+		if code != 1 || len(stdout) != 0 || adapterkit.Exists(filepath.Join(out, "mutation.json")) {
 			t.Fatalf("stryker exit %d report %q: run exited %d stdout %q stderr %q; a failed Stryker run, a Pending mutant, a file outside the repository or a missing report is an error, never evidence", bad.code, bad.report, code, stdout, stderr)
 		}
 	}

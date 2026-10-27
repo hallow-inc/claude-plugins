@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -272,7 +273,7 @@ func TestIntegrationFuzzWithoutFuzzFilesRunsNothing(t *testing.T) {
 	if cases, ok := got["app/parse.py"]; !ok || len(cases) != 0 || len(got) != 1 {
 		t.Fatalf("suites %v; app/parse.py has no fuzz file, so one suite with zero cases", got)
 	}
-	if exists(marker) {
+	if adapterkit.Exists(marker) {
 		t.Fatal("pytest started though no fuzz file exists; it would run the unit's whole test suite as fuzz targets")
 	}
 }

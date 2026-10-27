@@ -11,8 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 	"pgregory.net/rapid"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
 const splitBase = `def parts_ok(parts):
@@ -220,7 +222,7 @@ func TestIntegrationMutationUnparseableSyntax(t *testing.T) {
 	if resp.Environment == nil || !guardLine.MatchString(resp.Environment.Message) || len(resp.Evidence) != 0 {
 		t.Fatalf("response %+v; parso cannot read app/bad.py line 3, so the run reports environment naming file and line and writes no evidence", resp)
 	}
-	if exists(marker) {
+	if adapterkit.Exists(marker) {
 		t.Fatal("pytest started; no mutant of any file may run once a changed file fails the syntax guard")
 	}
 	if after := repoState(t, top); after != before {

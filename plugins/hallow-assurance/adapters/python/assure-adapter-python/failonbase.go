@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 func changedTestFiles(c runContext, unit string) ([]string, error) {
-	paths, err := changedPaths(c.root, c.ref)
+	paths, err := adapterkit.ChangedPaths(c.root, c.ref)
 	if err != nil {
 		return nil, err
 	}
@@ -40,14 +42,14 @@ func isTestModule(p string) bool {
 
 // selectChanged lists the tests of the current test files whose identity is new or whose text
 // (decorators included) differs from the base tree's copy of the same file.
-func selectChanged(python, root, baseRoot string, files []string) ([]selectedTest, []xmlCase, error) {
+func selectChanged(python, root, baseRoot string, files []string) ([]selectedTest, []adapterkit.XMLCase, error) {
 	var head, base []string
 	for _, f := range files {
-		if !isTestModule(f) || !exists(filepath.Join(root, filepath.FromSlash(f))) {
+		if !isTestModule(f) || !adapterkit.Exists(filepath.Join(root, filepath.FromSlash(f))) {
 			continue
 		}
 		head = append(head, filepath.Join(root, filepath.FromSlash(f)))
-		if p := filepath.Join(baseRoot, filepath.FromSlash(f)); exists(p) {
+		if p := filepath.Join(baseRoot, filepath.FromSlash(f)); adapterkit.Exists(p) {
 			base = append(base, p)
 		}
 	}
@@ -60,14 +62,14 @@ func selectChanged(python, root, baseRoot string, files []string) ([]selectedTes
 		return nil, nil, err
 	}
 	var selected []selectedTest
-	var unparsed []xmlCase
+	var unparsed []adapterkit.XMLCase
 	for _, f := range files {
 		h, ok := headInfo[filepath.Join(root, filepath.FromSlash(f))]
 		if !ok {
 			continue
 		}
 		if h.Error != "" {
-			unparsed = append(unparsed, xmlCase{Name: collectionCase, Classname: f, Error: &xmlText{Message: "test file does not parse", Body: h.Error}})
+			unparsed = append(unparsed, adapterkit.XMLCase{Name: collectionCase, Classname: f, Error: &adapterkit.XMLText{Message: "test file does not parse", Body: h.Error}})
 			continue
 		}
 		old := map[string]string{}
@@ -92,12 +94,12 @@ func baseName(caseName string) string {
 
 // foldCase gives one result for a test from all its parameter instances: a failure if any failed,
 // else an error if any errored, else skipped if all skipped, else passed.
-func foldCase(name, file string, instances []xmlCase) xmlCase {
+func foldCase(name, file string, instances []adapterkit.XMLCase) adapterkit.XMLCase {
 	return foldInstances(name, file, instances, "fails on the base commit", "errors on the base commit")
 }
 
-func foldInstances(name, file string, instances []xmlCase, failMsg, errMsg string) xmlCase {
-	tc := xmlCase{Name: name, Classname: file}
+func foldInstances(name, file string, instances []adapterkit.XMLCase, failMsg, errMsg string) adapterkit.XMLCase {
+	tc := adapterkit.XMLCase{Name: name, Classname: file}
 	var failures, errs []string
 	skipped := 0
 	for _, in := range instances {
@@ -112,18 +114,18 @@ func foldInstances(name, file string, instances []xmlCase, failMsg, errMsg strin
 	}
 	switch {
 	case len(failures) > 0:
-		tc.Failure = &xmlText{Message: failMsg, Body: capText([]byte(strings.Join(failures, "\n\n")))}
+		tc.Failure = &adapterkit.XMLText{Message: failMsg, Body: adapterkit.CapText([]byte(strings.Join(failures, "\n\n")))}
 	case len(errs) > 0:
-		tc.Error = &xmlText{Message: errMsg, Body: capText([]byte(strings.Join(errs, "\n\n")))}
+		tc.Error = &adapterkit.XMLText{Message: errMsg, Body: adapterkit.CapText([]byte(strings.Join(errs, "\n\n")))}
 	case skipped == len(instances):
 		tc.Skipped = &struct{}{}
 	}
 	return tc
 }
 
-func baseCases(selected []selectedTest, suites []xmlSuite, output []byte) []xmlSuite {
-	instances := map[string][]xmlCase{}
-	collection := map[string]*xmlText{}
+func baseCases(selected []selectedTest, suites []adapterkit.XMLSuite, output []byte) []adapterkit.XMLSuite {
+	instances := map[string][]adapterkit.XMLCase{}
+	collection := map[string]*adapterkit.XMLText{}
 	for _, s := range suites {
 		for _, c := range s.Cases {
 			if c.Name == collectionCase {
@@ -134,24 +136,24 @@ func baseCases(selected []selectedTest, suites []xmlSuite, output []byte) []xmlS
 			instances[key] = append(instances[key], c)
 		}
 	}
-	byFile := map[string]*xmlSuite{}
+	byFile := map[string]*adapterkit.XMLSuite{}
 	for _, t := range selected {
 		s, ok := byFile[t.file]
 		if !ok {
-			s = &xmlSuite{Name: t.file, Cases: []xmlCase{}}
+			s = &adapterkit.XMLSuite{Name: t.file, Cases: []adapterkit.XMLCase{}}
 			byFile[t.file] = s
 		}
 		name := strings.TrimPrefix(t.id, t.file+"::")
 		switch in := instances[t.id]; {
 		case collection[t.file] != nil:
-			s.Cases = append(s.Cases, xmlCase{Name: name, Classname: t.file, Error: &xmlText{Message: "could not be collected on the base commit", Body: collection[t.file].Body}})
+			s.Cases = append(s.Cases, adapterkit.XMLCase{Name: name, Classname: t.file, Error: &adapterkit.XMLText{Message: "could not be collected on the base commit", Body: collection[t.file].Body}})
 		case len(in) == 0:
-			s.Cases = append(s.Cases, xmlCase{Name: name, Classname: t.file, Error: &xmlText{Message: "did not run on the base commit", Body: capText(output)}})
+			s.Cases = append(s.Cases, adapterkit.XMLCase{Name: name, Classname: t.file, Error: &adapterkit.XMLText{Message: "did not run on the base commit", Body: adapterkit.CapText(output)}})
 		default:
 			s.Cases = append(s.Cases, foldCase(name, t.file, in))
 		}
 	}
-	out := []xmlSuite{}
+	out := []adapterkit.XMLSuite{}
 	for _, f := range slices.Sorted(maps.Keys(byFile)) {
 		s := byFile[f]
 		s.Tests = len(s.Cases)
@@ -160,7 +162,7 @@ func baseCases(selected []selectedTest, suites []xmlSuite, output []byte) []xmlS
 	return out
 }
 
-func unitFailOnBase(c runContext, unit string) ([]xmlSuite, string, error) {
+func unitFailOnBase(c runContext, unit string) ([]adapterkit.XMLSuite, string, error) {
 	u := c.units[unit]
 	if msg, err := discoveryRefusal(u.python, c.top, unit); err != nil || msg != "" {
 		return nil, msg, err
@@ -179,7 +181,7 @@ func unitFailOnBase(c runContext, unit string) ([]xmlSuite, string, error) {
 	if err := baseTree(c.top, c.ref, unit, tree); err != nil {
 		return nil, "", err
 	}
-	baseRoot := filepath.Join(tree, filepath.FromSlash(relSlash(c.top, c.root)))
+	baseRoot := filepath.Join(tree, filepath.FromSlash(adapterkit.RelSlash(c.top, c.root)))
 	selected, unparsed, err := selectChanged(u.python, c.root, baseRoot, files)
 	if err != nil {
 		return nil, "", err
@@ -187,9 +189,9 @@ func unitFailOnBase(c runContext, unit string) ([]xmlSuite, string, error) {
 	if err := overlayTests(c.root, baseRoot, files); err != nil {
 		return nil, "", err
 	}
-	var suites []xmlSuite
+	var suites []adapterkit.XMLSuite
 	for _, tc := range unparsed {
-		suites = append(suites, xmlSuite{Name: tc.Classname, Tests: 1, Cases: []xmlCase{tc}})
+		suites = append(suites, adapterkit.XMLSuite{Name: tc.Classname, Tests: 1, Cases: []adapterkit.XMLCase{tc}})
 	}
 	if len(selected) == 0 {
 		return suites, "", nil
@@ -201,16 +203,16 @@ func unitFailOnBase(c runContext, unit string) ([]xmlSuite, string, error) {
 	return append(suites, got...), "", nil
 }
 
-func runSelected(c runContext, unit, dst, baseRoot string, selected []selectedTest) ([]xmlSuite, string, error) {
+func runSelected(c runContext, unit, dst, baseRoot string, selected []selectedTest) ([]adapterkit.XMLSuite, string, error) {
 	tree := filepath.Join(dst, "tree")
-	baseUnit := filepath.Join(tree, filepath.FromSlash(relSlash(c.top, unit)))
+	baseUnit := filepath.Join(tree, filepath.FromSlash(adapterkit.RelSlash(c.top, unit)))
 	if msg, err := probeTree(c.units[unit].python, c.top, tree, baseUnit); err != nil || msg != "" {
 		return nil, msg, err
 	}
 	argsFile := filepath.Join(dst, "selected.args")
 	var files []string
 	for _, t := range selected {
-		files = append(files, relSlash(baseUnit, filepath.Join(baseRoot, filepath.FromSlash(t.file))))
+		files = append(files, adapterkit.RelSlash(baseUnit, filepath.Join(baseRoot, filepath.FromSlash(t.file))))
 	}
 	slices.Sort(files)
 	if err := os.WriteFile(argsFile, []byte(strings.Join(slices.Compact(files), "\n")+"\n"), 0o644); err != nil {
@@ -224,7 +226,7 @@ func runSelected(c runContext, unit, dst, baseRoot string, selected []selectedTe
 }
 
 func runFailOnBase(c runContext) ([]evidence, string, error) {
-	suites := []xmlSuite{}
+	suites := []adapterkit.XMLSuite{}
 	for _, unit := range slices.Sorted(maps.Keys(c.sel)) {
 		if len(c.sel[unit]) == 0 {
 			continue

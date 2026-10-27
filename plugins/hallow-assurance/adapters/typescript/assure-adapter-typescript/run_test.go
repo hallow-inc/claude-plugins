@@ -14,6 +14,7 @@ import (
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
@@ -416,7 +417,7 @@ func TestRunUnitWithNoSelectedFileRunsNoTests(t *testing.T) {
 func TestRunTestsNeedsNeitherTypeScriptVersionNorESLintConfig(t *testing.T) {
 	r := newRepo(t, nil, map[string]map[string]string{".": {"vitest": "5.0.4"}})
 	installTool(t, r.top, "typescript", "7.0.2")
-	if exists(filepath.Join(r.top, "eslint.config.js")) {
+	if adapterkit.Exists(filepath.Join(r.top, "eslint.config.js")) {
 		t.Fatal("fixture has an eslint config; the scenario needs a unit without one")
 	}
 	writeTree(t, r.top, map[string]string{"src/parse.ts": "export const parse = 2;\n"})

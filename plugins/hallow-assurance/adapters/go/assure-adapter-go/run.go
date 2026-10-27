@@ -14,7 +14,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type evidence struct {
@@ -87,7 +88,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if !onPath("go") {
 		return environment("go is not on PATH; install the Go toolchain go.mod selects"), nil
 	}
-	v, err := toolOutput(root, "go", "env", "GOVERSION")
+	v, err := adapterkit.ToolOutput(root, "go", "env", "GOVERSION")
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -99,7 +100,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return environment(env), nil
 	}
 	versions["go"] = v
-	paths, err := changedPaths(root, ref)
+	paths, err := adapterkit.ChangedPaths(root, ref)
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -115,45 +116,6 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 
 func environment(msg string) runResponse {
 	return runResponse{Protocol: 2, Evidence: []evidence{}, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}, Environment: &environmentMessage{Message: msg}}
-}
-
-func toolOutput(dir, name string, args ...string) (string, error) {
-	if _, err := exec.LookPath(name); err != nil {
-		return "", fmt.Errorf("%s not found on PATH", name)
-	}
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-
-func gitPaths(dir string, args ...string) ([]string, error) {
-	out, err := gitBytes(dir, append([]string{args[0], "-z"}, args[1:]...)...)
-	if err != nil {
-		return nil, err
-	}
-	var paths []string
-	for p := range strings.SplitSeq(string(out), "\x00") {
-		if p != "" {
-			paths = append(paths, p)
-		}
-	}
-	return paths, nil
-}
-
-func changedPaths(root, ref string) ([]string, error) {
-	diff, err := gitPaths(root, "diff", "--name-only", "--relative", ref, "--")
-	if err != nil {
-		return nil, err
-	}
-	untracked, err := gitPaths(root, "ls-files", "--others", "--exclude-standard")
-	if err != nil {
-		return nil, err
-	}
-	return append(diff, untracked...), nil
 }
 
 func ignoredByGo(p string) bool {
@@ -240,7 +202,7 @@ func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int,
 }
 
 func runTests(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, mod := range modules(sel) {
 		args := append([]string{"test", "-race", "-shuffle=on", "-short", "-json"}, sel[mod]...)
 		stdout, stderr, code, err := runTool(filepath.Join(root, mod), "go", args...)
@@ -249,7 +211,7 @@ func runTests(root, _, out string, sel map[string][]string, _ map[string]string)
 		}
 		events := parseEvents(stdout)
 		if code != 0 && len(events) == 0 {
-			suites.Suites = append(suites.Suites, errorSuite("module "+mod, capText(stderr)))
+			suites.Suites = append(suites.Suites, errorSuite("module "+mod, adapterkit.CapText(stderr)))
 			continue
 		}
 		suites.Suites = append(suites.Suites, toJUnit(events).Suites...)
@@ -262,19 +224,4 @@ func runTests(root, _, out string, sel map[string][]string, _ map[string]string)
 		return nil, err
 	}
 	return []evidence{{Type: "test.junit", Path: "junit.xml"}}, nil
-}
-
-func capText(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > maxOutput {
-		n := maxOutput
-		for n > 0 && !utf8.RuneStart(s[n]) {
-			n--
-		}
-		s = s[:n]
-	}
-	if s == "" {
-		s = "no output"
-	}
-	return s
 }

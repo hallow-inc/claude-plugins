@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
@@ -155,14 +156,14 @@ var sentinelLine = regexp.MustCompile(`(?m)^` + exitSentinel + `([0-9]+)\s*$`)
 // mutantStatus maps a finished cosmic-ray job to a Stryker status from pytest's own exit code.
 func mutantStatus(r cosmicResult) (string, error) {
 	if r.WorkerOutcome != "normal" {
-		return "", fmt.Errorf("cosmic-ray worker outcome %q: %s", r.WorkerOutcome, capText([]byte(r.Output)))
+		return "", fmt.Errorf("cosmic-ray worker outcome %q: %s", r.WorkerOutcome, adapterkit.CapText([]byte(r.Output)))
 	}
 	if r.TestOutcome != nil && *r.TestOutcome == "killed" && r.Output == "timeout" {
 		return "Timeout", nil
 	}
 	m := sentinelLine.FindAllStringSubmatch(r.Output, -1)
 	if len(m) == 0 {
-		return "", fmt.Errorf("mutant test run printed no %s line: %s", exitSentinel, capText([]byte(r.Output)))
+		return "", fmt.Errorf("mutant test run printed no %s line: %s", exitSentinel, adapterkit.CapText([]byte(r.Output)))
 	}
 	switch m[len(m)-1][1] {
 	case "0":
@@ -170,7 +171,7 @@ func mutantStatus(r cosmicResult) (string, error) {
 	case "1", "2":
 		return "Killed", nil
 	}
-	return "", fmt.Errorf("pytest exited %s on a mutant: %s", m[len(m)-1][1], capText([]byte(r.Output)))
+	return "", fmt.Errorf("pytest exited %s on a mutant: %s", m[len(m)-1][1], adapterkit.CapText([]byte(r.Output)))
 }
 
 var mutationHunk = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+[0-9]+(?:,[0-9]+)? @@`)

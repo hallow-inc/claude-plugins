@@ -1,20 +1,17 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
-	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type taskLocation struct {
@@ -29,18 +26,6 @@ type listedTest struct {
 }
 
 type testKey struct{ file, name string }
-
-func gitBytes(dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
 
 func vitestList(dir, bin, root string, files []string) ([]listedTest, error) {
 	if len(files) == 0 {
@@ -59,7 +44,7 @@ func vitestList(dir, bin, root string, files []string) ([]listedTest, error) {
 	}
 	data, rerr := os.ReadFile(report)
 	if code != 0 || rerr != nil {
-		return nil, fmt.Errorf("vitest list in %s exited %d: %s", dir, code, capText(append(stdout, stderr...)))
+		return nil, fmt.Errorf("vitest list in %s exited %d: %s", dir, code, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	var out []listedTest
 	if err := json.Unmarshal(data, &out); err != nil {
@@ -72,7 +57,7 @@ func vitestList(dir, bin, root string, files []string) ([]listedTest, error) {
 }
 
 func changedTests(c runContext, unit string) ([]string, error) {
-	paths, err := changedPaths(c.root, c.ref)
+	paths, err := adapterkit.ChangedPaths(c.root, c.ref)
 	if err != nil {
 		return nil, err
 	}
@@ -101,54 +86,19 @@ func treeSpec(ref, rel string) string {
 }
 
 func extractTree(top, ref, rel, dst string) error {
-	id, err := gitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
+	id, err := adapterkit.GitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
-	data, err := gitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
+	data, err := adapterkit.GitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
 	if err != nil {
 		return err
 	}
-	tr := tar.NewReader(bytes.NewReader(data))
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !filepath.IsLocal(h.Name) {
-			return fmt.Errorf("git archive: unsafe path %q", h.Name)
-		}
-		target := filepath.Join(dst, filepath.FromSlash(h.Name))
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := writeFrom(target, tr, h.Size); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func writeFrom(target string, r io.Reader, size int64) error {
-	f, err := os.Create(target)
-	if err != nil {
-		return err
-	}
-	_, err = io.CopyN(f, r, size)
-	return errors.Join(err, f.Close())
+	return adapterkit.ExtractTar(data, dst)
 }
 
 func ancestorFiles(top, ref, rel, dst string) error {
-	listing, err := gitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
+	listing, err := adapterkit.GitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
@@ -158,7 +108,7 @@ func ancestorFiles(top, ref, rel, dst string) error {
 		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] == "120000" {
 			continue
 		}
-		data, err := gitBytes(top, "cat-file", "blob", fields[2])
+		data, err := adapterkit.GitBytes(top, "cat-file", "blob", fields[2])
 		if err != nil {
 			return err
 		}
@@ -177,17 +127,17 @@ func ancestorFiles(top, ref, rel, dst string) error {
 // files at ref (a unit's tsconfig.json may extend one above it), and symlinks to the current
 // node_modules directories at the same relative positions so hoisted packages resolve.
 func baseTree(c runContext, unit, dst string) error {
-	if err := extractTree(c.top, c.ref, relSlash(c.top, unit), filepath.Join(dst, relSlash(c.top, unit))); err != nil {
+	if err := extractTree(c.top, c.ref, adapterkit.RelSlash(c.top, unit), filepath.Join(dst, adapterkit.RelSlash(c.top, unit))); err != nil {
 		return err
 	}
 	for dir := unit; ; dir = filepath.Dir(dir) {
-		rel := relSlash(c.top, dir)
+		rel := adapterkit.RelSlash(c.top, dir)
 		if dir != unit {
 			if err := ancestorFiles(c.top, c.ref, rel, dst); err != nil {
 				return err
 			}
 		}
-		if nm := filepath.Join(dir, "node_modules"); exists(nm) {
+		if nm := filepath.Join(dir, "node_modules"); adapterkit.Exists(nm) {
 			link := filepath.Join(dst, filepath.FromSlash(rel), "node_modules")
 			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 				return err
@@ -228,7 +178,7 @@ func overlayTests(root, baseRoot string, tests []string) error {
 func existing(root string, files []string) []string {
 	var out []string
 	for _, f := range files {
-		if p := filepath.Join(root, filepath.FromSlash(f)); exists(p) {
+		if p := filepath.Join(root, filepath.FromSlash(f)); adapterkit.Exists(p) {
 			out = append(out, p)
 		}
 	}
@@ -249,8 +199,8 @@ func newTests(head, base []listedTest) []listedTest {
 	return out
 }
 
-func baseCase(t listedTest, f *vitestFile, output string) xmlCase {
-	tc := xmlCase{Name: t.Name, Classname: t.File}
+func baseCase(t listedTest, f *vitestFile, output string) adapterkit.XMLCase {
+	tc := adapterkit.XMLCase{Name: t.Name, Classname: t.File}
 	var ran, skipped int
 	failed := false
 	var failures []string
@@ -266,7 +216,7 @@ func baseCase(t listedTest, f *vitestFile, output string) xmlCase {
 			} else if slices.Contains(skippedStatuses, a.Status) {
 				skipped++
 			} else if a.Status != "passed" {
-				tc.Error = &xmlText{Message: "unknown vitest status " + a.Status, Body: "no output"}
+				tc.Error = &adapterkit.XMLText{Message: "unknown vitest status " + a.Status, Body: "no output"}
 			}
 		}
 	}
@@ -275,20 +225,20 @@ func baseCase(t listedTest, f *vitestFile, output string) xmlCase {
 		if f != nil && strings.TrimSpace(f.Message) != "" {
 			text = f.Message
 		}
-		return xmlCase{Name: t.Name, Classname: t.File, Error: &xmlText{Message: "did not run on the base commit", Body: capText([]byte(text))}}
+		return adapterkit.XMLCase{Name: t.Name, Classname: t.File, Error: &adapterkit.XMLText{Message: "did not run on the base commit", Body: adapterkit.CapText([]byte(text))}}
 	}
 	if tc.Error != nil {
 		return tc
 	}
 	if failed {
-		tc.Failure = &xmlText{Message: "fails on the base commit", Body: capText([]byte(strings.Join(failures, "\n")))}
+		tc.Failure = &adapterkit.XMLText{Message: "fails on the base commit", Body: adapterkit.CapText([]byte(strings.Join(failures, "\n")))}
 	} else if skipped == ran {
 		tc.Skipped = &struct{}{}
 	}
 	return tc
 }
 
-func baseSuites(baseRoot string, selected []listedTest, report string, output []byte) []xmlSuite {
+func baseSuites(baseRoot string, selected []listedTest, report string, output []byte) []adapterkit.XMLSuite {
 	files := map[string]*vitestFile{}
 	var r vitestReport
 	if data, err := os.ReadFile(report); err == nil && json.Unmarshal(data, &r) == nil {
@@ -300,9 +250,9 @@ func baseSuites(baseRoot string, selected []listedTest, report string, output []
 	for _, t := range selected {
 		byFile[t.File] = append(byFile[t.File], t)
 	}
-	var out []xmlSuite
+	var out []adapterkit.XMLSuite
 	for _, name := range slices.Sorted(maps.Keys(byFile)) {
-		s := xmlSuite{Name: name, Cases: []xmlCase{}}
+		s := adapterkit.XMLSuite{Name: name, Cases: []adapterkit.XMLCase{}}
 		for _, t := range byFile[name] {
 			s.Cases = append(s.Cases, baseCase(t, files[name], string(output)))
 		}
@@ -312,7 +262,7 @@ func baseSuites(baseRoot string, selected []listedTest, report string, output []
 	return out
 }
 
-func unitFailOnBase(c runContext, unit, seed string) ([]xmlSuite, error) {
+func unitFailOnBase(c runContext, unit, seed string) ([]adapterkit.XMLSuite, error) {
 	tests, err := changedTests(c, unit)
 	if err != nil {
 		return nil, err
@@ -331,8 +281,8 @@ func unitFailOnBase(c runContext, unit, seed string) ([]xmlSuite, error) {
 	if err := baseTree(c, unit, dst); err != nil {
 		return nil, err
 	}
-	baseRoot := filepath.Join(dst, filepath.FromSlash(relSlash(c.top, c.root)))
-	baseUnit := filepath.Join(dst, filepath.FromSlash(relSlash(c.top, unit)))
+	baseRoot := filepath.Join(dst, filepath.FromSlash(adapterkit.RelSlash(c.top, c.root)))
+	baseUnit := filepath.Join(dst, filepath.FromSlash(adapterkit.RelSlash(c.top, unit)))
 	base, err := vitestList(baseUnit, bin, baseRoot, existing(baseRoot, tests))
 	if err != nil {
 		return nil, err
@@ -363,7 +313,7 @@ func runFailOnBase(c runContext) ([]evidence, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, unit := range slices.Sorted(maps.Keys(c.sel)) {
 		s, err := unitFailOnBase(c, unit, seed)
 		if err != nil {

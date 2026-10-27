@@ -1,42 +1,17 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
-
-func gitPaths(dir string, args ...string) ([]string, error) {
-	if _, err := exec.LookPath("git"); err != nil {
-		return nil, fmt.Errorf("git not found on PATH")
-	}
-	cmd := exec.CommandContext(context.Background(), "git", append([]string{args[0], "-z"}, args[1:]...)...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
-	}
-	var paths []string
-	for p := range strings.SplitSeq(string(b), "\x00") {
-		if p != "" {
-			paths = append(paths, p)
-		}
-	}
-	return paths, nil
-}
-
-func exists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
 
 func unitOf(top, dir string) (string, bool) {
 	for {
-		if exists(filepath.Join(dir, "pyproject.toml")) {
+		if adapterkit.Exists(filepath.Join(dir, "pyproject.toml")) {
 			return dir, true
 		}
 		if dir == top {
@@ -51,14 +26,14 @@ func unitOf(top, dir string) (string, bool) {
 }
 
 func unitFiles(root, top, unit string) ([]string, error) {
-	listed, err := gitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
+	listed, err := adapterkit.GitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, err
 	}
 	var out []string
 	for _, l := range listed {
 		abs := filepath.Join(unit, filepath.FromSlash(l))
-		if !exists(abs) {
+		if !adapterkit.Exists(abs) {
 			continue
 		}
 		if u, ok := unitOf(top, filepath.Dir(abs)); !ok || u != unit {
@@ -104,7 +79,7 @@ func selectUnits(root, top string, paths []string) (map[string][]string, string,
 		}
 		if role == "config" {
 			whole[unit] = true
-		} else if (role == "source" || role == "test") && exists(abs) {
+		} else if (role == "source" || role == "test") && adapterkit.Exists(abs) {
 			sel[unit] = append(sel[unit], p)
 		}
 	}

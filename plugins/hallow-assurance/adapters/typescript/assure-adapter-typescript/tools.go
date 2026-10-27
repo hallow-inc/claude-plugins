@@ -2,20 +2,19 @@ package main
 
 import (
 	"bufio"
-	"cmp"
-	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type tsTool struct {
@@ -44,19 +43,8 @@ func isExact(v string) bool {
 	return exactVersion.MatchString(v)
 }
 
-func compareVersions(a, b string) int {
-	as, bs := strings.Split(a, "."), strings.Split(b, ".")
-	for i := range 3 {
-		x, y := strings.TrimLeft(as[i], "0"), strings.TrimLeft(bs[i], "0")
-		if c := cmp.Or(cmp.Compare(len(x), len(y)), strings.Compare(x, y)); c != 0 {
-			return c
-		}
-	}
-	return 0
-}
-
 func (t tsTool) inRange(v string) bool {
-	return isExact(v) && compareVersions(v, t.lo) >= 0 && compareVersions(v, t.hi) < 0
+	return isExact(v) && adapterkit.CompareVersions(v, t.lo) >= 0 && adapterkit.CompareVersions(v, t.hi) < 0
 }
 
 func (t tsTool) rangeText() string {
@@ -108,36 +96,28 @@ type lockfile struct {
 	untracked                  bool
 }
 
-func relSlash(top, p string) string {
-	rel, err := filepath.Rel(top, p)
-	if err != nil {
-		return p
-	}
-	return filepath.ToSlash(rel)
-}
-
 func findLockfile(top, unit string) (lockfile, error) {
 	for dir := unit; ; dir = filepath.Dir(dir) {
 		var here []string
 		for _, n := range lockfileNames {
-			if exists(filepath.Join(dir, n)) {
+			if adapterkit.Exists(filepath.Join(dir, n)) {
 				here = append(here, n)
 			}
 		}
 		if len(here) > 1 {
-			return lockfile{problem: fmt.Sprintf("%s holds more than one lockfile (%s); keep the one your package manager uses, because CI could not tell which install to reproduce", relSlash(top, dir), strings.Join(here, ", "))}, nil
+			return lockfile{problem: fmt.Sprintf("%s holds more than one lockfile (%s); keep the one your package manager uses, because CI could not tell which install to reproduce", adapterkit.RelSlash(top, dir), strings.Join(here, ", "))}, nil
 		} else if len(here) == 1 {
 			return lockfileIn(top, dir, here[0])
 		}
 		if dir == top || filepath.Dir(dir) == dir {
-			return lockfile{problem: fmt.Sprintf("no lockfile (%s) in %s or any parent up to the git top-level, so CI could not reproduce the install; commit the lockfile your package manager writes", strings.Join(lockfileNames, ", "), relSlash(top, unit))}, nil
+			return lockfile{problem: fmt.Sprintf("no lockfile (%s) in %s or any parent up to the git top-level, so CI could not reproduce the install; commit the lockfile your package manager writes", strings.Join(lockfileNames, ", "), adapterkit.RelSlash(top, unit))}, nil
 		}
 	}
 }
 
 func lockfileIn(top, dir, name string) (lockfile, error) {
-	rel := relSlash(top, filepath.Join(dir, name))
-	tracked, err := gitPaths(dir, "ls-files", name)
+	rel := adapterkit.RelSlash(top, filepath.Join(dir, name))
+	tracked, err := adapterkit.GitPaths(dir, "ls-files", name)
 	if err != nil {
 		return lockfile{}, err
 	}
@@ -156,18 +136,6 @@ func lockfileIn(top, dir, name string) (lockfile, error) {
 type resolved struct {
 	name, version, pinnedBy, install, bin string
 	untracked                             bool
-}
-
-func findUp(top, unit, rel string) (string, bool) {
-	for dir := unit; ; dir = filepath.Dir(dir) {
-		p := filepath.Join(dir, rel)
-		if exists(p) {
-			return p, true
-		}
-		if dir == top || filepath.Dir(dir) == dir {
-			return "", false
-		}
-	}
 }
 
 func installedVersion(p string) (string, error) {
@@ -198,19 +166,19 @@ func resolveTool(top, unit string, lock lockfile, t tsTool) (resolved, resolutio
 		if lock.problem != "" {
 			return resolved{}, toolFailed, msg
 		}
-		return resolved{}, toolFailed, fmt.Sprintf("%s; install with: %s (in %s)", msg, lock.install, relSlash(top, lock.dir))
+		return resolved{}, toolFailed, fmt.Sprintf("%s; install with: %s (in %s)", msg, lock.install, adapterkit.RelSlash(top, lock.dir))
 	}
 	if lock.problem != "" {
 		return fail("%s", lock.problem)
 	}
-	pkgJSON, ok := findUp(top, unit, filepath.Join("node_modules", filepath.FromSlash(t.name), "package.json"))
+	pkgJSON, ok := adapterkit.FindUp(top, unit, filepath.Join("node_modules", filepath.FromSlash(t.name), "package.json"))
 	if !ok {
-		r, _, problem := fail("not installed in node_modules of %s or any parent up to the git top-level", relSlash(top, unit))
+		r, _, problem := fail("not installed in node_modules of %s or any parent up to the git top-level", adapterkit.RelSlash(top, unit))
 		return r, toolNotInstalled, problem
 	}
 	v, err := installedVersion(pkgJSON)
 	if err != nil {
-		return fail("%s is unreadable: %v", relSlash(top, pkgJSON), err)
+		return fail("%s is unreadable: %v", adapterkit.RelSlash(top, pkgJSON), err)
 	}
 	if !isExact(v) {
 		return fail("installed version %q is not an exact version", v)
@@ -220,7 +188,7 @@ func resolveTool(top, unit string, lock lockfile, t tsTool) (resolved, resolutio
 	}
 	r := resolved{name: t.name, version: v, pinnedBy: lock.rel, install: lock.install, untracked: lock.untracked}
 	if t.bin != "" {
-		bin, ok := findUp(top, unit, filepath.Join("node_modules", ".bin", t.bin))
+		bin, ok := adapterkit.FindUp(top, unit, filepath.Join("node_modules", ".bin", t.bin))
 		if !ok {
 			return fail("executable %s is missing from node_modules/.bin", t.bin)
 		}
@@ -286,19 +254,6 @@ func realPath(p string) string {
 	return p
 }
 
-func gitOutput(dir string, args ...string) (string, error) {
-	if _, err := exec.LookPath("git"); err != nil {
-		return "", fmt.Errorf("git not found on PATH")
-	}
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-
 func toolsEnvironment(msg string) toolsResponse {
 	return toolsResponse{Protocol: 2, Tools: []toolEntry{}, Environment: &environmentMessage{Message: msg}}
 }
@@ -309,14 +264,14 @@ func listTools(root string) (toolsResponse, error) {
 		return toolsResponse{}, err
 	}
 	root = realPath(root)
-	top, err := gitOutput(root, "rev-parse", "--show-toplevel")
+	top, err := adapterkit.ToolOutput(root, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return toolsResponse{}, err
 	}
 	top = realPath(top)
 	unit, ok := unitOf(top, root)
 	if !ok {
-		return toolsEnvironment(fmt.Sprintf("%s has no package.json in it or any parent up to the git top-level; assure-adapter-typescript needs one to find its unit", relSlash(top, root))), nil
+		return toolsEnvironment(fmt.Sprintf("%s has no package.json in it or any parent up to the git top-level; assure-adapter-typescript needs one to find its unit", adapterkit.RelSlash(top, root))), nil
 	}
 	if msg := refusal(top, unit); msg != "" {
 		return toolsEnvironment(msg), nil
@@ -326,7 +281,7 @@ func listTools(root string) (toolsResponse, error) {
 		return toolsResponse{}, err
 	}
 	if lock.problem == "" && lock.dir != root {
-		return toolsEnvironment(fmt.Sprintf("the lockfile is %s, outside %s; run assure tools from %s so its install line runs where the lockfile is", lock.rel, relSlash(top, root), relSlash(top, lock.dir))), nil
+		return toolsEnvironment(fmt.Sprintf("the lockfile is %s, outside %s; run assure tools from %s so its install line runs where the lockfile is", lock.rel, adapterkit.RelSlash(top, root), adapterkit.RelSlash(top, lock.dir))), nil
 	}
 	resp := toolsResponse{Protocol: 2, Tools: []toolEntry{}}
 	var problems []string
@@ -381,7 +336,7 @@ func seedFrom(sha string) (string, error) {
 }
 
 func assureSeed(root string) (string, error) {
-	sha, err := gitOutput(root, "rev-parse", "HEAD")
+	sha, err := adapterkit.ToolOutput(root, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}

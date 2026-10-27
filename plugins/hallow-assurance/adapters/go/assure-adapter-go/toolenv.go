@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 func onPath(name string) bool {
@@ -45,7 +47,7 @@ func gatherProbe(root string) (probe, error) {
 	if err != nil {
 		return probe{}, err
 	}
-	top, err := toolOutput(root, "git", "rev-parse", "--show-toplevel")
+	top, err := adapterkit.ToolOutput(root, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return probe{}, err
 	}
@@ -73,7 +75,7 @@ func readMise(root string, p *probe) error {
 		return err
 	}
 	if code != 0 {
-		p.miseErr = fmt.Sprintf("mise ls --json --local failed in %s: %s", root, capText(stderr))
+		p.miseErr = fmt.Sprintf("mise ls --json --local failed in %s: %s", root, adapterkit.CapText(stderr))
 		return nil
 	}
 	if err := json.Unmarshal(stdout, &p.mise); err != nil {
@@ -103,7 +105,7 @@ func trackedAmong(top string, rels []string) (map[string]bool, error) {
 	if len(rels) == 0 {
 		return out, nil
 	}
-	lines, err := gitPaths(top, append([]string{"ls-files", "--"}, rels...)...)
+	lines, err := adapterkit.GitPaths(top, append([]string{"ls-files", "--"}, rels...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +123,7 @@ func foundVersion(name string) (string, error) {
 	case "gremlins":
 		return gremlinsVersion()
 	default:
-		return toolOutput(".", name, "version", "--short")
+		return adapterkit.ToolOutput(".", name, "version", "--short")
 	}
 }
 

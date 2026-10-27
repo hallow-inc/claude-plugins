@@ -8,24 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
-
-type xmlProperty struct {
-	Name  string `xml:"name,attr"`
-	Value string `xml:"value,attr"`
-}
-
-type xmlFuzzSuite struct {
-	Name       string        `xml:"name,attr"`
-	Tests      int           `xml:"tests,attr"`
-	Properties []xmlProperty `xml:"properties>property"`
-	Cases      []xmlCase     `xml:"testcase"`
-}
-
-type xmlFuzzSuites struct {
-	XMLName xml.Name       `xml:"testsuites"`
-	Suites  []xmlFuzzSuite `xml:"testsuite"`
-}
 
 // fuzzFiles gives a source file's fuzz files that exist: test_<stem>_fuzz.py beside it, and the
 // same name under the unit's tests/ mirroring its directory with a leading src/ removed.
@@ -45,8 +30,8 @@ func fuzzFiles(root, unit, src string) []string {
 	}
 	var out []string
 	for _, p := range []string{filepath.Join(filepath.Dir(abs), name), filepath.Join(unit, "tests", filepath.FromSlash(mirror), name)} {
-		if exists(p) {
-			out = append(out, relSlash(root, p))
+		if adapterkit.Exists(p) {
+			out = append(out, adapterkit.RelSlash(root, p))
 		}
 	}
 	slices.Sort(out)
@@ -67,10 +52,10 @@ func changedSources(c runContext, unit string) ([]string, error) {
 	return out, nil
 }
 
-func foldSuite(file string, cases []xmlCase) []xmlCase {
-	instances := map[string][]xmlCase{}
+func foldSuite(file string, cases []adapterkit.XMLCase) []adapterkit.XMLCase {
+	instances := map[string][]adapterkit.XMLCase{}
 	var names []string
-	var out []xmlCase
+	var out []adapterkit.XMLCase
 	for _, c := range cases {
 		if c.Name == collectionCase {
 			out = append(out, c)
@@ -89,7 +74,7 @@ func foldSuite(file string, cases []xmlCase) []xmlCase {
 	return out
 }
 
-func unitFuzz(c runContext, unit, tmp string, i int) ([]xmlFuzzSuite, string, error) {
+func unitFuzz(c runContext, unit, tmp string, i int) ([]adapterkit.XMLFuzzSuite, string, error) {
 	sources, err := changedSources(c, unit)
 	if err != nil || len(sources) == 0 {
 		return nil, "", err
@@ -103,7 +88,7 @@ func unitFuzz(c runContext, unit, tmp string, i int) ([]xmlFuzzSuite, string, er
 		targets[src] = fuzzFiles(c.root, unit, src)
 		all = append(all, targets[src]...)
 	}
-	byFile := map[string][]xmlCase{}
+	byFile := map[string][]adapterkit.XMLCase{}
 	if len(all) > 0 {
 		slices.Sort(all)
 		args := absFiles(c.root, slices.Compact(all))
@@ -115,9 +100,9 @@ func unitFuzz(c runContext, unit, tmp string, i int) ([]xmlFuzzSuite, string, er
 			byFile[s.Name] = foldSuite(s.Name, s.Cases)
 		}
 	}
-	out := make([]xmlFuzzSuite, 0, len(sources))
+	out := make([]adapterkit.XMLFuzzSuite, 0, len(sources))
 	for _, src := range sources {
-		s := xmlFuzzSuite{Name: src, Properties: []xmlProperty{{Name: "assure.source", Value: src}}, Cases: []xmlCase{}}
+		s := adapterkit.XMLFuzzSuite{Name: src, Properties: []adapterkit.XMLProperty{{Name: "assure.source", Value: src}}, Cases: []adapterkit.XMLCase{}}
 		for _, f := range targets[src] {
 			s.Cases = append(s.Cases, byFile[f]...)
 		}
@@ -141,7 +126,7 @@ func runFuzz(c runContext) ([]evidence, string, error) {
 		return nil, "", err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	suites := xmlFuzzSuites{Suites: []xmlFuzzSuite{}}
+	suites := adapterkit.XMLFuzzSuites{Suites: []adapterkit.XMLFuzzSuite{}}
 	for i, unit := range slices.Sorted(maps.Keys(c.sel)) {
 		s, msg, err := unitFuzz(c, unit, tmp, i)
 		if err != nil || msg != "" {

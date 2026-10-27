@@ -6,60 +6,20 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
-type xmlText struct {
-	Message string `xml:"message,attr"`
-	Body    string `xml:",chardata"`
-}
-
-type xmlCase struct {
-	Name      string    `xml:"name,attr"`
-	Classname string    `xml:"classname,attr"`
-	Failure   *xmlText  `xml:"failure"`
-	Error     *xmlText  `xml:"error"`
-	Skipped   *struct{} `xml:"skipped"`
-}
-
-type xmlSuite struct {
-	Name  string    `xml:"name,attr"`
-	Tests int       `xml:"tests,attr"`
-	Cases []xmlCase `xml:"testcase"`
-}
-
-type xmlSuites struct {
-	XMLName xml.Name   `xml:"testsuites"`
-	Suites  []xmlSuite `xml:"testsuite"`
-}
-
-const maxOutput = 16 << 10
-
-func capText(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > maxOutput {
-		n := maxOutput
-		for n > 0 && !utf8.RuneStart(s[n]) {
-			n--
-		}
-		s = s[:n]
-	}
-	if s == "" {
-		s = "no output"
-	}
-	return s
-}
-
 type pytestCase struct {
-	Classname string    `xml:"classname,attr"`
-	Name      string    `xml:"name,attr"`
-	File      string    `xml:"file,attr"`
-	Failures  []xmlText `xml:"failure"`
-	Errors    []xmlText `xml:"error"`
-	Skipped   *xmlText  `xml:"skipped"`
+	Classname string               `xml:"classname,attr"`
+	Name      string               `xml:"name,attr"`
+	File      string               `xml:"file,attr"`
+	Failures  []adapterkit.XMLText `xml:"failure"`
+	Errors    []adapterkit.XMLText `xml:"error"`
+	Skipped   *adapterkit.XMLText  `xml:"skipped"`
 }
 
-func joinTexts(texts []xmlText) *xmlText {
+func joinTexts(texts []adapterkit.XMLText) *adapterkit.XMLText {
 	if len(texts) == 0 {
 		return nil
 	}
@@ -67,7 +27,7 @@ func joinTexts(texts []xmlText) *xmlText {
 	for _, t := range texts[1:] {
 		body += "\n\n" + t.Message + "\n" + t.Body
 	}
-	return &xmlText{Message: texts[0].Message, Body: capText([]byte(body))}
+	return &adapterkit.XMLText{Message: texts[0].Message, Body: adapterkit.CapText([]byte(body))}
 }
 
 type pytestReport struct {
@@ -91,7 +51,7 @@ func relTo(root, p string) string {
 
 func pytestFile(top, unit, file string) string {
 	for dir := unit; ; dir = filepath.Dir(dir) {
-		if p := filepath.Join(dir, filepath.FromSlash(file)); exists(p) {
+		if p := filepath.Join(dir, filepath.FromSlash(file)); adapterkit.Exists(p) {
 			return p
 		}
 		if dir == top || filepath.Dir(dir) == dir {
@@ -108,12 +68,12 @@ func caseName(c pytestCase) string {
 	return c.Name
 }
 
-func convertCase(file string, c pytestCase) xmlCase {
+func convertCase(file string, c pytestCase) adapterkit.XMLCase {
 	errs := joinTexts(c.Errors)
 	if c.Classname == "" && errs != nil {
-		return xmlCase{Name: collectionCase, Classname: file, Error: &xmlText{Message: "collection failure", Body: errs.Body}}
+		return adapterkit.XMLCase{Name: collectionCase, Classname: file, Error: &adapterkit.XMLText{Message: "collection failure", Body: errs.Body}}
 	}
-	tc := xmlCase{Name: caseName(c), Classname: file}
+	tc := adapterkit.XMLCase{Name: caseName(c), Classname: file}
 	switch {
 	case len(c.Failures) > 0:
 		tc.Failure = joinTexts(append(slices.Clone(c.Failures), c.Errors...))
@@ -127,7 +87,7 @@ func convertCase(file string, c pytestCase) xmlCase {
 
 // mergeCase folds the second <testcase> pytest writes for a test whose teardown errors after its
 // call phase already reported a result, so one test keeps one result.
-func mergeCase(a, b xmlCase) xmlCase {
+func mergeCase(a, b adapterkit.XMLCase) adapterkit.XMLCase {
 	failure, errs := a.Failure, a.Error
 	if failure == nil {
 		failure = b.Failure
@@ -136,7 +96,7 @@ func mergeCase(a, b xmlCase) xmlCase {
 		errs = b.Error
 	}
 	if failure != nil && errs != nil {
-		failure = &xmlText{Message: failure.Message, Body: capText([]byte(failure.Body + "\n\n" + errs.Message + "\n" + errs.Body))}
+		failure = &adapterkit.XMLText{Message: failure.Message, Body: adapterkit.CapText([]byte(failure.Body + "\n\n" + errs.Message + "\n" + errs.Body))}
 		errs = nil
 	}
 	a.Failure, a.Error = failure, errs
@@ -146,20 +106,20 @@ func mergeCase(a, b xmlCase) xmlCase {
 	return a
 }
 
-func toJUnit(root, top, unit string, r pytestReport) []xmlSuite {
-	byFile := map[string]*xmlSuite{}
+func toJUnit(root, top, unit string, r pytestReport) []adapterkit.XMLSuite {
+	byFile := map[string]*adapterkit.XMLSuite{}
 	var order []string
 	for _, s := range r.Suites {
 		for _, c := range s.Cases {
 			file := relTo(root, pytestFile(top, unit, c.File))
 			suite, ok := byFile[file]
 			if !ok {
-				suite = &xmlSuite{Name: file, Cases: []xmlCase{}}
+				suite = &adapterkit.XMLSuite{Name: file, Cases: []adapterkit.XMLCase{}}
 				byFile[file] = suite
 				order = append(order, file)
 			}
 			tc := convertCase(file, c)
-			if i := slices.IndexFunc(suite.Cases, func(o xmlCase) bool { return o.Name == tc.Name }); i >= 0 {
+			if i := slices.IndexFunc(suite.Cases, func(o adapterkit.XMLCase) bool { return o.Name == tc.Name }); i >= 0 {
 				suite.Cases[i] = mergeCase(suite.Cases[i], tc)
 				continue
 			}
@@ -167,17 +127,17 @@ func toJUnit(root, top, unit string, r pytestReport) []xmlSuite {
 		}
 	}
 	slices.Sort(order)
-	out := []xmlSuite{}
+	out := []adapterkit.XMLSuite{}
 	for _, f := range order {
 		s := byFile[f]
-		slices.SortStableFunc(s.Cases, func(a, b xmlCase) int { return strings.Compare(a.Name, b.Name) })
+		slices.SortStableFunc(s.Cases, func(a, b adapterkit.XMLCase) int { return strings.Compare(a.Name, b.Name) })
 		s.Tests = len(s.Cases)
 		out = append(out, *s)
 	}
 	return out
 }
 
-func hasFailure(suites []xmlSuite) bool {
+func hasFailure(suites []adapterkit.XMLSuite) bool {
 	for _, s := range suites {
 		for _, c := range s.Cases {
 			if c.Failure != nil || c.Error != nil {
@@ -197,8 +157,8 @@ func readPytestReport(path string) (pytestReport, error) {
 	return r, xml.Unmarshal(data, &r)
 }
 
-func writeJUnit(path string, suites []xmlSuite) error {
-	data, err := xml.MarshalIndent(xmlSuites{Suites: suites}, "", "  ")
+func writeJUnit(path string, suites []adapterkit.XMLSuite) error {
+	data, err := xml.MarshalIndent(adapterkit.XMLSuites{Suites: suites}, "", "  ")
 	if err != nil {
 		return err
 	}

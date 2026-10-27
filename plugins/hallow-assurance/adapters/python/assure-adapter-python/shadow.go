@@ -1,32 +1,17 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-)
 
-func gitBytes(dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
+)
 
 func treeSpec(ref, rel string) string {
 	if rel == "." {
@@ -36,61 +21,19 @@ func treeSpec(ref, rel string) string {
 }
 
 func extractTree(top, ref, rel, dst string) error {
-	id, err := gitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
+	id, err := adapterkit.GitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
-	data, err := gitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
+	data, err := adapterkit.GitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
 	if err != nil {
 		return err
 	}
-	tr := tar.NewReader(bytes.NewReader(data))
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !filepath.IsLocal(h.Name) {
-			return fmt.Errorf("git archive: unsafe path %q", h.Name)
-		}
-		target := filepath.Join(dst, filepath.FromSlash(h.Name))
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := writeFrom(target, tr, h.Size, h.FileInfo().Mode().Perm()); err != nil {
-				return err
-			}
-		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := os.Symlink(h.Linkname, target); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func writeFrom(target string, r io.Reader, size int64, perm os.FileMode) error {
-	f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	_, err = io.CopyN(f, r, size)
-	return errors.Join(err, f.Close())
+	return adapterkit.ExtractTar(data, dst)
 }
 
 func ancestorFiles(top, ref, rel, dst string) error {
-	listing, err := gitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
+	listing, err := adapterkit.GitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
@@ -100,7 +43,7 @@ func ancestorFiles(top, ref, rel, dst string) error {
 		if !ok || len(fields) != 3 || fields[1] != "blob" {
 			continue
 		}
-		data, err := gitBytes(top, "cat-file", "blob", fields[2])
+		data, err := adapterkit.GitBytes(top, "cat-file", "blob", fields[2])
 		if err != nil {
 			return err
 		}
@@ -135,11 +78,11 @@ func ancestors(top, unit string) []string {
 // baseTree mirrors the git top-level under dst at ref: the unit's tree and each ancestor
 // directory's own files (a unit's tests may rely on a parent conftest.py or pyproject.toml).
 func baseTree(top, ref, unit, dst string) error {
-	if err := extractTree(top, ref, relSlash(top, unit), filepath.Join(dst, relSlash(top, unit))); err != nil {
+	if err := extractTree(top, ref, adapterkit.RelSlash(top, unit), filepath.Join(dst, adapterkit.RelSlash(top, unit))); err != nil {
 		return err
 	}
 	for _, dir := range ancestors(top, unit) {
-		if err := ancestorFiles(top, ref, relSlash(top, dir), dst); err != nil {
+		if err := ancestorFiles(top, ref, adapterkit.RelSlash(top, dir), dst); err != nil {
 			return err
 		}
 	}
@@ -174,30 +117,30 @@ func copyEntry(src, dst string) error {
 // workTree mirrors the git top-level under dst with the current content of the unit's tracked and
 // untracked-not-ignored files and each ancestor directory's own such files.
 func workTree(top, unit, dst string) error {
-	listed, err := gitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
+	listed, err := adapterkit.GitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
 	if err != nil {
 		return err
 	}
 	for _, l := range listed {
 		src := filepath.Join(unit, filepath.FromSlash(l))
-		if !exists(src) {
+		if !adapterkit.Exists(src) {
 			continue
 		}
-		if err := copyEntry(src, filepath.Join(dst, relSlash(top, unit), filepath.FromSlash(l))); err != nil {
+		if err := copyEntry(src, filepath.Join(dst, adapterkit.RelSlash(top, unit), filepath.FromSlash(l))); err != nil {
 			return err
 		}
 	}
 	for _, dir := range ancestors(top, unit) {
-		listed, err := gitPaths(dir, "ls-files", "--cached", "--others", "--exclude-standard", "--", ".")
+		listed, err := adapterkit.GitPaths(dir, "ls-files", "--cached", "--others", "--exclude-standard", "--", ".")
 		if err != nil {
 			return err
 		}
 		for _, l := range listed {
 			src := filepath.Join(dir, filepath.FromSlash(l))
-			if strings.Contains(l, "/") || !exists(src) {
+			if strings.Contains(l, "/") || !adapterkit.Exists(src) {
 				continue
 			}
-			if err := copyEntry(src, filepath.Join(dst, relSlash(top, dir), l)); err != nil {
+			if err := copyEntry(src, filepath.Join(dst, adapterkit.RelSlash(top, dir), l)); err != nil {
 				return err
 			}
 		}
@@ -230,7 +173,7 @@ func overlayTests(root, baseRoot string, tests []string) error {
 
 func importRoots(unit string) []string {
 	roots := []string{unit}
-	if src := filepath.Join(unit, "src"); exists(src) {
+	if src := filepath.Join(unit, "src"); adapterkit.Exists(src) {
 		roots = append(roots, src)
 	}
 	return roots
@@ -256,7 +199,7 @@ func topLevelPackages(treeUnit string) ([]string, error) {
 			return nil, err
 		}
 		for _, e := range entries {
-			if e.IsDir() && identifier.MatchString(e.Name()) && exists(filepath.Join(root, e.Name(), "__init__.py")) {
+			if e.IsDir() && identifier.MatchString(e.Name()) && adapterkit.Exists(filepath.Join(root, e.Name(), "__init__.py")) {
 				out = append(out, e.Name())
 			}
 		}
@@ -285,7 +228,7 @@ func probeTree(python, top, treeRoot, treeUnit string) (string, error) {
 		return "", err
 	}
 	if code != 0 {
-		return "", fmt.Errorf("%s import probe exited %d: %s", python, code, capText(stderr))
+		return "", fmt.Errorf("%s import probe exited %d: %s", python, code, adapterkit.CapText(stderr))
 	}
 	var found map[string][]string
 	if err := json.Unmarshal(stdout, &found); err != nil {

@@ -10,10 +10,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -115,7 +115,7 @@ func (m *junitModel) place(t *rapid.T, unitRel string, dir bool) (fileAttr, clas
 	} else {
 		writeTree(t, m.unit, map[string]string{unitRel: ""})
 	}
-	return relSlash(m.rootdir, abs), relSlash(m.root, abs)
+	return adapterkit.RelSlash(m.rootdir, abs), adapterkit.RelSlash(m.root, abs)
 }
 
 func (m *junitModel) addCollectionError(t *rapid.T, unitRel string, dir bool) {
@@ -381,34 +381,4 @@ func TestReadPytestReportFailsClosed(t *testing.T) {
 			t.Fatalf("readPytestReport(%s) = nil error; a report that cannot be read must stop the run, not count as zero failures", name)
 		}
 	}
-}
-
-func TestCapTextKeepsValidPrefix(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		unit := rapid.SampledFrom([]string{"a", "é", "€", "😀", " ", "\n"}).Draw(t, "unit")
-		shift := strings.Repeat("a", rapid.IntRange(0, 3).Draw(t, "shift"))
-		n := rapid.IntRange(0, 40).Draw(t, "n")
-		if rapid.Bool().Draw(t, "nearCap") {
-			n = max(0, (maxOutput+rapid.IntRange(-6, 6).Draw(t, "delta")-len(shift))/len(unit))
-		}
-		s := rapid.SampledFrom([]string{"", " ", "\n"}).Draw(t, "lead") + shift +
-			strings.Repeat(unit, n) +
-			rapid.SampledFrom([]string{"", " ", "\n", "x"}).Draw(t, "tail")
-		got := capText([]byte(s))
-		trimmed := strings.TrimSpace(s)
-		switch {
-		case trimmed == "":
-			if got != "no output" {
-				t.Fatalf("capText(blank) = %q, want \"no output\"; an erroring case with an empty body tells the reader nothing", got)
-			}
-		case len(trimmed) <= maxOutput:
-			if got != trimmed {
-				t.Fatalf("capText kept %d of %d bytes under the cap", len(got), len(trimmed))
-			}
-		default:
-			if !utf8.ValidString(got) || !strings.HasPrefix(trimmed, got) || len(got) > maxOutput || len(got) <= maxOutput-utf8.UTFMax {
-				t.Fatalf("capText of %d bytes gave %d bytes (valid UTF-8 %v); the cap must cut at the last rune boundary at or below %d so the XML stays valid and the head of the output survives", len(trimmed), len(got), utf8.ValidString(got), maxOutput)
-			}
-		}
-	})
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ievidence "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -89,7 +90,7 @@ func unitCoverage(c runContext, unit, seed, tmp string, i int) ([]ievidence.LCOV
 	dir := filepath.Join(tmp, strconv.Itoa(i))
 	args := []string{"run", "--passWithNoTests", "--coverage.enabled", "--coverage.provider=v8", "--coverage.reporter=json", "--coverage.reportOnFailure", "--coverage.reportsDirectory=" + dir}
 	for _, s := range sources {
-		args = append(args, "--coverage.include="+globSpecial.Replace(relSlash(unit, filepath.Join(c.root, filepath.FromSlash(s)))))
+		args = append(args, "--coverage.include="+globSpecial.Replace(adapterkit.RelSlash(unit, filepath.Join(c.root, filepath.FromSlash(s)))))
 	}
 	stdout, stderr, _, err := runToolEnv(unit, []string{"ASSURE_SEED=" + seed}, c.tools[unit]["vitest"].bin, args...)
 	if err != nil {
@@ -97,11 +98,11 @@ func unitCoverage(c runContext, unit, seed, tmp string, i int) ([]ievidence.LCOV
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "coverage-final.json"))
 	if err != nil {
-		return nil, fmt.Errorf("vitest coverage in %s wrote no report: %w\n%s", relSlash(c.top, unit), err, capText(append(stdout, stderr...)))
+		return nil, fmt.Errorf("vitest coverage in %s wrote no report: %w\n%s", adapterkit.RelSlash(c.top, unit), err, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	var report map[string]istanbulFile
 	if err := json.Unmarshal(data, &report); err != nil {
-		return nil, fmt.Errorf("vitest coverage in %s: %w", relSlash(c.top, unit), err)
+		return nil, fmt.Errorf("vitest coverage in %s: %w", adapterkit.RelSlash(c.top, unit), err)
 	}
 	byPath := map[string]istanbulFile{}
 	for name, f := range report {
@@ -111,7 +112,7 @@ func unitCoverage(c runContext, unit, seed, tmp string, i int) ([]ievidence.LCOV
 	for _, s := range sources {
 		f, ok := byPath[s]
 		if !ok {
-			return nil, fmt.Errorf("vitest coverage in %s has no entry for %s", relSlash(c.top, unit), s)
+			return nil, fmt.Errorf("vitest coverage in %s has no entry for %s", adapterkit.RelSlash(c.top, unit), s)
 		}
 		lf, err := lcovFile(s, f)
 		if err != nil {

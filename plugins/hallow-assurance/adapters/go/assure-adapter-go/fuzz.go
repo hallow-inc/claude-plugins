@@ -12,15 +12,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
-type xmlProperty struct {
-	Name  string `xml:"name,attr"`
-	Value string `xml:"value,attr"`
-}
-
 func changedSources(root, ref string) ([]string, error) {
-	paths, err := changedPaths(root, ref)
+	paths, err := adapterkit.ChangedPaths(root, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +97,7 @@ func runFuzz(root, ref, out string, _ map[string][]string, _ map[string]string) 
 	if err != nil {
 		return nil, err
 	}
-	suites := xmlFuzzSuites{Suites: []xmlFuzzSuite{}}
+	suites := adapterkit.XMLFuzzSuites{Suites: []adapterkit.XMLFuzzSuite{}}
 	for _, dir := range dirs {
 		mod, ok := moduleOf(root, dir)
 		if !ok {
@@ -111,7 +108,7 @@ func runFuzz(root, ref, out string, _ map[string][]string, _ map[string]string) 
 			return nil, err
 		}
 		for _, p := range byDir[dir] {
-			s.Properties = append(s.Properties, xmlProperty{Name: "assure.source", Value: p})
+			s.Properties = append(s.Properties, adapterkit.XMLProperty{Name: "assure.source", Value: p})
 		}
 		suites.Suites = append(suites.Suites, s)
 	}
@@ -125,24 +122,12 @@ func runFuzz(root, ref, out string, _ map[string][]string, _ map[string]string) 
 	return []evidence{{Type: "fuzz.run", Path: "fuzz.xml"}}, nil
 }
 
-type xmlFuzzSuite struct {
-	Name       string        `xml:"name,attr"`
-	Tests      int           `xml:"tests,attr"`
-	Properties []xmlProperty `xml:"properties>property"`
-	Cases      []xmlCase     `xml:"testcase"`
-}
-
-type xmlFuzzSuites struct {
-	XMLName xml.Name       `xml:"testsuites"`
-	Suites  []xmlFuzzSuite `xml:"testsuite"`
-}
-
-func fuzzSuite(root, mod, dir, seed string) (xmlFuzzSuite, error) {
+func fuzzSuite(root, mod, dir, seed string) (adapterkit.XMLFuzzSuite, error) {
 	names, err := fuzzTargets(filepath.Join(root, filepath.FromSlash(dir)))
 	if err != nil {
-		return xmlFuzzSuite{}, err
+		return adapterkit.XMLFuzzSuite{}, err
 	}
-	s := xmlFuzzSuite{Name: dir, Cases: []xmlCase{}}
+	s := adapterkit.XMLFuzzSuite{Name: dir, Cases: []adapterkit.XMLCase{}}
 	if len(names) == 0 {
 		return s, nil
 	}
@@ -154,7 +139,7 @@ func fuzzSuite(root, mod, dir, seed string) (xmlFuzzSuite, error) {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		if _, ok := errors.AsType[*exec.ExitError](err); !ok {
-			return xmlFuzzSuite{}, err
+			return adapterkit.XMLFuzzSuite{}, err
 		}
 	}
 	s.Cases = fuzzCases(dir, names, parseEvents(stdout.Bytes()), stderr.String())
@@ -183,12 +168,12 @@ func foldFuzzEvents(events []event) (result map[string]string, outs map[string]*
 	return result, outs, pkgOut
 }
 
-func fuzzCases(dir string, names []string, events []event, stderr string) []xmlCase {
+func fuzzCases(dir string, names []string, events []event, stderr string) []adapterkit.XMLCase {
 	result, outs, pkgOut := foldFuzzEvents(events)
 	appendCapped(pkgOut, stderr)
-	cases := []xmlCase{}
+	cases := []adapterkit.XMLCase{}
 	for _, n := range names {
-		c := xmlCase{Name: n, Classname: dir}
+		c := adapterkit.XMLCase{Name: n, Classname: dir}
 		body := ""
 		if b := outs[n]; b != nil {
 			body = b.String()
@@ -196,11 +181,11 @@ func fuzzCases(dir string, names []string, events []event, stderr string) []xmlC
 		switch result[n] {
 		case "pass":
 		case "fail":
-			c.Failure = &xmlText{Message: "fuzz target failed on its seed corpus", Body: body}
+			c.Failure = &adapterkit.XMLText{Message: "fuzz target failed on its seed corpus", Body: body}
 		case "skip":
 			c.Skipped = &struct{}{}
 		default:
-			c.Error = &xmlText{Message: "fuzz target did not run", Body: capText([]byte(pkgOut.String()))}
+			c.Error = &adapterkit.XMLText{Message: "fuzz target did not run", Body: adapterkit.CapText([]byte(pkgOut.String()))}
 		}
 		cases = append(cases, c)
 	}

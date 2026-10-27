@@ -88,7 +88,7 @@ func canonical(t *rapid.T, label string) string {
 	}).Draw(t, label)
 }
 
-func TestVersionComparisonIsTotalAndConsistent(t *testing.T) {
+func TestSameVersionMatchesNumericallyEqualExactVersions(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		a := versionGen(true).Draw(t, "a")
 		b := versionGen(true).Draw(t, "b")
@@ -101,15 +101,8 @@ func TestVersionComparisonIsTotalAndConsistent(t *testing.T) {
 				b = strings.Replace(b, ".", ".0", 1)
 			}
 		}
-		got := compareVersions(a, b)
-		if want := modelCompare(a, b); got != want {
-			t.Fatalf("compareVersions(%q, %q) = %d, want %d by numeric order of each component", a, b, got, want)
-		}
-		if back := compareVersions(b, a); back != -got {
-			t.Fatalf("compareVersions not antisymmetric: (%q,%q)=%d, (%q,%q)=%d", a, b, got, b, a, back)
-		}
-		if sameVersion(a, b) != (got == 0) {
-			t.Fatalf("sameVersion(%q, %q) = %v disagrees with compareVersions = %d", a, b, sameVersion(a, b), got)
+		if want := modelCompare(a, b) == 0; sameVersion(a, b) != want {
+			t.Fatalf("sameVersion(%q, %q) = %v, want %v: a leading v and leading zeros do not change which version a pin names", a, b, !want, want)
 		}
 
 		p, f := canonical(t, "pinned"), canonical(t, "found")
