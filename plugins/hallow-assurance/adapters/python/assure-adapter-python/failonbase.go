@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 func changedTestFiles(c runContext, unit string) ([]string, error) {
-	paths, err := changedPaths(c.root, c.ref)
+	paths, err := adapterkit.ChangedPaths(c.root, c.ref)
 	if err != nil {
 		return nil, err
 	}

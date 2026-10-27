@@ -16,6 +16,7 @@ import (
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
@@ -125,7 +126,7 @@ func committedModule(t *testing.T, files map[string]string) string {
 
 func selection(t *testing.T, dir string) map[string][]string {
 	t.Helper()
-	paths, err := changedPaths(dir, "HEAD")
+	paths, err := adapterkit.ChangedPaths(dir, "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}

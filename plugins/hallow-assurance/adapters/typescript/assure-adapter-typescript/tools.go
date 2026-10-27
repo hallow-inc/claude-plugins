@@ -16,6 +16,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type tsTool struct {
@@ -137,7 +139,7 @@ func findLockfile(top, unit string) (lockfile, error) {
 
 func lockfileIn(top, dir, name string) (lockfile, error) {
 	rel := relSlash(top, filepath.Join(dir, name))
-	tracked, err := gitPaths(dir, "ls-files", name)
+	tracked, err := adapterkit.GitPaths(dir, "ls-files", name)
 	if err != nil {
 		return lockfile{}, err
 	}

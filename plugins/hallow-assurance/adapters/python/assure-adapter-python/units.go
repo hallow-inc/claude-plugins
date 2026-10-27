@@ -1,33 +1,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
-)
 
-func gitPaths(dir string, args ...string) ([]string, error) {
-	if _, err := exec.LookPath("git"); err != nil {
-		return nil, fmt.Errorf("git not found on PATH")
-	}
-	cmd := exec.CommandContext(context.Background(), "git", append([]string{args[0], "-z"}, args[1:]...)...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
-	}
-	var paths []string
-	for p := range strings.SplitSeq(string(b), "\x00") {
-		if p != "" {
-			paths = append(paths, p)
-		}
-	}
-	return paths, nil
-}
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
+)
 
 func exists(p string) bool {
 	_, err := os.Stat(p)
@@ -51,7 +32,7 @@ func unitOf(top, dir string) (string, bool) {
 }
 
 func unitFiles(root, top, unit string) ([]string, error) {
-	listed, err := gitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
+	listed, err := adapterkit.GitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, err
 	}

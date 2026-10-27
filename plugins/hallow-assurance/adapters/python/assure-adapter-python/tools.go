@@ -16,6 +16,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type pyTool struct {
@@ -134,7 +136,7 @@ func findLockfile(top, unit string) (lockfile, error) {
 			return lockfile{problem: fmt.Sprintf("%s sits beside uv.lock; assure-adapter-python supports only uv projects, so CI could not tell which install to reproduce", relSlash(top, filepath.Join(dir, n)))}, nil
 		}
 	}
-	tracked, err := gitPaths(dir, "ls-files", "uv.lock")
+	tracked, err := adapterkit.GitPaths(dir, "ls-files", "uv.lock")
 	if err != nil {
 		return lockfile{}, err
 	}

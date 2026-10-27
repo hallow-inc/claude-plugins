@@ -20,19 +20,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-)
 
-func gitBytes(dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
+)
 
 func isTestName(name, prefix string) bool {
 	if !strings.HasPrefix(name, prefix) {
@@ -83,7 +73,7 @@ func testFuncs(src []byte) (map[string]string, error) {
 }
 
 func baseTestFuncs(root, ref, dir string) (map[string]string, error) {
-	names, err := gitBytes(root, "ls-tree", "--name-only", ref, "--", "./"+path.Clean(dir)+"/")
+	names, err := adapterkit.GitBytes(root, "ls-tree", "--name-only", ref, "--", "./"+path.Clean(dir)+"/")
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +82,7 @@ func baseTestFuncs(root, ref, dir string) (map[string]string, error) {
 		if !strings.HasSuffix(n, "_test.go") {
 			continue
 		}
-		src, err := gitBytes(root, "show", ref+":./"+path.Join(dir, path.Base(n)))
+		src, err := adapterkit.GitBytes(root, "show", ref+":./"+path.Join(dir, path.Base(n)))
 		if err != nil {
 			return nil, err
 		}
@@ -153,15 +143,15 @@ func extractBase(root, ref, mod, dst string) error {
 	if mod != "." {
 		tree += mod
 	}
-	id, err := gitBytes(root, "rev-parse", "--verify", tree)
+	id, err := adapterkit.GitBytes(root, "rev-parse", "--verify", tree)
 	if err != nil {
 		return err
 	}
-	top, err := gitBytes(root, "rev-parse", "--show-toplevel")
+	top, err := adapterkit.GitBytes(root, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return err
 	}
-	data, err := gitBytes(strings.TrimSpace(string(top)), "archive", "--format=tar", strings.TrimSpace(string(id)))
+	data, err := adapterkit.GitBytes(strings.TrimSpace(string(top)), "archive", "--format=tar", strings.TrimSpace(string(id)))
 	if err != nil {
 		return err
 	}
@@ -234,7 +224,7 @@ func overlayTests(root, mod, dst string, changedTests []string) error {
 }
 
 func runFailOnBase(root, ref, out string, sel map[string][]string, versions map[string]string) ([]evidence, error) {
-	paths, err := changedPaths(root, ref)
+	paths, err := adapterkit.ChangedPaths(root, ref)
 	if err != nil {
 		return nil, err
 	}

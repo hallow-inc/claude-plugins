@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type mutationTarget struct {
@@ -21,7 +23,7 @@ func mutationTargets(c runContext, unit string) ([]mutationTarget, error) {
 	if err != nil || len(sources) == 0 {
 		return nil, err
 	}
-	tracked, err := gitPaths(c.root, append([]string{"ls-files", "--"}, sources...)...)
+	tracked, err := adapterkit.GitPaths(c.root, append([]string{"ls-files", "--"}, sources...)...)
 	if err != nil {
 		return nil, err
 	}

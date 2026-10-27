@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type evidence struct {
@@ -108,7 +110,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return runResponse{}, err
 	}
 	c.top = realPath(top)
-	paths, err := changedPaths(c.root, ref)
+	paths, err := adapterkit.ChangedPaths(c.root, ref)
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -159,7 +161,7 @@ func defaultUnit(root, top string) (string, string, error) {
 	if unit, ok := unitOf(top, root); ok {
 		return unit, "", nil
 	}
-	listed, err := gitPaths(root, "ls-files", "--cached", "--others", "--exclude-standard", "--", "pyproject.toml", "**/pyproject.toml")
+	listed, err := adapterkit.GitPaths(root, "ls-files", "--cached", "--others", "--exclude-standard", "--", "pyproject.toml", "**/pyproject.toml")
 	if err != nil {
 		return "", "", err
 	}
@@ -209,18 +211,6 @@ func toolOutput(dir, name string, args ...string) (string, error) {
 		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(b)), nil
-}
-
-func changedPaths(root, ref string) ([]string, error) {
-	diff, err := gitPaths(root, "diff", "--name-only", "--relative", ref, "--")
-	if err != nil {
-		return nil, err
-	}
-	untracked, err := gitPaths(root, "ls-files", "--others", "--exclude-standard")
-	if err != nil {
-		return nil, err
-	}
-	return append(diff, untracked...), nil
 }
 
 func runToolEnv(dir string, env []string, name string, args ...string) (stdout, stderr []byte, code int, err error) {

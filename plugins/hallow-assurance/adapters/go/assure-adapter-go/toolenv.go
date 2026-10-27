@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 func onPath(name string) bool {
@@ -103,7 +105,7 @@ func trackedAmong(top string, rels []string) (map[string]bool, error) {
 	if len(rels) == 0 {
 		return out, nil
 	}
-	lines, err := gitPaths(top, append([]string{"ls-files", "--"}, rels...)...)
+	lines, err := adapterkit.GitPaths(top, append([]string{"ls-files", "--"}, rels...)...)
 	if err != nil {
 		return nil, err
 	}

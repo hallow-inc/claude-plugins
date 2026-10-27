@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -11,10 +10,11 @@ import (
 	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type taskLocation struct {
@@ -29,18 +29,6 @@ type listedTest struct {
 }
 
 type testKey struct{ file, name string }
-
-func gitBytes(dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
 
 func vitestList(dir, bin, root string, files []string) ([]listedTest, error) {
 	if len(files) == 0 {
@@ -72,7 +60,7 @@ func vitestList(dir, bin, root string, files []string) ([]listedTest, error) {
 }
 
 func changedTests(c runContext, unit string) ([]string, error) {
-	paths, err := changedPaths(c.root, c.ref)
+	paths, err := adapterkit.ChangedPaths(c.root, c.ref)
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +89,11 @@ func treeSpec(ref, rel string) string {
 }
 
 func extractTree(top, ref, rel, dst string) error {
-	id, err := gitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
+	id, err := adapterkit.GitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
-	data, err := gitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
+	data, err := adapterkit.GitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
 	if err != nil {
 		return err
 	}
@@ -148,7 +136,7 @@ func writeFrom(target string, r io.Reader, size int64) error {
 }
 
 func ancestorFiles(top, ref, rel, dst string) error {
-	listing, err := gitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
+	listing, err := adapterkit.GitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
@@ -158,7 +146,7 @@ func ancestorFiles(top, ref, rel, dst string) error {
 		if !ok || len(fields) != 3 || fields[1] != "blob" || fields[0] == "120000" {
 			continue
 		}
-		data, err := gitBytes(top, "cat-file", "blob", fields[2])
+		data, err := adapterkit.GitBytes(top, "cat-file", "blob", fields[2])
 		if err != nil {
 			return err
 		}

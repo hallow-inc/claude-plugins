@@ -3,30 +3,18 @@ package main
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-)
 
-func gitBytes(dir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
+)
 
 func treeSpec(ref, rel string) string {
 	if rel == "." {
@@ -36,11 +24,11 @@ func treeSpec(ref, rel string) string {
 }
 
 func extractTree(top, ref, rel, dst string) error {
-	id, err := gitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
+	id, err := adapterkit.GitBytes(top, "rev-parse", "--verify", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
-	data, err := gitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
+	data, err := adapterkit.GitBytes(top, "archive", "--format=tar", strings.TrimSpace(string(id)))
 	if err != nil {
 		return err
 	}
@@ -90,7 +78,7 @@ func writeFrom(target string, r io.Reader, size int64, perm os.FileMode) error {
 }
 
 func ancestorFiles(top, ref, rel, dst string) error {
-	listing, err := gitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
+	listing, err := adapterkit.GitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
 	if err != nil {
 		return err
 	}
@@ -100,7 +88,7 @@ func ancestorFiles(top, ref, rel, dst string) error {
 		if !ok || len(fields) != 3 || fields[1] != "blob" {
 			continue
 		}
-		data, err := gitBytes(top, "cat-file", "blob", fields[2])
+		data, err := adapterkit.GitBytes(top, "cat-file", "blob", fields[2])
 		if err != nil {
 			return err
 		}
@@ -174,7 +162,7 @@ func copyEntry(src, dst string) error {
 // workTree mirrors the git top-level under dst with the current content of the unit's tracked and
 // untracked-not-ignored files and each ancestor directory's own such files.
 func workTree(top, unit, dst string) error {
-	listed, err := gitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
+	listed, err := adapterkit.GitPaths(unit, "ls-files", "--cached", "--others", "--exclude-standard")
 	if err != nil {
 		return err
 	}
@@ -188,7 +176,7 @@ func workTree(top, unit, dst string) error {
 		}
 	}
 	for _, dir := range ancestors(top, unit) {
-		listed, err := gitPaths(dir, "ls-files", "--cached", "--others", "--exclude-standard", "--", ".")
+		listed, err := adapterkit.GitPaths(dir, "ls-files", "--cached", "--others", "--exclude-standard", "--", ".")
 		if err != nil {
 			return err
 		}

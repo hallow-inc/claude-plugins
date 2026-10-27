@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type evidence struct {
@@ -99,7 +101,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return environment(env), nil
 	}
 	versions["go"] = v
-	paths, err := changedPaths(root, ref)
+	paths, err := adapterkit.ChangedPaths(root, ref)
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -128,32 +130,6 @@ func toolOutput(dir, name string, args ...string) (string, error) {
 		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
 	return strings.TrimSpace(string(b)), nil
-}
-
-func gitPaths(dir string, args ...string) ([]string, error) {
-	out, err := gitBytes(dir, append([]string{args[0], "-z"}, args[1:]...)...)
-	if err != nil {
-		return nil, err
-	}
-	var paths []string
-	for p := range strings.SplitSeq(string(out), "\x00") {
-		if p != "" {
-			paths = append(paths, p)
-		}
-	}
-	return paths, nil
-}
-
-func changedPaths(root, ref string) ([]string, error) {
-	diff, err := gitPaths(root, "diff", "--name-only", "--relative", ref, "--")
-	if err != nil {
-		return nil, err
-	}
-	untracked, err := gitPaths(root, "ls-files", "--others", "--exclude-standard")
-	if err != nil {
-		return nil, err
-	}
-	return append(diff, untracked...), nil
 }
 
 func ignoredByGo(p string) bool {

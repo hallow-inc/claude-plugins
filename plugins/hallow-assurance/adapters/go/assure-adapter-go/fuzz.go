@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type xmlProperty struct {
@@ -20,7 +22,7 @@ type xmlProperty struct {
 }
 
 func changedSources(root, ref string) ([]string, error) {
-	paths, err := changedPaths(root, ref)
+	paths, err := adapterkit.ChangedPaths(root, ref)
 	if err != nil {
 		return nil, err
 	}
