@@ -1,12 +1,13 @@
 package main
 
 import (
-	"cmp"
 	"fmt"
 	"path"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type pinnedTool struct {
@@ -45,23 +46,12 @@ func isExact(pin string) bool {
 	return exactPin.MatchString(pin)
 }
 
-func compareVersions(a, b string) int {
-	as, bs := strings.Split(stripV(a), "."), strings.Split(stripV(b), ".")
-	for i := range 3 {
-		x, y := strings.TrimLeft(as[i], "0"), strings.TrimLeft(bs[i], "0")
-		if c := cmp.Or(cmp.Compare(len(x), len(y)), strings.Compare(x, y)); c != 0 {
-			return c
-		}
-	}
-	return 0
-}
-
 func sameVersion(pinned, found string) bool {
-	return isExact(pinned) && isExact(found) && compareVersions(pinned, found) == 0
+	return isExact(pinned) && isExact(found) && adapterkit.CompareVersions(stripV(pinned), stripV(found)) == 0
 }
 
 func (t pinnedTool) inRange(v string) bool {
-	return isExact(v) && compareVersions(v, t.lo) >= 0 && compareVersions(v, t.hi) < 0
+	return isExact(v) && adapterkit.CompareVersions(stripV(v), stripV(t.lo)) >= 0 && adapterkit.CompareVersions(stripV(v), stripV(t.hi)) < 0
 }
 
 func (t pinnedTool) rangeText() string {

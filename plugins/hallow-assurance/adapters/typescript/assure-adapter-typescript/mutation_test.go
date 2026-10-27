@@ -548,7 +548,7 @@ func TestRunMutationStrykerFailureIsError(t *testing.T) {
 		replay(t, r.unitData, "stryker", bad)
 		out := t.TempDir()
 		code, stdout, stderr := runRaw("VER-MUTATION-CHANGED", out)
-		if code != 1 || len(stdout) != 0 || exists(filepath.Join(out, "mutation.json")) {
+		if code != 1 || len(stdout) != 0 || adapterkit.Exists(filepath.Join(out, "mutation.json")) {
 			t.Fatalf("stryker exit %d report %q: run exited %d stdout %q stderr %q; a failed Stryker run, a Pending mutant, a file outside the repository or a missing report is an error, never evidence", bad.code, bad.report, code, stdout, stderr)
 		}
 	}

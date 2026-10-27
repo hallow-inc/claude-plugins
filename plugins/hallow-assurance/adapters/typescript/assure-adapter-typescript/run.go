@@ -219,7 +219,7 @@ func runTests(c runContext) ([]evidence, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
-		suites.Suites = append(suites.Suites, vitestSuites(c.root, relSlash(c.top, unit), report, append(stdout, stderr...), code)...)
+		suites.Suites = append(suites.Suites, vitestSuites(c.root, adapterkit.RelSlash(c.top, unit), report, append(stdout, stderr...), code)...)
 	}
 	data, err := xml.MarshalIndent(suites, "", "  ")
 	if err != nil {

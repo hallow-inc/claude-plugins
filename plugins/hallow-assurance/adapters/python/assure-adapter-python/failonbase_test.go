@@ -236,7 +236,7 @@ func TestChangedTestFiles(t *testing.T) {
 	want := []string{"tests/conftest.py", "tests/test_edit.py", "tests/test_gone.py", "tests/test_new.py"}
 	for _, rootRel := range []string{".", "svc", "svc/a"} {
 		root := filepath.Join(top, filepath.FromSlash(rootRel))
-		prefix := strings.TrimPrefix(relSlash(root, filepath.Join(top, "svc", "a")), ".")
+		prefix := strings.TrimPrefix(adapterkit.RelSlash(root, filepath.Join(top, "svc", "a")), ".")
 		var expect []string
 		for _, w := range want {
 			expect = append(expect, strings.TrimPrefix(prefix+"/"+w, "/"))

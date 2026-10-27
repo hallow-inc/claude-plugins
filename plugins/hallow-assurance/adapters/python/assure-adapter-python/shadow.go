@@ -78,11 +78,11 @@ func ancestors(top, unit string) []string {
 // baseTree mirrors the git top-level under dst at ref: the unit's tree and each ancestor
 // directory's own files (a unit's tests may rely on a parent conftest.py or pyproject.toml).
 func baseTree(top, ref, unit, dst string) error {
-	if err := extractTree(top, ref, relSlash(top, unit), filepath.Join(dst, relSlash(top, unit))); err != nil {
+	if err := extractTree(top, ref, adapterkit.RelSlash(top, unit), filepath.Join(dst, adapterkit.RelSlash(top, unit))); err != nil {
 		return err
 	}
 	for _, dir := range ancestors(top, unit) {
-		if err := ancestorFiles(top, ref, relSlash(top, dir), dst); err != nil {
+		if err := ancestorFiles(top, ref, adapterkit.RelSlash(top, dir), dst); err != nil {
 			return err
 		}
 	}
@@ -123,10 +123,10 @@ func workTree(top, unit, dst string) error {
 	}
 	for _, l := range listed {
 		src := filepath.Join(unit, filepath.FromSlash(l))
-		if !exists(src) {
+		if !adapterkit.Exists(src) {
 			continue
 		}
-		if err := copyEntry(src, filepath.Join(dst, relSlash(top, unit), filepath.FromSlash(l))); err != nil {
+		if err := copyEntry(src, filepath.Join(dst, adapterkit.RelSlash(top, unit), filepath.FromSlash(l))); err != nil {
 			return err
 		}
 	}
@@ -137,10 +137,10 @@ func workTree(top, unit, dst string) error {
 		}
 		for _, l := range listed {
 			src := filepath.Join(dir, filepath.FromSlash(l))
-			if strings.Contains(l, "/") || !exists(src) {
+			if strings.Contains(l, "/") || !adapterkit.Exists(src) {
 				continue
 			}
-			if err := copyEntry(src, filepath.Join(dst, relSlash(top, dir), l)); err != nil {
+			if err := copyEntry(src, filepath.Join(dst, adapterkit.RelSlash(top, dir), l)); err != nil {
 				return err
 			}
 		}
@@ -173,7 +173,7 @@ func overlayTests(root, baseRoot string, tests []string) error {
 
 func importRoots(unit string) []string {
 	roots := []string{unit}
-	if src := filepath.Join(unit, "src"); exists(src) {
+	if src := filepath.Join(unit, "src"); adapterkit.Exists(src) {
 		roots = append(roots, src)
 	}
 	return roots
@@ -199,7 +199,7 @@ func topLevelPackages(treeUnit string) ([]string, error) {
 			return nil, err
 		}
 		for _, e := range entries {
-			if e.IsDir() && identifier.MatchString(e.Name()) && exists(filepath.Join(root, e.Name(), "__init__.py")) {
+			if e.IsDir() && identifier.MatchString(e.Name()) && adapterkit.Exists(filepath.Join(root, e.Name(), "__init__.py")) {
 				out = append(out, e.Name())
 			}
 		}

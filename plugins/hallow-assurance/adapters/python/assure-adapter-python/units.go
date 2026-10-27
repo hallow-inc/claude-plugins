@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -10,14 +9,9 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
-func exists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
-
 func unitOf(top, dir string) (string, bool) {
 	for {
-		if exists(filepath.Join(dir, "pyproject.toml")) {
+		if adapterkit.Exists(filepath.Join(dir, "pyproject.toml")) {
 			return dir, true
 		}
 		if dir == top {
@@ -39,7 +33,7 @@ func unitFiles(root, top, unit string) ([]string, error) {
 	var out []string
 	for _, l := range listed {
 		abs := filepath.Join(unit, filepath.FromSlash(l))
-		if !exists(abs) {
+		if !adapterkit.Exists(abs) {
 			continue
 		}
 		if u, ok := unitOf(top, filepath.Dir(abs)); !ok || u != unit {
@@ -85,7 +79,7 @@ func selectUnits(root, top string, paths []string) (map[string][]string, string,
 		}
 		if role == "config" {
 			whole[unit] = true
-		} else if (role == "source" || role == "test") && exists(abs) {
+		} else if (role == "source" || role == "test") && adapterkit.Exists(abs) {
 			sel[unit] = append(sel[unit], p)
 		}
 	}

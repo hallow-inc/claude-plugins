@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -11,14 +10,9 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
-func exists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
-
 func unitOf(top, dir string) (string, bool) {
 	for {
-		if exists(filepath.Join(dir, "package.json")) {
+		if adapterkit.Exists(filepath.Join(dir, "package.json")) {
 			return dir, true
 		}
 		if dir == top {
@@ -42,7 +36,7 @@ func refusal(top, unit string) string {
 	for dir := unit; ; dir = filepath.Dir(dir) {
 		for _, u := range unsupportedLayouts {
 			p := filepath.Join(dir, u.name)
-			if exists(p) {
+			if adapterkit.Exists(p) {
 				rel, _ := filepath.Rel(top, p)
 				return fmt.Sprintf("%s: the %s layout is unsupported; assure-adapter-typescript runs only on node_modules installs", filepath.ToSlash(rel), u.layout)
 			}
@@ -65,7 +59,7 @@ func unitFiles(root, top, unit string) ([]string, error) {
 	var out []string
 	for _, l := range listed {
 		abs := filepath.Join(unit, filepath.FromSlash(l))
-		if inNodeModules(l) || !exists(abs) {
+		if inNodeModules(l) || !adapterkit.Exists(abs) {
 			continue
 		}
 		if u, ok := unitOf(top, filepath.Dir(abs)); !ok || u != unit {
@@ -111,7 +105,7 @@ func selectUnits(root, top string, paths []string) (map[string][]string, string,
 		}
 		if role == "config" {
 			whole[unit] = true
-		} else if (role == "source" || role == "test") && exists(abs) {
+		} else if (role == "source" || role == "test") && adapterkit.Exists(abs) {
 			sel[unit] = append(sel[unit], p)
 		}
 	}

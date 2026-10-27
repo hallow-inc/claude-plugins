@@ -51,7 +51,7 @@ func relTo(root, p string) string {
 
 func pytestFile(top, unit, file string) string {
 	for dir := unit; ; dir = filepath.Dir(dir) {
-		if p := filepath.Join(dir, filepath.FromSlash(file)); exists(p) {
+		if p := filepath.Join(dir, filepath.FromSlash(file)); adapterkit.Exists(p) {
 			return p
 		}
 		if dir == top || filepath.Dir(dir) == dir {

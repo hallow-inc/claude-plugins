@@ -21,7 +21,7 @@ func fuzzFiles(root, src string) []string {
 		}
 		for _, x := range sourceExts {
 			f := stem + ".fuzz.test." + x
-			if exists(filepath.Join(root, filepath.FromSlash(f))) {
+			if adapterkit.Exists(filepath.Join(root, filepath.FromSlash(f))) {
 				out = append(out, f)
 			}
 		}
@@ -64,7 +64,7 @@ func unitFuzz(c runContext, unit, seed, tmp string, i int) ([]adapterkit.XMLFuzz
 		if err != nil {
 			return nil, err
 		}
-		name := relSlash(c.top, unit)
+		name := adapterkit.RelSlash(c.top, unit)
 		for _, s := range vitestSuites(c.root, name, report, append(stdout, stderr...), code) {
 			if s.Name == "unit "+name {
 				runErrors = append(runErrors, s.Cases...)

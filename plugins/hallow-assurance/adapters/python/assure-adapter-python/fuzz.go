@@ -30,8 +30,8 @@ func fuzzFiles(root, unit, src string) []string {
 	}
 	var out []string
 	for _, p := range []string{filepath.Join(filepath.Dir(abs), name), filepath.Join(unit, "tests", filepath.FromSlash(mirror), name)} {
-		if exists(p) {
-			out = append(out, relSlash(root, p))
+		if adapterkit.Exists(p) {
+			out = append(out, adapterkit.RelSlash(root, p))
 		}
 	}
 	slices.Sort(out)

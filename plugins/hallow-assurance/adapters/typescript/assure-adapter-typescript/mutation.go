@@ -59,7 +59,7 @@ func mutateEntries(c runContext, unit string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		rel := relSlash(unit, filepath.Join(c.root, filepath.FromSlash(f)))
+		rel := adapterkit.RelSlash(unit, filepath.Join(c.root, filepath.FromSlash(f)))
 		for _, r := range ranges {
 			out = append(out, fmt.Sprintf("%s:%d-%d", rel, r.start, r.end))
 		}
@@ -189,7 +189,7 @@ func stryker(c runContext, unit string, mutate []string, seed string) ([]byte, e
 	cmd.Dir = unit
 	cmd.Env = append(os.Environ(), "ASSURE_SEED="+seed)
 	if log, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("stryker run in %s: %w\n%s", relSlash(c.top, unit), err, adapterkit.CapText(log))
+		return nil, fmt.Errorf("stryker run in %s: %w\n%s", adapterkit.RelSlash(c.top, unit), err, adapterkit.CapText(log))
 	}
 	return os.ReadFile(filepath.Join(dir, "report.json"))
 }
@@ -213,7 +213,7 @@ func runMutation(c runContext) ([]evidence, string, error) {
 			return nil, "", err
 		}
 		rel := func(name string) (string, error) {
-			p := relSlash(c.root, filepath.Join(unit, filepath.FromSlash(name)))
+			p := adapterkit.RelSlash(c.root, filepath.Join(unit, filepath.FromSlash(name)))
 			if p == ".." || strings.HasPrefix(p, "../") || filepath.IsAbs(p) {
 				return "", fmt.Errorf("stryker report: %s is outside %s", name, c.root)
 			}

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	"pgregory.net/rapid"
 )
 
@@ -76,7 +77,7 @@ func treeFiles(t fataler, dst string) map[string]string {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		rel := relSlash(dst, p)
+		rel := adapterkit.RelSlash(dst, p)
 		if d.Type()&fs.ModeSymlink != 0 {
 			target, err := os.Readlink(p)
 			out[rel] = "-> " + target

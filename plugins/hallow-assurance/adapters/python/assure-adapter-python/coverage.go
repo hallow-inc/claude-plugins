@@ -73,14 +73,14 @@ func measure(c runContext, unit, dir string, abs []string) (coverageReport, erro
 	}
 	output := append(stdout, stderr...)
 	if !slices.Contains([]int{0, 1, 2, 5}, code) {
-		return coverageReport{}, fmt.Errorf("coverage run of pytest in %s exited %d: %s", relSlash(c.top, unit), code, adapterkit.CapText(output))
+		return coverageReport{}, fmt.Errorf("coverage run of pytest in %s exited %d: %s", adapterkit.RelSlash(c.top, unit), code, adapterkit.CapText(output))
 	}
 	_, jout, jcode, err := runToolEnv(unit, nil, python, "-m", "coverage", "json", "--rcfile="+rc, "--data-file="+data, "-o", report)
 	if err != nil {
 		return coverageReport{}, err
 	}
 	if jcode != 0 {
-		return coverageReport{}, fmt.Errorf("coverage json in %s exited %d: %s\n%s", relSlash(c.top, unit), jcode, adapterkit.CapText(jout), adapterkit.CapText(output))
+		return coverageReport{}, fmt.Errorf("coverage json in %s exited %d: %s\n%s", adapterkit.RelSlash(c.top, unit), jcode, adapterkit.CapText(jout), adapterkit.CapText(output))
 	}
 	raw, err := os.ReadFile(report)
 	if err != nil {
@@ -88,7 +88,7 @@ func measure(c runContext, unit, dir string, abs []string) (coverageReport, erro
 	}
 	var r coverageReport
 	if err := json.Unmarshal(raw, &r); err != nil {
-		return coverageReport{}, fmt.Errorf("coverage json in %s: %w", relSlash(c.top, unit), err)
+		return coverageReport{}, fmt.Errorf("coverage json in %s: %w", adapterkit.RelSlash(c.top, unit), err)
 	}
 	return r, nil
 }
@@ -123,7 +123,7 @@ func unitCoverage(c runContext, unit, tmp string, i int) ([]ievidence.LCOVFile, 
 		}
 		f, ok := byPath[s]
 		if !ok {
-			return nil, fmt.Errorf("coverage in %s has no entry for %s; its lines cannot be shown covered or uncovered", relSlash(c.top, unit), s)
+			return nil, fmt.Errorf("coverage in %s has no entry for %s; its lines cannot be shown covered or uncovered", adapterkit.RelSlash(c.top, unit), s)
 		}
 		out = append(out, lcovFile(s, f, fi.Functions))
 	}

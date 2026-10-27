@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 //go:embed helper.py
@@ -82,7 +84,7 @@ func discoveryRefusal(python, top, unit string) (string, error) {
 	var paths []string
 	for dir := unit; ; dir = filepath.Dir(dir) {
 		for _, n := range pytestConfigFiles {
-			if p := filepath.Join(dir, n); exists(p) {
+			if p := filepath.Join(dir, n); adapterkit.Exists(p) {
 				paths = append(paths, p)
 			}
 		}
@@ -101,9 +103,9 @@ func discoveryRefusal(python, top, unit string) (string, error) {
 		case !ok:
 			return "", fmt.Errorf("helper gave no result for %s", p)
 		case c.Error != "":
-			problems = append(problems, fmt.Sprintf("%s could not be read for pytest discovery settings: %s", relSlash(top, p), c.Error))
+			problems = append(problems, fmt.Sprintf("%s could not be read for pytest discovery settings: %s", adapterkit.RelSlash(top, p), c.Error))
 		case len(c.Keys) > 0:
-			problems = append(problems, fmt.Sprintf("%s sets %s; assure-adapter-python supports only pytest's default test discovery, so it could not tell which functions are tests", relSlash(top, p), strings.Join(c.Keys, ", ")))
+			problems = append(problems, fmt.Sprintf("%s sets %s; assure-adapter-python supports only pytest's default test discovery, so it could not tell which functions are tests", adapterkit.RelSlash(top, p), strings.Join(c.Keys, ", ")))
 		}
 	}
 	return strings.Join(problems, "\n"), nil

@@ -13,6 +13,7 @@ import (
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -114,7 +115,7 @@ func (m *junitModel) place(t *rapid.T, unitRel string, dir bool) (fileAttr, clas
 	} else {
 		writeTree(t, m.unit, map[string]string{unitRel: ""})
 	}
-	return relSlash(m.rootdir, abs), relSlash(m.root, abs)
+	return adapterkit.RelSlash(m.rootdir, abs), adapterkit.RelSlash(m.root, abs)
 }
 
 func (m *junitModel) addCollectionError(t *rapid.T, unitRel string, dir bool) {

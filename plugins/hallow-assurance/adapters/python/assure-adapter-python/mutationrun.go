@@ -98,7 +98,7 @@ func (c runContext) mutationTree(unit, tmp string) (mutationTree, string, error)
 	if err := workTree(c.top, unit, t.tree); err != nil {
 		return t, "", err
 	}
-	t.unit = filepath.Join(t.tree, filepath.FromSlash(relSlash(c.top, unit)))
+	t.unit = filepath.Join(t.tree, filepath.FromSlash(adapterkit.RelSlash(c.top, unit)))
 	if msg, err := probeTree(c.units[unit].python, c.top, t.tree, t.unit); err != nil || msg != "" {
 		return t, msg, err
 	}
@@ -114,7 +114,7 @@ func (c runContext) contexts(unit string, t mutationTree, targets []mutationTarg
 	python := c.units[unit].python
 	var abs []string
 	for _, tg := range targets {
-		abs = append(abs, filepath.Join(t.tree, filepath.FromSlash(relSlash(c.top, filepath.Join(c.root, filepath.FromSlash(tg.rel))))))
+		abs = append(abs, filepath.Join(t.tree, filepath.FromSlash(adapterkit.RelSlash(c.top, filepath.Join(c.root, filepath.FromSlash(tg.rel))))))
 	}
 	rc, data, report := filepath.Join(t.dir, "coveragerc"), filepath.Join(t.dir, "contexts.data"), filepath.Join(t.dir, "contexts.json")
 	if err := os.WriteFile(rc, []byte(coverageRC(abs)), 0o644); err != nil {
@@ -127,14 +127,14 @@ func (c runContext) contexts(unit string, t mutationTree, targets []mutationTarg
 		return nil, err
 	}
 	if !slices.Contains([]int{0, 1, 2, 5}, code) {
-		return nil, fmt.Errorf("pytest in %s exited %d while recording which tests run the changed lines: %s", relSlash(c.top, unit), code, adapterkit.CapText(append(stdout, stderr...)))
+		return nil, fmt.Errorf("pytest in %s exited %d while recording which tests run the changed lines: %s", adapterkit.RelSlash(c.top, unit), code, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	_, jerr, jcode, err := runToolEnv(t.unit, env, python, "-m", "coverage", "json", "--show-contexts", "--rcfile="+rc, "--data-file="+data, "-o", report)
 	if err != nil {
 		return nil, err
 	}
 	if jcode != 0 {
-		return nil, fmt.Errorf("coverage json in %s exited %d: %s", relSlash(c.top, unit), jcode, adapterkit.CapText(jerr))
+		return nil, fmt.Errorf("coverage json in %s exited %d: %s", adapterkit.RelSlash(c.top, unit), jcode, adapterkit.CapText(jerr))
 	}
 	raw, err := os.ReadFile(report)
 	if err != nil {
@@ -144,14 +144,14 @@ func (c runContext) contexts(unit string, t mutationTree, targets []mutationTarg
 		Files map[string]contextFile `json:"files"`
 	}
 	if err := json.Unmarshal(raw, &r); err != nil {
-		return nil, fmt.Errorf("coverage json in %s: %w", relSlash(c.top, unit), err)
+		return nil, fmt.Errorf("coverage json in %s: %w", adapterkit.RelSlash(c.top, unit), err)
 	}
 	out := map[string]contextFile{}
 	for name, f := range r.Files {
 		if !filepath.IsAbs(name) {
 			name = filepath.Join(t.unit, name)
 		}
-		out[relSlash(t.tree, name)] = f
+		out[adapterkit.RelSlash(t.tree, name)] = f
 	}
 	return out, nil
 }
@@ -163,7 +163,7 @@ func (c runContext) baseline(unit string, t mutationTree, script string) (time.D
 		return 0, err
 	}
 	if code != 0 {
-		return 0, fmt.Errorf("the selected tests of %s fail before mutation (exit %d), so no mutant result would mean anything: %s", relSlash(c.top, unit), code, adapterkit.CapText(append(stdout, stderr...)))
+		return 0, fmt.Errorf("the selected tests of %s fail before mutation (exit %d), so no mutant result would mean anything: %s", adapterkit.RelSlash(c.top, unit), code, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	return time.Since(started), nil
 }
@@ -181,7 +181,7 @@ func (c runContext) cosmic(unit string, t mutationTree, name string, args ...str
 }
 
 func (c runContext) mutateFile(unit string, t mutationTree, i int, tg mutationTarget, ctx contextFile) ([]strykerMutant, string, error) {
-	treeRel := relSlash(c.top, filepath.Join(c.root, filepath.FromSlash(tg.rel)))
+	treeRel := adapterkit.RelSlash(c.top, filepath.Join(c.root, filepath.FromSlash(tg.rel)))
 	abs := filepath.Join(t.tree, filepath.FromSlash(treeRel))
 	orig, err := os.ReadFile(abs)
 	if err != nil {
@@ -213,7 +213,7 @@ func (c runContext) mutateFile(unit string, t mutationTree, i int, tg mutationTa
 	} else if err := os.WriteFile(script, []byte("exit 0\n"), 0o644); err != nil {
 		return nil, "", err
 	}
-	module := relSlash(t.unit, abs)
+	module := adapterkit.RelSlash(t.unit, abs)
 	cfg, session := filepath.Join(dir, "cosmic-ray.toml"), filepath.Join(dir, "session.sqlite")
 	if err := os.WriteFile(cfg, []byte(cosmicConfig(module, "sh "+shellQuote(script), timeout, tg.ranges)), 0o644); err != nil {
 		return nil, "", err
@@ -252,7 +252,7 @@ func (c runContext) mutateUnit(unit string, targets []mutationTarget, rep stryke
 		return "", err
 	}
 	for i, tg := range targets {
-		muts, source, err := c.mutateFile(unit, t, i, tg, ctxs[relSlash(c.top, filepath.Join(c.root, filepath.FromSlash(tg.rel)))])
+		muts, source, err := c.mutateFile(unit, t, i, tg, ctxs[adapterkit.RelSlash(c.top, filepath.Join(c.root, filepath.FromSlash(tg.rel)))])
 		if err != nil {
 			return "", err
 		}

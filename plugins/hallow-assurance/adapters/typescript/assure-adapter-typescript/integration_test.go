@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -54,7 +55,7 @@ func npmCI() (string, error) {
 	sum := sha256.Sum256(append(pkg, lock...))
 	dir := filepath.Join(os.TempDir(), fmt.Sprintf("assure-ts-integration-%x", sum[:6]))
 	modules := filepath.Join(dir, "node_modules")
-	if exists(filepath.Join(modules, ".package-lock.json")) {
+	if adapterkit.Exists(filepath.Join(modules, ".package-lock.json")) {
 		return modules, nil
 	}
 	tmp, err := os.MkdirTemp(os.TempDir(), "assure-ts-npm-*")
@@ -72,7 +73,7 @@ func npmCI() (string, error) {
 		return "", fmt.Errorf("%w\n%s", err, out)
 	}
 	if err := os.Rename(tmp, dir); err != nil {
-		if !errors.Is(err, fs.ErrExist) && !exists(modules) {
+		if !errors.Is(err, fs.ErrExist) && !adapterkit.Exists(modules) {
 			return "", err
 		}
 		_ = os.RemoveAll(tmp)

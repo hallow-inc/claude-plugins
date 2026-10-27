@@ -127,17 +127,17 @@ func ancestorFiles(top, ref, rel, dst string) error {
 // files at ref (a unit's tsconfig.json may extend one above it), and symlinks to the current
 // node_modules directories at the same relative positions so hoisted packages resolve.
 func baseTree(c runContext, unit, dst string) error {
-	if err := extractTree(c.top, c.ref, relSlash(c.top, unit), filepath.Join(dst, relSlash(c.top, unit))); err != nil {
+	if err := extractTree(c.top, c.ref, adapterkit.RelSlash(c.top, unit), filepath.Join(dst, adapterkit.RelSlash(c.top, unit))); err != nil {
 		return err
 	}
 	for dir := unit; ; dir = filepath.Dir(dir) {
-		rel := relSlash(c.top, dir)
+		rel := adapterkit.RelSlash(c.top, dir)
 		if dir != unit {
 			if err := ancestorFiles(c.top, c.ref, rel, dst); err != nil {
 				return err
 			}
 		}
-		if nm := filepath.Join(dir, "node_modules"); exists(nm) {
+		if nm := filepath.Join(dir, "node_modules"); adapterkit.Exists(nm) {
 			link := filepath.Join(dst, filepath.FromSlash(rel), "node_modules")
 			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 				return err
@@ -178,7 +178,7 @@ func overlayTests(root, baseRoot string, tests []string) error {
 func existing(root string, files []string) []string {
 	var out []string
 	for _, f := range files {
-		if p := filepath.Join(root, filepath.FromSlash(f)); exists(p) {
+		if p := filepath.Join(root, filepath.FromSlash(f)); adapterkit.Exists(p) {
 			out = append(out, p)
 		}
 	}
@@ -281,8 +281,8 @@ func unitFailOnBase(c runContext, unit, seed string) ([]adapterkit.XMLSuite, err
 	if err := baseTree(c, unit, dst); err != nil {
 		return nil, err
 	}
-	baseRoot := filepath.Join(dst, filepath.FromSlash(relSlash(c.top, c.root)))
-	baseUnit := filepath.Join(dst, filepath.FromSlash(relSlash(c.top, unit)))
+	baseRoot := filepath.Join(dst, filepath.FromSlash(adapterkit.RelSlash(c.top, c.root)))
+	baseUnit := filepath.Join(dst, filepath.FromSlash(adapterkit.RelSlash(c.top, unit)))
 	base, err := vitestList(baseUnit, bin, baseRoot, existing(baseRoot, tests))
 	if err != nil {
 		return nil, err

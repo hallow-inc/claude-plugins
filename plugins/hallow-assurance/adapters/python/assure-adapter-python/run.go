@@ -233,18 +233,18 @@ func (c runContext) pytest(dir, unit, junit, mapRoot, mapTop string, env []strin
 	switch code {
 	case 0, 1, 2, 5:
 	default:
-		return nil, nil, fmt.Errorf("pytest in %s exited %d: %s", relSlash(c.top, unit), code, adapterkit.CapText(output))
+		return nil, nil, fmt.Errorf("pytest in %s exited %d: %s", adapterkit.RelSlash(c.top, unit), code, adapterkit.CapText(output))
 	}
 	if code == 5 {
 		return []adapterkit.XMLSuite{}, output, nil
 	}
 	r, err := readPytestReport(junit)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pytest in %s exited %d without a readable report (%w): %s", relSlash(c.top, unit), code, err, adapterkit.CapText(output))
+		return nil, nil, fmt.Errorf("pytest in %s exited %d without a readable report (%w): %s", adapterkit.RelSlash(c.top, unit), code, err, adapterkit.CapText(output))
 	}
 	suites := toJUnit(mapRoot, mapTop, dir, r)
 	if code != 0 && !hasFailure(suites) {
-		return nil, nil, fmt.Errorf("pytest in %s exited %d with no failing test or collection error in its report: %s", relSlash(c.top, unit), code, adapterkit.CapText(output))
+		return nil, nil, fmt.Errorf("pytest in %s exited %d with no failing test or collection error in its report: %s", adapterkit.RelSlash(c.top, unit), code, adapterkit.CapText(output))
 	}
 	return suites, output, nil
 }

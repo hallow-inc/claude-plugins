@@ -67,11 +67,11 @@ func TestFuzzFilesMatchesSpec(t *testing.T) {
 		root := filepath.Join(top, filepath.FromSlash(rootRel))
 		var expect []string
 		for _, w := range want {
-			expect = append(expect, relSlash(root, filepath.Join(top, filepath.FromSlash(w))))
+			expect = append(expect, adapterkit.RelSlash(root, filepath.Join(top, filepath.FromSlash(w))))
 		}
 		slices.Sort(expect)
 		expect = slices.Compact(expect)
-		got := fuzzFiles(root, filepath.Join(top, filepath.FromSlash(unitRel)), relSlash(root, filepath.Join(top, filepath.FromSlash(src))))
+		got := fuzzFiles(root, filepath.Join(top, filepath.FromSlash(unitRel)), adapterkit.RelSlash(root, filepath.Join(top, filepath.FromSlash(src))))
 		if !slices.Equal(got, expect) {
 			t.Fatalf("fuzzFiles(%s in unit %s, root %s) = %q, want %q", src, unitRel, rootRel, got, expect)
 		}

@@ -45,11 +45,11 @@ func isTestModule(p string) bool {
 func selectChanged(python, root, baseRoot string, files []string) ([]selectedTest, []adapterkit.XMLCase, error) {
 	var head, base []string
 	for _, f := range files {
-		if !isTestModule(f) || !exists(filepath.Join(root, filepath.FromSlash(f))) {
+		if !isTestModule(f) || !adapterkit.Exists(filepath.Join(root, filepath.FromSlash(f))) {
 			continue
 		}
 		head = append(head, filepath.Join(root, filepath.FromSlash(f)))
-		if p := filepath.Join(baseRoot, filepath.FromSlash(f)); exists(p) {
+		if p := filepath.Join(baseRoot, filepath.FromSlash(f)); adapterkit.Exists(p) {
 			base = append(base, p)
 		}
 	}
@@ -181,7 +181,7 @@ func unitFailOnBase(c runContext, unit string) ([]adapterkit.XMLSuite, string, e
 	if err := baseTree(c.top, c.ref, unit, tree); err != nil {
 		return nil, "", err
 	}
-	baseRoot := filepath.Join(tree, filepath.FromSlash(relSlash(c.top, c.root)))
+	baseRoot := filepath.Join(tree, filepath.FromSlash(adapterkit.RelSlash(c.top, c.root)))
 	selected, unparsed, err := selectChanged(u.python, c.root, baseRoot, files)
 	if err != nil {
 		return nil, "", err
@@ -205,14 +205,14 @@ func unitFailOnBase(c runContext, unit string) ([]adapterkit.XMLSuite, string, e
 
 func runSelected(c runContext, unit, dst, baseRoot string, selected []selectedTest) ([]adapterkit.XMLSuite, string, error) {
 	tree := filepath.Join(dst, "tree")
-	baseUnit := filepath.Join(tree, filepath.FromSlash(relSlash(c.top, unit)))
+	baseUnit := filepath.Join(tree, filepath.FromSlash(adapterkit.RelSlash(c.top, unit)))
 	if msg, err := probeTree(c.units[unit].python, c.top, tree, baseUnit); err != nil || msg != "" {
 		return nil, msg, err
 	}
 	argsFile := filepath.Join(dst, "selected.args")
 	var files []string
 	for _, t := range selected {
-		files = append(files, relSlash(baseUnit, filepath.Join(baseRoot, filepath.FromSlash(t.file))))
+		files = append(files, adapterkit.RelSlash(baseUnit, filepath.Join(baseRoot, filepath.FromSlash(t.file))))
 	}
 	slices.Sort(files)
 	if err := os.WriteFile(argsFile, []byte(strings.Join(slices.Compact(files), "\n")+"\n"), 0o644); err != nil {

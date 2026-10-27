@@ -104,42 +104,22 @@ type lockfile struct {
 	untracked         bool
 }
 
-func relSlash(top, p string) string {
-	rel, err := filepath.Rel(top, p)
-	if err != nil {
-		return p
-	}
-	return filepath.ToSlash(rel)
-}
-
-func findUp(top, unit, rel string) (string, bool) {
-	for dir := unit; ; dir = filepath.Dir(dir) {
-		p := filepath.Join(dir, rel)
-		if exists(p) {
-			return p, true
-		}
-		if dir == top || filepath.Dir(dir) == dir {
-			return "", false
-		}
-	}
-}
-
 func findLockfile(top, unit string) (lockfile, error) {
-	p, ok := findUp(top, unit, "uv.lock")
+	p, ok := adapterkit.FindUp(top, unit, "uv.lock")
 	if !ok {
-		return lockfile{problem: fmt.Sprintf("no uv.lock in %s or any parent up to the git top-level; assure-adapter-python supports only uv projects, so the layout needs a committed uv.lock", relSlash(top, unit))}, nil
+		return lockfile{problem: fmt.Sprintf("no uv.lock in %s or any parent up to the git top-level; assure-adapter-python supports only uv projects, so the layout needs a committed uv.lock", adapterkit.RelSlash(top, unit))}, nil
 	}
 	dir := filepath.Dir(p)
 	for _, n := range foreignLockfiles {
-		if exists(filepath.Join(dir, n)) {
-			return lockfile{problem: fmt.Sprintf("%s sits beside uv.lock; assure-adapter-python supports only uv projects, so CI could not tell which install to reproduce", relSlash(top, filepath.Join(dir, n)))}, nil
+		if adapterkit.Exists(filepath.Join(dir, n)) {
+			return lockfile{problem: fmt.Sprintf("%s sits beside uv.lock; assure-adapter-python supports only uv projects, so CI could not tell which install to reproduce", adapterkit.RelSlash(top, filepath.Join(dir, n)))}, nil
 		}
 	}
 	tracked, err := adapterkit.GitPaths(dir, "ls-files", "uv.lock")
 	if err != nil {
 		return lockfile{}, err
 	}
-	return lockfile{dir: dir, rel: relSlash(top, p), untracked: !slices.Contains(tracked, "uv.lock")}, nil
+	return lockfile{dir: dir, rel: adapterkit.RelSlash(top, p), untracked: !slices.Contains(tracked, "uv.lock")}, nil
 }
 
 type venv struct {
@@ -153,21 +133,21 @@ func findVenv(top, unit string, lock lockfile) venv {
 		if !filepath.IsAbs(dir) {
 			dir = filepath.Join(lock.dir, dir)
 		}
-		if !exists(dir) {
-			return venv{absent: true, problem: fmt.Sprintf("UV_PROJECT_ENVIRONMENT names %s, which does not exist; run %s (in %s)", dir, installUv, relSlash(top, lock.dir))}
+		if !adapterkit.Exists(dir) {
+			return venv{absent: true, problem: fmt.Sprintf("UV_PROJECT_ENVIRONMENT names %s, which does not exist; run %s (in %s)", dir, installUv, adapterkit.RelSlash(top, lock.dir))}
 		}
 		return checkVenv(top, dir, lock)
 	}
-	dir, ok := findUp(top, unit, ".venv")
+	dir, ok := adapterkit.FindUp(top, unit, ".venv")
 	if !ok {
-		return venv{absent: true, problem: fmt.Sprintf("no .venv in %s or any parent up to the git top-level; run %s (in %s)", relSlash(top, unit), installUv, relSlash(top, lock.dir))}
+		return venv{absent: true, problem: fmt.Sprintf("no .venv in %s or any parent up to the git top-level; run %s (in %s)", adapterkit.RelSlash(top, unit), installUv, adapterkit.RelSlash(top, lock.dir))}
 	}
 	return checkVenv(top, dir, lock)
 }
 
 func checkVenv(top, dir string, lock lockfile) venv {
-	if !exists(filepath.Join(dir, "bin", "python")) {
-		return venv{problem: fmt.Sprintf("%s has no bin/python; run %s (in %s)", dir, installUv, relSlash(top, lock.dir))}
+	if !adapterkit.Exists(filepath.Join(dir, "bin", "python")) {
+		return venv{problem: fmt.Sprintf("%s has no bin/python; run %s (in %s)", dir, installUv, adapterkit.RelSlash(top, lock.dir))}
 	}
 	return venv{dir: dir}
 }
@@ -249,7 +229,7 @@ const (
 
 func resolveTool(top string, lock lockfile, site string, t pyTool) (resolved, resolution, string) {
 	fail := func(format string, args ...any) (resolved, resolution, string) {
-		return resolved{}, toolFailed, fmt.Sprintf("%s: %s; install with: %s (in %s)", t.name, fmt.Sprintf(format, args...), installUv, relSlash(top, lock.dir))
+		return resolved{}, toolFailed, fmt.Sprintf("%s: %s; install with: %s (in %s)", t.name, fmt.Sprintf(format, args...), installUv, adapterkit.RelSlash(top, lock.dir))
 	}
 	infos, err := distInfos(site, t.name)
 	if err != nil {
@@ -281,7 +261,7 @@ func resolveTool(top string, lock lockfile, site string, t pyTool) (resolved, re
 	venvDir := filepath.Dir(filepath.Dir(filepath.Dir(site)))
 	for _, b := range t.bins {
 		p := filepath.Join(venvDir, "bin", b)
-		if !exists(p) {
+		if !adapterkit.Exists(p) {
 			return fail("executable %s is missing from %s", b, filepath.Join(venvDir, "bin"))
 		}
 		r.bins[b] = p
@@ -312,7 +292,7 @@ func resolveEnvironment(top, unit string) (environment, string, error) {
 func resolveTools(top string, env environment, names []string) ([]resolved, string, error) {
 	site, err := sitePackages(env.venv)
 	if err != nil {
-		return nil, fmt.Sprintf("%v; run %s (in %s)", err, installUv, relSlash(top, env.lock.dir)), nil
+		return nil, fmt.Sprintf("%v; run %s (in %s)", err, installUv, adapterkit.RelSlash(top, env.lock.dir)), nil
 	}
 	var out []resolved
 	var problems []string
@@ -383,7 +363,7 @@ func listTools(root string) (toolsResponse, error) {
 	top = realPath(top)
 	unit, ok := unitOf(top, root)
 	if !ok {
-		return toolsEnvironment(fmt.Sprintf("%s has no pyproject.toml in it or any parent up to the git top-level; assure-adapter-python needs one to find its unit", relSlash(top, root))), nil
+		return toolsEnvironment(fmt.Sprintf("%s has no pyproject.toml in it or any parent up to the git top-level; assure-adapter-python needs one to find its unit", adapterkit.RelSlash(top, root))), nil
 	}
 	lock, err := findLockfile(top, unit)
 	if err != nil {
@@ -393,7 +373,7 @@ func listTools(root string) (toolsResponse, error) {
 		return toolsEnvironment(lock.problem), nil
 	}
 	if lock.dir != root {
-		return toolsEnvironment(fmt.Sprintf("the lockfile is %s, outside %s; run assure tools from %s so its install line runs where the lockfile is", lock.rel, relSlash(top, root), relSlash(top, lock.dir))), nil
+		return toolsEnvironment(fmt.Sprintf("the lockfile is %s, outside %s; run assure tools from %s so its install line runs where the lockfile is", lock.rel, adapterkit.RelSlash(top, root), adapterkit.RelSlash(top, lock.dir))), nil
 	}
 	if !onPath("uv") {
 		return toolsEnvironment(fmt.Sprintf("uv is not on PATH, so CI cannot run %s; pin uv in the repository's mise configuration", installUv)), nil
@@ -428,7 +408,7 @@ func installedTools(top, unit string, lock lockfile) ([]toolEntry, string) {
 	}
 	site, err := sitePackages(v.dir)
 	if err != nil {
-		return nil, fmt.Sprintf("%v; run %s (in %s)", err, installUv, relSlash(top, lock.dir))
+		return nil, fmt.Sprintf("%v; run %s (in %s)", err, installUv, adapterkit.RelSlash(top, lock.dir))
 	}
 	var problems []string
 	for _, t := range pyTools {
