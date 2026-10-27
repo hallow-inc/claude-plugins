@@ -130,26 +130,26 @@ func toolOutput(dir, name string, args ...string) (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 
-func gitLines(dir string, args ...string) ([]string, error) {
-	out, err := toolOutput(dir, "git", args...)
+func gitPaths(dir string, args ...string) ([]string, error) {
+	out, err := gitBytes(dir, append([]string{args[0], "-z"}, args[1:]...)...)
 	if err != nil {
 		return nil, err
 	}
-	var lines []string
-	for l := range strings.SplitSeq(out, "\n") {
-		if l != "" {
-			lines = append(lines, l)
+	var paths []string
+	for p := range strings.SplitSeq(string(out), "\x00") {
+		if p != "" {
+			paths = append(paths, p)
 		}
 	}
-	return lines, nil
+	return paths, nil
 }
 
 func changedPaths(root, ref string) ([]string, error) {
-	diff, err := gitLines(root, "diff", "--name-only", "--relative", ref, "--")
+	diff, err := gitPaths(root, "diff", "--name-only", "--relative", ref, "--")
 	if err != nil {
 		return nil, err
 	}
-	untracked, err := gitLines(root, "ls-files", "--others", "--exclude-standard")
+	untracked, err := gitPaths(root, "ls-files", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, err
 	}

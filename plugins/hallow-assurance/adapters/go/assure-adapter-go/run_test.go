@@ -164,6 +164,36 @@ func TestChangedPackageSelection(t *testing.T) {
 	})
 }
 
+func isolateGitConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
+func TestTrackedNonASCIIFileSelectsItsPackage(t *testing.T) {
+	isolateGitConfig(t)
+	for _, name := range []string{"cafe.go", "café.go"} {
+		dir := committedModule(t, map[string]string{"p/" + name: "package p\n"})
+		writeFiles(t, dir, map[string]string{"p/" + name: "package p\n\nvar X = 1\n"})
+		want := map[string][]string{".": {"./p"}}
+		if got := selection(t, dir); !reflect.DeepEqual(got, want) {
+			t.Fatalf("modified %s: got %v, want %v; git's default core.quotePath prints this name quoted in diff output, and a quoted name that is not decoded drops its package from selection, silently skipping its tests", name, got, want)
+		}
+	}
+}
+
+func TestUntrackedNonASCIIFileSelectsItsPackage(t *testing.T) {
+	isolateGitConfig(t)
+	for _, name := range []string{"cafe.go", "café.go"} {
+		dir := committedModule(t, map[string]string{"README.md": "x\n"})
+		writeFiles(t, dir, map[string]string{"p/" + name: "package p\n"})
+		want := map[string][]string{".": {"./p"}}
+		if got := selection(t, dir); !reflect.DeepEqual(got, want) {
+			t.Fatalf("untracked %s: got %v, want %v; git's default core.quotePath prints this name quoted in ls-files output, and a quoted name that is not decoded drops its package from selection, silently skipping its tests", name, got, want)
+		}
+	}
+}
+
 func runIn(t *testing.T, dir string, args ...string) (runResponse, string, int) {
 	t.Helper()
 	resp, _, stderr, code := runRawIn(t, dir, args...)

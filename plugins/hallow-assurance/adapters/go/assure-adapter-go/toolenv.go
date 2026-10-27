@@ -103,7 +103,7 @@ func trackedAmong(top string, rels []string) (map[string]bool, error) {
 	if len(rels) == 0 {
 		return out, nil
 	}
-	lines, err := gitLines(top, append([]string{"ls-files", "--"}, rels...)...)
+	lines, err := gitPaths(top, append([]string{"ls-files", "--"}, rels...)...)
 	if err != nil {
 		return nil, err
 	}
