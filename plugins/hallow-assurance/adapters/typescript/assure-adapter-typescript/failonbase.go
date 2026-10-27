@@ -1,13 +1,10 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -97,42 +94,7 @@ func extractTree(top, ref, rel, dst string) error {
 	if err != nil {
 		return err
 	}
-	tr := tar.NewReader(bytes.NewReader(data))
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !filepath.IsLocal(h.Name) {
-			return fmt.Errorf("git archive: unsafe path %q", h.Name)
-		}
-		target := filepath.Join(dst, filepath.FromSlash(h.Name))
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := writeFrom(target, tr, h.Size); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func writeFrom(target string, r io.Reader, size int64) error {
-	f, err := os.Create(target)
-	if err != nil {
-		return err
-	}
-	_, err = io.CopyN(f, r, size)
-	return errors.Join(err, f.Close())
+	return adapterkit.ExtractTar(data, dst)
 }
 
 func ancestorFiles(top, ref, rel, dst string) error {

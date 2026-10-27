@@ -1,12 +1,9 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,49 +29,7 @@ func extractTree(top, ref, rel, dst string) error {
 	if err != nil {
 		return err
 	}
-	tr := tar.NewReader(bytes.NewReader(data))
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if !filepath.IsLocal(h.Name) {
-			return fmt.Errorf("git archive: unsafe path %q", h.Name)
-		}
-		target := filepath.Join(dst, filepath.FromSlash(h.Name))
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := writeFrom(target, tr, h.Size, h.FileInfo().Mode().Perm()); err != nil {
-				return err
-			}
-		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			if err := os.Symlink(h.Linkname, target); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func writeFrom(target string, r io.Reader, size int64, perm os.FileMode) error {
-	f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	_, err = io.CopyN(f, r, size)
-	return errors.Join(err, f.Close())
+	return adapterkit.ExtractTar(data, dst)
 }
 
 func ancestorFiles(top, ref, rel, dst string) error {
