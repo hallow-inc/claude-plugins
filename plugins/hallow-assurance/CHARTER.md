@@ -1,6 +1,6 @@
 # hallow-assurance — Charter & Build Outline
 
-> Owner: Brandon · Status: **Draft v0** · Last updated: 2026-10-05
+> Owner: Brandon · Status: **Draft v0** · Last updated: 2026-10-27
 >
 > This document is the source of truth for what we're building and why. Design decisions that
 > contradict it need a charter change first. Items marked `TODO(decide)` are open decisions.
@@ -12,8 +12,9 @@
 ## Purpose
 
 Give every Hallow codebase, in any language, a consistent and enforceable way to verify software in
-proportion to how much its failure matters, and make coding agents operate inside those rules
-rather than around them.
+proportion to how much its failure matters, and help coding agents meet that bar while they work.
+It verifies the code through tests, mutation, fuzzing, and Lean proofs; it does not restrict who
+edits what.
 
 It is inspired by RTCA DO-178B (criticality levels, objectives tables, structural coverage
 resolution, tool qualification), NASA NPR 7150.2D (software classes, tailoring with rationale),
@@ -26,17 +27,17 @@ model**, not their paperwork.
 ## What we're building
 
 1. **`assure`** — a Go CLI and deterministic evaluator. Reads a repo's manifest, a versioned
-   objectives catalog, normalized evidence, waivers, and provenance; decides pass/fail per
-   objective.
+   objectives catalog, normalized evidence, waivers, and coverage resolutions; decides pass/fail
+   per objective.
 2. **Language adapters** — external executables (`assure-adapter-<lang>`) speaking a small JSON
    protocol. They classify files, run tools, and emit normalized evidence. They never decide
    pass/fail.
 3. **An objectives catalog** — language-neutral objectives (our Annex A), each with the levels it
    applies at, evidence type, thresholds, and per-language
    implementations or declared alternatives.
-4. **A Claude Code plugin** (`hallow-assurance`) — hooks, subagents, skills, and commands that make
-   agents follow the framework during development. Distributed through the existing Hallow plugin
-   marketplace.
+4. **A Claude Code plugin** (`hallow-assurance`) — two hooks, optional subagents, and skills that
+   tell an agent what the framework expects at session start and check its work before it stops.
+   Distributed through the existing Hallow plugin marketplace.
 
 ## Design invariants (non-negotiable)
 
@@ -44,24 +45,20 @@ model**, not their paperwork.
    Adding a language must require zero changes to the plugin or the core.
 2. **Pass/fail is deterministic.** No LLM participates in any gate decision. Model judgment may
    produce findings (inspections) but never verdicts.
-3. **The repo chooses its authority.** With `authority: ci` in the manifest, or a `human_review`
-   key and no `authority`, the CI run is the
-   verdict and hooks are early warning; CI reruns everything. Otherwise (the default) the
-   developer's local `assure evaluate` is the verdict, and every report says it is self-attested.
-   A developer can adopt hallow-assurance alone, without the team or project adopting it.
+3. **CI reruns everything.** `assure evaluate` decides the same way on a laptop and in CI, and the
+   hooks are early warning. A repo that makes the `assure-gate` job a required check gets its
+   verdict from a machine the agent cannot write to. A developer can adopt hallow-assurance alone,
+   without the team or project adopting it.
 4. **Adapters emit evidence; the evaluator decides.** No thresholds live in adapters.
 5. **Fail closed.** Missing or malformed evidence fails the objective unless a valid waiver covers it.
-6. **Agents cannot move the goalposts.** Agents may not edit the catalog, thresholds, manifest
-   levels, waivers, provenance, formal-model challenge files, or gate config. Enforced
-   locally by `assure guard` and the Stop drift check. `assure evaluate` reports every
-   protected-file change; under `authority: ci`, at
-   levels the base manifest marks `human_review: required`, it also needs an approving review from
-   someone other than the PR author. Review is optional by default: the framework checks the
-   software, not the developer.
+6. **The gate measures the code, not the developer.** Nothing restricts who edits what. A weakened
+   test still has to survive the objectives: mutation, not coverage, is the quality signal on
+   changed code; a fix's tests must fail on the base commit; an expired waiver fails evaluation.
+   An edit to the catalog, a threshold, a waiver, or the manifest shows in the PR diff.
 7. **Every objective is computable from evidence.** If a check can't be computed, it doesn't belong
    in the catalog.
 8. **Reproducible.** Every result is tied to a commit SHA and toolchain versions.
-9. **Hooks are fast.** Per-edit hooks < 3s p95. Stop-hook fast check < 2 min p95 on the pilot repo.
+9. **Hooks are fast.** SessionStart < 3s p95. Stop-hook fast check < 2 min p95 on the pilot repo.
 10. **Standard formats first.** JUnit XML, LCOV/Cobertura, and the Stryker
     mutation-testing-report schema before anything custom.
 
@@ -69,12 +66,11 @@ model**, not their paperwork.
 
 In scope:
 
-- `assure` CLI: `classify`, `context`, `guard`, `lint`, `check`, `evaluate`, `hook`, `record`,
-  `explain`
-- Manifest, catalog, waiver, provenance, evidence-index, and adapter-protocol schemas
+- `assure` CLI: `check`, `classify`, `context`, `evaluate`, `hook`, `init`, `reference`, `tools`
+- Manifest, catalog, waiver, coverage-resolution, report, stop-state, and adapter-protocol schemas
 - Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test), Python adapter (v1,
   M6a), Lean adapter (v1, staged M7a–c)
-- Claude Code plugin: hooks, three subagents, skills, commands
+- Claude Code plugin: SessionStart and Stop hooks, three optional subagents, skills
 - CI integration: required status check, PR report, nightly runs
 - Tool qualification fixtures (seeded-bug repos) for each adapter
 - Pilot: the Hallow AI repo (Go)
@@ -88,6 +84,8 @@ In scope:
 - Supporting agent harnesses other than Claude Code in the plugin (the CLI and evaluator stay
   harness-neutral, so others can integrate later)
 - A Rust adapter
+- Restricting or attesting who edits what: edit-blocking hooks, protected files, edit records, and review
+  approvals were built and then removed in #48 (`drop-policing`)
 - Code-shape rules (lint, complexity, unsafe use, dropped errors). `assure` judges behaviour
   evidence and the integrity of that evidence, never how code is written; the adopting repo's own
   lint owns code shape.
@@ -97,15 +95,13 @@ In scope:
 v0 (pilot, report-only):
 
 - Pilot repo runs `assure check` locally via hooks and `assure evaluate` in CI
-- Agents are blocked from editing protected files and from stopping with failing fast checks
+- Agents are blocked from stopping with failing fast checks
 - p95 hook latencies within invariant 9
 
 v1:
 
 - `assure evaluate` is a required check on the pilot repo, blocking on levels A–B
 - The TypeScript adapter ships with **zero** diffs to `plugin/` and `internal/core/`
-- Verifier independence verified from provenance on every PR touching level A–B code in a repo with
-  `provenance: true`
 - Each adapter passes its qualification fixtures in CI
 - Within six weeks of blocking mode: at least a few real bugs attributed to framework layers
   (`found-by:*` labels), mutation efficacy on changed code trending up, test count flat or down
@@ -115,7 +111,7 @@ v1:
 | Risk | Mitigation |
 |---|---|
 | Claude Code hook schema changes | All hook I/O goes through one `assure hook <event>` entrypoint that parses stdin; the rest of the CLI never sees hook JSON. Contract tests against recorded hook payloads. |
-| Agents gaming gates | Invariant 6; guard protects `.assure/`; CI reruns; mutation (not coverage) as the quality signal |
+| Agents gaming gates | Invariants 3 and 6: CI reruns everything; mutation (not coverage) as the quality signal; fix tests fail on base; expired waivers fail; catalog, threshold, and waiver edits show in the PR diff |
 | Stop-hook loops and cost | Retry cap in `.assure/state/`, honor the hook's stop-active flag, escalate to human after N attempts |
 | Rule-pack false positives cause suppression fatigue | New rules ship advisory for one catalog version before becoming required |
 | Mutation tooling maturity (esp. Go) | Adapter qualification fixtures; mutation starts advisory at level C |
@@ -130,7 +126,7 @@ v1:
 
 Lives at `plugins/hallow-assurance/` inside the `hallow-claude-plugins` marketplace repo. OpenSpec
 changes and specs live in that repo's root `openspec/`; the marketplace entry's `source` points at
-`./plugins/hallow-assurance/plugin`. CI for invariant 6 is that repo's.
+`./plugins/hallow-assurance/plugin`. CI for invariant 3 is that repo's.
 
 ```
 plugins/hallow-assurance/
@@ -145,7 +141,7 @@ plugins/hallow-assurance/
     hookio/                      # ONLY place that knows Claude Code hook JSON
     evidence/                    # parsers: JUnit, LCOV, mutation report
     adapterproto/                # adapter protocol client
-    provenance/
+    adapterkit/                  # helpers the adapters share: git, tool runs, tar, JUnit
   adapters/
     go/assure-adapter-go/        # assure-adapter-go (separate binary; dir named after the binary)
     typescript/…                 # assure-adapter-typescript (v1)
@@ -264,63 +260,6 @@ Each added line with zero hits must fall in a function that has a resolution. Re
 function name, never the line, and do not expire; one whose function is gone is reported as
 removable. "Verdict" is reserved for gate decisions (invariant 2).
 
-**Provenance** — `.assure/provenance/<session_id>.jsonl`, one committed file per session
-(append-only, written only by `assure record`; protected from agent edits):
-
-```json
-{"v":0,"session":"7f3a2c9e","agent_type":"hallow-assurance:verifier","agent_id":"a4d2c8f1e0b3a297","tool":"Edit","path":"internal/chat/stream_test.go","role":"test","pre":"9f2c3b1d0e7a6f5c4b3a29180716253443526170","post":"a41e5d6c7b8a99887766554433221100ffeeddcc"}
-```
-
-`pre` is the file's blob hash (`git hash-object --path`) captured by the PreToolUse hook after guard
-allows the call, held in `.assure/state/pending/<session>/<tool_use_id>.json`; `post` is captured by
-`record` at PostToolUse, which appends the record and deletes the pending entry. `null` means
-absent / deleted. Renames are delete + create. The Stop drift snapshot excludes
-`.assure/provenance/`, because `record` appends to it mid-session; CI's append-only check covers it.
-
-Provenance is opt-in: the manifest key `provenance: true` turns it on, and absent means off. Off,
-the hooks write no pending entry and no record, and `assure record` exits 0. CI reads the key from
-the manifest at the base ref, like `human_review`, so a PR cannot switch off its own check; with no
-manifest there, or the key off, IND-VERIFIER-DISTINCT is not applicable and is absent from the
-report. Existing `.assure/provenance/` files are ignored when off and stay excluded from
-CFG-PROTECTED either way. `guard`'s role rules apply whatever the key says.
-
-Threat model: a shortcut-taking agent (edits tests while implementing, edits through Bash), not a
-forging one. Any agent running as the developer's OS user can reach every local secret, so local
-provenance is detective, never preventive; only `authority: ci` puts the verdict on a machine the
-agent cannot write to. `guard` sees only file tools, so with
-provenance off an edit through Bash goes undetected.
-
-CI check, per changed file in a level A–B component: the records must form an unbroken blob chain
-`merge-base blob → pre→post → … → final blob`. Order comes from the hash links, not timestamps. Any
-break is a **gap**: unattributed, never assumed human. At a review-required level, a gap fails
-IND-VERIFIER-DISTINCT for that file unless the PR has an approving review from someone other than
-the PR author. Gaps where the file also changed on the base branch are merge-shaped; counting them
-to decide whether a 3-way check is worth building is not built yet. CI also checks that a PR only appends to existing session files.
-
-Any non-author approval counts; there is no approver list. GitHub rejects an author's approval of
-their own PR, so an agent running on the author's credentials cannot produce one. The PR template
-lists what a reviewer is attesting to. `assure reviews --pr <n>` writes the reviews file
-`{author, head, reviews:[{login, state, commit}]}` from the GitHub API through `gh`, and
-`assure evaluate --reviews <file>` reads it, so the evaluator stays offline and a local run uses the
-same two commands as CI. An approval counts only when it is the reviewer's latest review and was made on `head`.
-
-Review is optional at every level unless the manifest sets `human_review: {A|B|C|D: required}`; a
-base ref with no manifest uses the default. At review-optional levels, gaps and protected-file
-changes pass and are listed as unreviewed; role violations, `agent_id` conflicts, and rewritten
-provenance still fail. The value is read from the manifest at the base ref, so a PR cannot relax
-its own gate.
-
-Independence (computed by the evaluator from provenance chains, the same rule at levels A and B):
-test-role files' chains are written only by verifier-side agent types (`verifier`, `pruner`: the
-pruner edits tests and is not the code's author); source- and config-role files never by them;
-unclassified files (fixtures) by either; distinct `agent_id` (the main thread is its own identity).
-`human_review` alone decides where a non-author approval is also needed. A model reviewer is not
-code verification and never counts.
-
-`guard` denies main-thread (no `agent_type`) edits to test-role files in level A–B components, with
-a message to spawn `hallow-assurance:verifier`, so the independence failure surfaces at edit time rather
-than in CI.
-
 **Adapter protocol v0** — subprocess, JSON on stdin/stdout:
 
 ```
@@ -385,49 +324,31 @@ from stdin, calls the relevant core function, and translates the result into exi
 output.
 
 Claude Code treats a hook timeout, a missing binary (exit 127), and any exit code other than 0 or 2
-as non-blocking. The local guard is therefore best-effort; under `authority: ci`, CI (invariant 3) is the
-enforcement, and under `authority: local` the guard and the Stop drift check are the only barriers. To
-keep local behavior as close to fail-closed as the harness allows:
+as non-blocking, so the hooks are early warning and CI is the check that cannot be skipped
+(invariant 3). Only Stop blocks; no hook denies an edit.
 
-- The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted) and exits 2 when
-  `assure` is missing or `assure hook protocol` prints a different hook-protocol number than the
-  shim expects. The shim checks a protocol number rather than a release version, because a build
-  from a commit SHA or a checkout carries a pseudo-version yet speaks its tag's protocol; its install
-  advice is the `go install …/...@v<version>` line built from `plugin.json`. The hook protocol is 2: M4b added the `subagent-stop` event, which an older
-  `assure` would reject with exit 2 and so block every subagent stop. For `stop` and `subagent-stop`
-  the shim allows with a `systemMessage` instead, because the agent cannot fix the install.
-- `internal/hookio` recovers from every internal error and emits a deny/block decision.
-- Every hook declares an explicit `timeout`; `guard` is a pure in-memory decision. It reads file
-  roles from each adapter's `describe` globs, cached in `.assure/state/adapters.json` and keyed by
-  the adapter executable's SHA-256, so no adapter runs at edit time while the cache is fresh.
-- Edits made through Bash bypass the `Edit|Write` matcher. SessionStart records hashes of protected
-  files in `.assure/state/`; the Stop check blocks on any drift. CI checks the PR diff the same way.
-  SessionStart also fires on `clear` and `compact`, so it never replaces a session's existing
-  snapshot.
-- `.claude/settings.json` and `.claude/settings.local.json` under the manifest root are protected by
-  `internal/hookio` in addition to the manifest's set, because editing them can disable the hooks.
-  They live in `hookio` because they are Claude Code concepts; the core stays harness-neutral.
-- The manifest is resolved from `tool_input.file_path` / `cwd`, not `CLAUDE_PROJECT_DIR`, which stays
-  at the session root inside worktrees.
+- The shim exits 0 when no `assurance.yaml` is found above `cwd` (repo not adopted). When `assure`
+  is missing or `assure hook protocol` prints a different hook-protocol number than the shim
+  expects, it prints install advice as a `systemMessage` and exits 0 for every event, because the
+  agent cannot fix the install. The shim checks a protocol number rather than a release version,
+  because a build from a commit SHA or a checkout carries a pseudo-version yet speaks its tag's
+  protocol; its install advice is the `go install …/...@v<version>` line built from `plugin.json`.
+  The hook protocol is 3: #48 removed the PreToolUse, PostToolUse, and SubagentStop events.
+- `internal/hookio` recovers from every internal error in the Stop hook and emits a block decision.
+- Every hook declares an explicit `timeout`. File roles come from each adapter's `describe` globs,
+  cached in `.assure/state/adapters.json` and keyed by the adapter executable's SHA-256.
+- The manifest is resolved from `cwd`, not `CLAUDE_PROJECT_DIR`, which stays at the session root
+  inside worktrees.
 
 | Event | Matcher | Calls | Effect |
 |---|---|---|---|
 | SessionStart | – | `context` | Injects level map + applicable objectives for the working area |
-| SessionStart | – | `guard --snapshot` | Records protected-file hashes for the Stop drift check |
-| PreToolUse | `Edit\|Write\|NotebookEdit` | `guard` | Blocks protected files; enforces subagent role rules keyed on the hook input's `agent_type` (e.g. verifier can't edit source) |
-| PostToolUse | `Edit\|Write\|NotebookEdit` | `record` | With `provenance: true`, appends provenance (never blocks; a failure is a CI gap); otherwise silent |
-| Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail or protected files drifted; retry cap (own counter + `stop_hook_active`) then escalate |
-| SubagentStop | `^hallow-assurance:verifier$` | `check --role verifier` | Verifier must leave passing tests (`VER-TESTS-PASS` only) |
+| Stop | – | `check --changed --fast` | Blocks stopping while fast objectives fail; retry cap (own counter + `stop_hook_active`) then escalate |
 
-Plugin subagent names are plugin-scoped (`hallow-assurance:verifier`), so the SubagentStop matcher is
-an anchored regex; an unanchored `verifier` never matches.
-
-Subagents: **implementer** (source only), **verifier** (tests/fuzz/properties only),
-**pruner** (deletes/merges tests, must cite mutation report).
-
-Role rules are enforced by `guard`, keyed on the `agent_type` field that PreToolUse carries for
-subagent tool calls. Claude Code ignores `hooks` and `permissionMode` in plugin subagent frontmatter,
-so frontmatter cannot enforce roles; `tools` / `disallowedTools` stay as defense-in-depth.
+Subagents are optional helpers with no enforcement behind their roles: **implementer** (source),
+**verifier** (tests/fuzz/properties), **pruner** (deletes/merges tests, cites the mutation report).
+Using them keeps tests written by someone other than the code's author; nothing checks that they
+were used.
 
 Skills: one generic `assure-testing` skill (philosophy, fail-first loop, coverage resolutions,
 how to read `assure` output, designing for deterministic simulation, formal model + differential
@@ -456,6 +377,7 @@ never reassigned, and new work takes a letter suffix.
 - ✅ Property tests: any generated path under a protected glob is denied; any generated
   (agent_type, path role) pair gets the decision the role table specifies. Example tests only for
   named regressions.
+- The guard, protected paths, and role rules were removed in #48 (`drop-policing`)
 
 **M2 — Plugin v0 (report-only pilot)**
 - `internal/hookio` + `assure hook` with contract tests against recorded payloads
@@ -467,6 +389,7 @@ never reassigned, and new work takes a letter suffix.
 - Install in the pilot repo (this repo first), report-only in CI
 - ✅ Latency within invariant 9 on the pilot repo
 - ✅ Manual session: agent edits a protected file → blocked; agent stops with failing test → blocked
+- The PreToolUse guard and the Stop drift check were removed in #48 (`drop-policing`)
 
 **M3a — Evaluator, waivers, baseline**
 - JUnit keeps failure text; SARIF results carry an optional numeric `properties.metric`
@@ -500,6 +423,9 @@ never reassigned, and new work takes a letter suffix.
 - ✅ Evaluator rejects a PR where implementer == verifier on level B code
 - Provenance became opt-in in M4c (`provenance-opt-in`); the record and independence check above run
   only with `provenance: true`
+- Role rules, provenance, `assure record`, IND-VERIFIER-DISTINCT, CFG-PROTECTED, `--reviews`,
+  `human_review`, and the SubagentStop check were removed in #48 (`drop-policing`); the three
+  subagents remain as optional helpers
 
 **M4b — Skills, commands**
 - `assure-testing` skill + Go reference embedded in the adapter (`describe` names it); `/hallow-assurance:*` commands
@@ -517,6 +443,7 @@ never reassigned, and new work takes a letter suffix.
   IND-VERIFIER-DISTINCT is not applicable, read from the base manifest
 - `assure-init`: `assure init` prints an annotated manifest template to stdout (every key with its allowed values and default, objectives per level from the catalog, `languages` from the adapters on `PATH`) and writes no file. Suggesting packages and `inputs: true` candidates is not built yet. It never proposes `formal:` values
 - ✅ `hello-world-bfree/g` adopts at level B with no second reviewer and no `human_review` key
+- `assure reviews`, `human_review`, and `provenance` were removed in #48 (`drop-policing`)
 
 **M4d — Evidence loops**
 - `fuzz-crasher-loop`: a nightly fuzz crasher becomes a committed seed and a
@@ -591,8 +518,8 @@ stays authoritative) once a stable Go implementation and JSON mapping exist.
   human with a `systemMessage`. It sits under Claude Code's own 8-block cap, so the escalation
   message always comes from `assure`. M4 (`stop-hook-no-dead-loops`): the cap also counts blocks
   per failure fingerprint for the whole session, so an unchanged failure stops blocking after 3
-  even across prompts; failures outside the agent's reach (missing snapshot, adapter that cannot
-  start, `assure` itself missing) allow the stop with a `systemMessage` on the first attempt.
+  even across prompts; failures outside the agent's reach (adapter that cannot start, `assure`
+  itself missing) allow the stop with a `systemMessage` on the first attempt.
 - `TODO(decide)` Whether FM-LINK + FM-COMPLETE may substitute for VER-MUTATION-CHANGED at level A
   (`alternative_for`). Leaning no for v1.
 
