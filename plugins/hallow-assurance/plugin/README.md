@@ -94,6 +94,27 @@ If `assure` is missing or speaks a different hook protocol than the plugin, Sess
 show you a message giving the `go install` line for the plugin's version and block nothing, because
 the agent cannot fix the install.
 
+### Building from a clone
+
+Changes merged since the last tag reach you only from a clone. At v0.2.0 that includes the Python
+adapter and `assure init`. Install `assure` and every adapter from the module root:
+
+```sh
+cd plugins/hallow-assurance
+go install ./...
+```
+
+`go install` writes to `go env GOBIN`, or to `$(go env GOPATH)/bin` when `GOBIN` is unset. If
+`which -a assure` shows a different `assure` earlier on `PATH`, the old binary keeps running. Set
+`GOBIN` to that earlier directory:
+
+```sh
+GOBIN="$HOME/go/bin" go install ./...
+```
+
+Check that `PATH` finds the adapter for each language the manifest lists, such as
+`which assure-adapter-python`. `assure init` lists the adapters it found in its `languages:` line.
+
 ### Upgrading from v0.1.x
 
 v0.2.0 removes the edit guard, protected files, provenance, and reviews. Before upgrading:
