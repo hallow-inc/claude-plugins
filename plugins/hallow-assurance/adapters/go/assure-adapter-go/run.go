@@ -89,7 +89,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if !onPath("go") {
 		return environment("go is not on PATH; install the Go toolchain go.mod selects"), nil
 	}
-	v, err := toolOutput(root, "go", "env", "GOVERSION")
+	v, err := adapterkit.ToolOutput(root, "go", "env", "GOVERSION")
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -117,19 +117,6 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 
 func environment(msg string) runResponse {
 	return runResponse{Protocol: 2, Evidence: []evidence{}, ToolVersions: map[string]string{}, PinnedBy: map[string]string{}, Environment: &environmentMessage{Message: msg}}
-}
-
-func toolOutput(dir, name string, args ...string) (string, error) {
-	if _, err := exec.LookPath(name); err != nil {
-		return "", fmt.Errorf("%s not found on PATH", name)
-	}
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(b)), nil
 }
 
 func ignoredByGo(p string) bool {

@@ -103,11 +103,11 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 	if !onPath("node") {
 		return environment("node is not on PATH; install the Node version the repository's CI uses"), nil
 	}
-	nodeVersion, err := toolOutput(c.root, "node", "--version")
+	nodeVersion, err := adapterkit.ToolOutput(c.root, "node", "--version")
 	if err != nil {
 		return runResponse{}, err
 	}
-	top, err := gitOutput(c.root, "rev-parse", "--show-toplevel")
+	top, err := adapterkit.ToolOutput(c.root, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -169,16 +169,6 @@ func (c *runContext) resolveUnits(obj string) (runResponse, string, error) {
 func onPath(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
-}
-
-func toolOutput(dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), name, args...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(b)), nil
 }
 
 func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int, err error) {

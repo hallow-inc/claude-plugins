@@ -3,14 +3,12 @@ package main
 import (
 	"bufio"
 	"cmp"
-	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -288,19 +286,6 @@ func realPath(p string) string {
 	return p
 }
 
-func gitOutput(dir string, args ...string) (string, error) {
-	if _, err := exec.LookPath("git"); err != nil {
-		return "", fmt.Errorf("git not found on PATH")
-	}
-	cmd := exec.CommandContext(context.Background(), "git", args...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-
 func toolsEnvironment(msg string) toolsResponse {
 	return toolsResponse{Protocol: 2, Tools: []toolEntry{}, Environment: &environmentMessage{Message: msg}}
 }
@@ -311,7 +296,7 @@ func listTools(root string) (toolsResponse, error) {
 		return toolsResponse{}, err
 	}
 	root = realPath(root)
-	top, err := gitOutput(root, "rev-parse", "--show-toplevel")
+	top, err := adapterkit.ToolOutput(root, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return toolsResponse{}, err
 	}
@@ -383,7 +368,7 @@ func seedFrom(sha string) (string, error) {
 }
 
 func assureSeed(root string) (string, error) {
-	sha, err := gitOutput(root, "rev-parse", "HEAD")
+	sha, err := adapterkit.ToolOutput(root, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}

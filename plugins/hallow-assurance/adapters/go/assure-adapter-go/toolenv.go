@@ -47,7 +47,7 @@ func gatherProbe(root string) (probe, error) {
 	if err != nil {
 		return probe{}, err
 	}
-	top, err := toolOutput(root, "git", "rev-parse", "--show-toplevel")
+	top, err := adapterkit.ToolOutput(root, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return probe{}, err
 	}
@@ -123,7 +123,7 @@ func foundVersion(name string) (string, error) {
 	case "gremlins":
 		return gremlinsVersion()
 	default:
-		return toolOutput(".", name, "version", "--short")
+		return adapterkit.ToolOutput(".", name, "version", "--short")
 	}
 }
 

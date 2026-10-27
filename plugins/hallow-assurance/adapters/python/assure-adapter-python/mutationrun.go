@@ -32,7 +32,7 @@ func mutationTargets(c runContext, unit string) ([]mutationTarget, error) {
 		if !slices.Contains(tracked, f) {
 			continue
 		}
-		diff, err := gitOutput(c.root, "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", c.ref, "--", f)
+		diff, err := adapterkit.ToolOutput(c.root, "git", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", c.ref, "--", f)
 		if err != nil {
 			return nil, err
 		}

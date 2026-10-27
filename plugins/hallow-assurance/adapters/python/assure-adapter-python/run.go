@@ -105,7 +105,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return runResponse{}, err
 	}
 	c := runContext{root: realPath(wd), ref: ref, out: out, units: map[string]unitEnv{}}
-	top, err := gitOutput(c.root, "rev-parse", "--show-toplevel")
+	top, err := adapterkit.ToolOutput(c.root, "git", "rev-parse", "--show-toplevel")
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -184,7 +184,7 @@ func (c *runContext) resolveUnits(obj string) (runResponse, string, error) {
 			return runResponse{}, msg, err
 		}
 		u := unitEnv{environment: env, python: filepath.Join(env.venv, "bin", "python"), tools: map[string]resolved{}}
-		version, err := toolOutput(unit, u.python, "--version")
+		version, err := adapterkit.ToolOutput(unit, u.python, "--version")
 		if err != nil {
 			return runResponse{}, "", err
 		}
@@ -201,16 +201,6 @@ func (c *runContext) resolveUnits(obj string) (runResponse, string, error) {
 	}
 	slices.Sort(resp.Untracked)
 	return resp, "", nil
-}
-
-func toolOutput(dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), name, args...)
-	cmd.Dir = dir
-	b, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(b)), nil
 }
 
 func runToolEnv(dir string, env []string, name string, args ...string) (stdout, stderr []byte, code int, err error) {

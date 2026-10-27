@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
@@ -50,7 +51,7 @@ func mutateEntries(c runContext, unit string) ([]string, error) {
 		if role != "source" {
 			continue
 		}
-		diff, err := gitOutput(c.root, "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", c.ref, "--", f)
+		diff, err := adapterkit.ToolOutput(c.root, "git", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", c.ref, "--", f)
 		if err != nil {
 			return nil, err
 		}
