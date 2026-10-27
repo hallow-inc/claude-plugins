@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 type coverFunc struct {
@@ -42,7 +44,7 @@ func listPackages(modDir string, pkgs []string) ([]goPackage, error) {
 		return nil, err
 	}
 	if code != 0 {
-		return nil, fmt.Errorf("go list in %s: exit %d: %s", modDir, code, capText(stderr))
+		return nil, fmt.Errorf("go list in %s: exit %d: %s", modDir, code, adapterkit.CapText(stderr))
 	}
 	var out []goPackage
 	for l := range strings.SplitSeq(strings.TrimSpace(string(stdout)), "\n") {
@@ -232,7 +234,7 @@ func moduleCoverage(root, mod, seed, tmp string, pkgs []string) ([]coverFile, er
 	}
 	data, rerr := os.ReadFile(profile)
 	if rerr != nil {
-		return nil, fmt.Errorf("go test -coverprofile in %s wrote no profile: %w\n%s", modDir, rerr, capText(log))
+		return nil, fmt.Errorf("go test -coverprofile in %s wrote no profile: %w\n%s", modDir, rerr, adapterkit.CapText(log))
 	}
 	hits, err := parseProfile(data)
 	if err != nil {

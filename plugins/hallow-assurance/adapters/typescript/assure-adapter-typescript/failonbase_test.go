@@ -13,6 +13,7 @@ import (
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -134,7 +135,7 @@ func TestBaseCaseFollowsResultsAtItsLocation(t *testing.T) {
 		}
 		output := xmlTextGen.Draw(t, "output")
 		c := baseCase(lt, f, output)
-		j := junitOf(t, []xmlSuite{{Name: lt.File, Tests: 1, Cases: []xmlCase{c}}})
+		j := junitOf(t, []adapterkit.XMLSuite{{Name: lt.File, Tests: 1, Cases: []adapterkit.XMLCase{c}}})
 		if j.Cases != 1 {
 			t.Fatalf("%d cases; each selected test is exactly one case", j.Cases)
 		}

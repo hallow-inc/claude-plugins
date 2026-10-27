@@ -75,7 +75,7 @@ func readMise(root string, p *probe) error {
 		return err
 	}
 	if code != 0 {
-		p.miseErr = fmt.Sprintf("mise ls --json --local failed in %s: %s", root, capText(stderr))
+		p.miseErr = fmt.Sprintf("mise ls --json --local failed in %s: %s", root, adapterkit.CapText(stderr))
 		return nil
 	}
 	if err := json.Unmarshal(stdout, &p.mise); err != nil {

@@ -44,7 +44,7 @@ func vitestList(dir, bin, root string, files []string) ([]listedTest, error) {
 	}
 	data, rerr := os.ReadFile(report)
 	if code != 0 || rerr != nil {
-		return nil, fmt.Errorf("vitest list in %s exited %d: %s", dir, code, capText(append(stdout, stderr...)))
+		return nil, fmt.Errorf("vitest list in %s exited %d: %s", dir, code, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	var out []listedTest
 	if err := json.Unmarshal(data, &out); err != nil {
@@ -199,8 +199,8 @@ func newTests(head, base []listedTest) []listedTest {
 	return out
 }
 
-func baseCase(t listedTest, f *vitestFile, output string) xmlCase {
-	tc := xmlCase{Name: t.Name, Classname: t.File}
+func baseCase(t listedTest, f *vitestFile, output string) adapterkit.XMLCase {
+	tc := adapterkit.XMLCase{Name: t.Name, Classname: t.File}
 	var ran, skipped int
 	failed := false
 	var failures []string
@@ -216,7 +216,7 @@ func baseCase(t listedTest, f *vitestFile, output string) xmlCase {
 			} else if slices.Contains(skippedStatuses, a.Status) {
 				skipped++
 			} else if a.Status != "passed" {
-				tc.Error = &xmlText{Message: "unknown vitest status " + a.Status, Body: "no output"}
+				tc.Error = &adapterkit.XMLText{Message: "unknown vitest status " + a.Status, Body: "no output"}
 			}
 		}
 	}
@@ -225,20 +225,20 @@ func baseCase(t listedTest, f *vitestFile, output string) xmlCase {
 		if f != nil && strings.TrimSpace(f.Message) != "" {
 			text = f.Message
 		}
-		return xmlCase{Name: t.Name, Classname: t.File, Error: &xmlText{Message: "did not run on the base commit", Body: capText([]byte(text))}}
+		return adapterkit.XMLCase{Name: t.Name, Classname: t.File, Error: &adapterkit.XMLText{Message: "did not run on the base commit", Body: adapterkit.CapText([]byte(text))}}
 	}
 	if tc.Error != nil {
 		return tc
 	}
 	if failed {
-		tc.Failure = &xmlText{Message: "fails on the base commit", Body: capText([]byte(strings.Join(failures, "\n")))}
+		tc.Failure = &adapterkit.XMLText{Message: "fails on the base commit", Body: adapterkit.CapText([]byte(strings.Join(failures, "\n")))}
 	} else if skipped == ran {
 		tc.Skipped = &struct{}{}
 	}
 	return tc
 }
 
-func baseSuites(baseRoot string, selected []listedTest, report string, output []byte) []xmlSuite {
+func baseSuites(baseRoot string, selected []listedTest, report string, output []byte) []adapterkit.XMLSuite {
 	files := map[string]*vitestFile{}
 	var r vitestReport
 	if data, err := os.ReadFile(report); err == nil && json.Unmarshal(data, &r) == nil {
@@ -250,9 +250,9 @@ func baseSuites(baseRoot string, selected []listedTest, report string, output []
 	for _, t := range selected {
 		byFile[t.File] = append(byFile[t.File], t)
 	}
-	var out []xmlSuite
+	var out []adapterkit.XMLSuite
 	for _, name := range slices.Sorted(maps.Keys(byFile)) {
-		s := xmlSuite{Name: name, Cases: []xmlCase{}}
+		s := adapterkit.XMLSuite{Name: name, Cases: []adapterkit.XMLCase{}}
 		for _, t := range byFile[name] {
 			s.Cases = append(s.Cases, baseCase(t, files[name], string(output)))
 		}
@@ -262,7 +262,7 @@ func baseSuites(baseRoot string, selected []listedTest, report string, output []
 	return out
 }
 
-func unitFailOnBase(c runContext, unit, seed string) ([]xmlSuite, error) {
+func unitFailOnBase(c runContext, unit, seed string) ([]adapterkit.XMLSuite, error) {
 	tests, err := changedTests(c, unit)
 	if err != nil {
 		return nil, err
@@ -313,7 +313,7 @@ func runFailOnBase(c runContext) ([]evidence, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, unit := range slices.Sorted(maps.Keys(c.sel)) {
 		s, err := unitFailOnBase(c, unit, seed)
 		if err != nil {

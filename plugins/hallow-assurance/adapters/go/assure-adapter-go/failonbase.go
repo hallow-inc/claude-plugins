@@ -205,7 +205,7 @@ func runFailOnBase(root, ref, out string, sel map[string][]string, versions map[
 	if err != nil {
 		return nil, err
 	}
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, mod := range modules(sel) {
 		dirs := selectedIn(root, mod, selected)
 		if len(dirs) == 0 {
@@ -237,7 +237,7 @@ func selectedIn(root, mod string, selected map[string][]string) map[string][]str
 	return dirs
 }
 
-func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[string][]string) ([]xmlSuite, error) {
+func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[string][]string) ([]adapterkit.XMLSuite, error) {
 	tmp, err := os.MkdirTemp("", "assure-fail-on-base-")
 	if err != nil {
 		return nil, err
@@ -254,7 +254,7 @@ func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[str
 		keys = append(keys, d)
 	}
 	sort.Strings(keys)
-	var suites []xmlSuite
+	var suites []adapterkit.XMLSuite
 	for _, dir := range keys {
 		names := dirs[dir]
 		rel := "./" + path.Clean(strings.TrimPrefix(strings.TrimPrefix(dir, mod), "/"))
@@ -278,7 +278,7 @@ func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[str
 	return suites, nil
 }
 
-func topLevelSuite(dir string, names []string, events []event, stderr string) xmlSuite {
+func topLevelSuite(dir string, names []string, events []event, stderr string) adapterkit.XMLSuite {
 	result := map[string]string{}
 	var pkgOut strings.Builder
 	for _, e := range events {
@@ -294,17 +294,17 @@ func topLevelSuite(dir string, names []string, events []event, stderr string) xm
 		}
 	}
 	appendCapped(&pkgOut, stderr)
-	s := xmlSuite{Name: dir, Cases: []xmlCase{}}
+	s := adapterkit.XMLSuite{Name: dir, Cases: []adapterkit.XMLCase{}}
 	for _, n := range names {
-		c := xmlCase{Name: n, Classname: dir}
+		c := adapterkit.XMLCase{Name: n, Classname: dir}
 		switch result[n] {
 		case "fail":
-			c.Failure = &xmlText{Message: "fails on the base commit"}
+			c.Failure = &adapterkit.XMLText{Message: "fails on the base commit"}
 		case "skip":
 			c.Skipped = &struct{}{}
 		case "pass":
 		default:
-			c.Error = &xmlText{Message: "did not run on the base commit", Body: capText([]byte(pkgOut.String()))}
+			c.Error = &adapterkit.XMLText{Message: "did not run on the base commit", Body: adapterkit.CapText([]byte(pkgOut.String()))}
 		}
 		s.Cases = append(s.Cases, c)
 	}

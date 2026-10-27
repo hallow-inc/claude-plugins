@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"pgregory.net/rapid"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 var (
@@ -83,7 +85,7 @@ func TestFuzzFilesMatchesSpec(t *testing.T) {
 func TestFoldSuiteOneCasePerTest(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		const file = "tests/test_x_fuzz.py"
-		var cases []xmlCase
+		var cases []adapterkit.XMLCase
 		want := map[string]string{}
 		outcomes := map[string][]instanceOutcome{}
 		bodies := map[string][]string{}
@@ -106,7 +108,7 @@ func TestFoldSuiteOneCasePerTest(t *testing.T) {
 		}
 		collect := rapid.Bool().Draw(t, "collectionError")
 		if collect {
-			cases = append(cases, xmlCase{Name: collectionCase, Classname: file, Error: &xmlText{Message: "collection failure", Body: "E boom"}})
+			cases = append(cases, adapterkit.XMLCase{Name: collectionCase, Classname: file, Error: &adapterkit.XMLText{Message: "collection failure", Body: "E boom"}})
 			want[collectionCase] = "errored"
 		}
 		got := map[string]string{}

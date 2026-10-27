@@ -228,7 +228,7 @@ func probeTree(python, top, treeRoot, treeUnit string) (string, error) {
 		return "", err
 	}
 	if code != 0 {
-		return "", fmt.Errorf("%s import probe exited %d: %s", python, code, capText(stderr))
+		return "", fmt.Errorf("%s import probe exited %d: %s", python, code, adapterkit.CapText(stderr))
 	}
 	var found map[string][]string
 	if err := json.Unmarshal(stdout, &found); err != nil {

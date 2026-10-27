@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"pgregory.net/rapid"
 
@@ -322,55 +321,4 @@ func TestRunTestsRunsInShortMode(t *testing.T) {
 	if j.Cases == 0 || j.Failures != 0 || j.Errors != 0 {
 		t.Fatalf("want TestSlow run and passing under -short, got %+v", j)
 	}
-}
-
-func TestCapTextBoundsEvidenceTextAndNeverEmpty(t *testing.T) {
-	check := func(t interface{ Fatalf(string, ...any) }, in string) {
-		got := capText([]byte(in))
-		trimmed := strings.TrimSpace(in)
-
-		if got == "" {
-			t.Fatalf("capText(%q) is empty; evidence messages must never be blank", in)
-		}
-		if len(got) > maxOutput {
-			t.Fatalf("len(capText) = %d > maxOutput %d; stderr would bloat evidence", len(got), maxOutput)
-		}
-		if trimmed == "" {
-			if got != "no output" {
-				t.Fatalf("capText(%q) = %q, want \"no output\"", in, got)
-			}
-			return
-		}
-		if !utf8.ValidString(got) {
-			t.Fatalf("capText result (%d bytes, ends %q) is not valid UTF-8; it lands in junit.xml and error strings, where a split rune corrupts the evidence", len(got), got[max(0, len(got)-4):])
-		}
-		if !strings.HasPrefix(trimmed, got) {
-			t.Fatalf("capText result is not a prefix of the trimmed input")
-		}
-		if len(trimmed) <= maxOutput {
-			if len(got) != len(trimmed) {
-				t.Fatalf("len(capText) = %d, want %d: text dropped below the bound", len(got), len(trimmed))
-			}
-		} else if len(got) < maxOutput-(utf8.UTFMax-1) {
-			t.Fatalf("len(capText) = %d < %d: text dropped beyond backing up to a rune boundary", len(got), maxOutput-(utf8.UTFMax-1))
-		}
-	}
-
-	check(t, "a"+strings.Repeat("é", maxOutput/2))
-
-	rapid.Check(t, func(t *rapid.T) {
-		pad := rapid.SampledFrom([]string{"", " ", "\n", "\t \r\n"})
-		var body string
-		switch rapid.IntRange(0, 2).Draw(t, "shape") {
-		case 0:
-			body = rapid.SampledFrom([]string{"", " ", "\n\t "}).Draw(t, "blank")
-		case 1:
-			body = rapid.String().Draw(t, "short")
-		case 2:
-			chunk := rapid.StringN(1, 8, -1).Draw(t, "chunk")
-			extra := rapid.IntRange(0, 64).Draw(t, "extra")
-			body = strings.Repeat(chunk, (maxOutput+extra)/len(chunk)+1)
-		}
-		check(t, pad.Draw(t, "lead")+body+pad.Draw(t, "trail"))
-	})
 }

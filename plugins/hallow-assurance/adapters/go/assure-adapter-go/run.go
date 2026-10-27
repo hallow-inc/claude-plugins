@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
@@ -203,7 +202,7 @@ func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int,
 }
 
 func runTests(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, mod := range modules(sel) {
 		args := append([]string{"test", "-race", "-shuffle=on", "-short", "-json"}, sel[mod]...)
 		stdout, stderr, code, err := runTool(filepath.Join(root, mod), "go", args...)
@@ -212,7 +211,7 @@ func runTests(root, _, out string, sel map[string][]string, _ map[string]string)
 		}
 		events := parseEvents(stdout)
 		if code != 0 && len(events) == 0 {
-			suites.Suites = append(suites.Suites, errorSuite("module "+mod, capText(stderr)))
+			suites.Suites = append(suites.Suites, errorSuite("module "+mod, adapterkit.CapText(stderr)))
 			continue
 		}
 		suites.Suites = append(suites.Suites, toJUnit(events).Suites...)
@@ -225,19 +224,4 @@ func runTests(root, _, out string, sel map[string][]string, _ map[string]string)
 		return nil, err
 	}
 	return []evidence{{Type: "test.junit", Path: "junit.xml"}}, nil
-}
-
-func capText(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > maxOutput {
-		n := maxOutput
-		for n > 0 && !utf8.RuneStart(s[n]) {
-			n--
-		}
-		s = s[:n]
-	}
-	if s == "" {
-		s = "no output"
-	}
-	return s
 }

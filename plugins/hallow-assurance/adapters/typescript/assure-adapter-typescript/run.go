@@ -208,7 +208,7 @@ func runTests(c runContext) ([]evidence, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	suites := xmlSuites{Suites: []xmlSuite{}}
+	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for i, unit := range slices.Sorted(maps.Keys(c.sel)) {
 		if len(c.sel[unit]) == 0 {
 			continue

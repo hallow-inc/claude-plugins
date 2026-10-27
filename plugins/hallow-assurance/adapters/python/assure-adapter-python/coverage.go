@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ievidence "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -72,14 +73,14 @@ func measure(c runContext, unit, dir string, abs []string) (coverageReport, erro
 	}
 	output := append(stdout, stderr...)
 	if !slices.Contains([]int{0, 1, 2, 5}, code) {
-		return coverageReport{}, fmt.Errorf("coverage run of pytest in %s exited %d: %s", relSlash(c.top, unit), code, capText(output))
+		return coverageReport{}, fmt.Errorf("coverage run of pytest in %s exited %d: %s", relSlash(c.top, unit), code, adapterkit.CapText(output))
 	}
 	_, jout, jcode, err := runToolEnv(unit, nil, python, "-m", "coverage", "json", "--rcfile="+rc, "--data-file="+data, "-o", report)
 	if err != nil {
 		return coverageReport{}, err
 	}
 	if jcode != 0 {
-		return coverageReport{}, fmt.Errorf("coverage json in %s exited %d: %s\n%s", relSlash(c.top, unit), jcode, capText(jout), capText(output))
+		return coverageReport{}, fmt.Errorf("coverage json in %s exited %d: %s\n%s", relSlash(c.top, unit), jcode, adapterkit.CapText(jout), adapterkit.CapText(output))
 	}
 	raw, err := os.ReadFile(report)
 	if err != nil {

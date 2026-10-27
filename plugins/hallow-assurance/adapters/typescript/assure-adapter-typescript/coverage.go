@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ievidence "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 )
 
@@ -97,7 +98,7 @@ func unitCoverage(c runContext, unit, seed, tmp string, i int) ([]ievidence.LCOV
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "coverage-final.json"))
 	if err != nil {
-		return nil, fmt.Errorf("vitest coverage in %s wrote no report: %w\n%s", relSlash(c.top, unit), err, capText(append(stdout, stderr...)))
+		return nil, fmt.Errorf("vitest coverage in %s wrote no report: %w\n%s", relSlash(c.top, unit), err, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	var report map[string]istanbulFile
 	if err := json.Unmarshal(data, &report); err != nil {

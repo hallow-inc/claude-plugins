@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"pgregory.net/rapid"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 // fobTest is one generated test: its identity parts and the two things
@@ -300,20 +302,20 @@ func foldModel(outcomes []instanceOutcome, bodies []string) (string, []string) {
 	return "passed", nil
 }
 
-func instanceCase(i int, o instanceOutcome, body string) xmlCase {
-	c := xmlCase{Name: fmt.Sprintf("test_x[%d]", i), Classname: "tests/test_x.py"}
+func instanceCase(i int, o instanceOutcome, body string) adapterkit.XMLCase {
+	c := adapterkit.XMLCase{Name: fmt.Sprintf("test_x[%d]", i), Classname: "tests/test_x.py"}
 	switch o {
 	case instFail:
-		c.Failure = &xmlText{Message: "m", Body: body}
+		c.Failure = &adapterkit.XMLText{Message: "m", Body: body}
 	case instError:
-		c.Error = &xmlText{Message: "m", Body: body}
+		c.Error = &adapterkit.XMLText{Message: "m", Body: body}
 	case instSkip:
 		c.Skipped = &struct{}{}
 	}
 	return c
 }
 
-func caseText(c xmlCase) string {
+func caseText(c adapterkit.XMLCase) string {
 	if c.Failure != nil {
 		return c.Failure.Body
 	}
@@ -330,7 +332,7 @@ func caseText(c xmlCase) string {
 func TestFoldCaseMatchesModel(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		outcomes := rapid.SliceOfN(rapid.SampledFrom([]instanceOutcome{instPass, instFail, instError, instSkip}), 1, 5).Draw(t, "outcomes")
-		var in []xmlCase
+		var in []adapterkit.XMLCase
 		var bodies []string
 		for i, o := range outcomes {
 			bodies = append(bodies, fmt.Sprintf("BODY-%d", i))
@@ -352,7 +354,7 @@ func TestFoldCaseMatchesModel(t *testing.T) {
 	})
 }
 
-func outcomeOf(c xmlCase) string {
+func outcomeOf(c adapterkit.XMLCase) string {
 	n := 0
 	out := "passed"
 	if c.Failure != nil {
@@ -372,7 +374,7 @@ func outcomeOf(c xmlCase) string {
 
 type baseReport struct {
 	selected    []selectedTest
-	report      []xmlCase
+	report      []adapterkit.XMLCase
 	want        map[string]string
 	collectBody map[string]string
 }
@@ -382,9 +384,9 @@ type baseReport struct {
 func (r *baseReport) drawRanTest(t *rapid.T, f, name string) string {
 	outcome := "passed"
 	for i := range rapid.IntRange(1, 3).Draw(t, "instances") {
-		c := xmlCase{Name: fmt.Sprintf("%s[%d]", name, i), Classname: f}
+		c := adapterkit.XMLCase{Name: fmt.Sprintf("%s[%d]", name, i), Classname: f}
 		if rapid.Bool().Draw(t, "fails") {
-			c.Failure, outcome = &xmlText{Body: "boom"}, "failed"
+			c.Failure, outcome = &adapterkit.XMLText{Body: "boom"}, "failed"
 		}
 		r.report = append(r.report, c)
 	}
@@ -394,7 +396,7 @@ func (r *baseReport) drawRanTest(t *rapid.T, f, name string) string {
 func (r *baseReport) drawFile(t *rapid.T, f string) {
 	if rapid.Bool().Draw(t, "collectError") {
 		r.collectBody[f] = "E   ModuleNotFoundError: " + f
-		r.report = append(r.report, xmlCase{Name: collectionCase, Classname: f, Error: &xmlText{Message: "collection failure", Body: r.collectBody[f]}})
+		r.report = append(r.report, adapterkit.XMLCase{Name: collectionCase, Classname: f, Error: &adapterkit.XMLText{Message: "collection failure", Body: r.collectBody[f]}})
 	}
 	seen := map[string]bool{}
 	for range rapid.IntRange(0, 3).Draw(t, "tests") {
@@ -417,7 +419,7 @@ func (r *baseReport) drawFile(t *rapid.T, f string) {
 	}
 }
 
-func (r *baseReport) check(t *rapid.T, suites []xmlSuite) {
+func (r *baseReport) check(t *rapid.T, suites []adapterkit.XMLSuite) {
 	got := map[string]string{}
 	for _, s := range suites {
 		if s.Tests != len(s.Cases) {
@@ -437,7 +439,7 @@ func (r *baseReport) check(t *rapid.T, suites []xmlSuite) {
 	}
 }
 
-func (r *baseReport) checkErrorText(t *rapid.T, key string, c xmlCase) {
+func (r *baseReport) checkErrorText(t *rapid.T, key string, c adapterkit.XMLCase) {
 	if c.Error == nil {
 		return
 	}
@@ -459,6 +461,6 @@ func TestBaseCasesOnePerSelectedTest(t *testing.T) {
 		for _, f := range []string{"tests/test_a.py", "tests/test_b.py"} {
 			r.drawFile(t, f)
 		}
-		r.check(t, baseCases(r.selected, []xmlSuite{{Name: "x", Cases: rapid.Permutation(r.report).Draw(t, "order")}}, []byte("PYTEST OUTPUT")))
+		r.check(t, baseCases(r.selected, []adapterkit.XMLSuite{{Name: "x", Cases: rapid.Permutation(r.report).Draw(t, "order")}}, []byte("PYTEST OUTPUT")))
 	})
 }

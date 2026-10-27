@@ -127,14 +127,14 @@ func (c runContext) contexts(unit string, t mutationTree, targets []mutationTarg
 		return nil, err
 	}
 	if !slices.Contains([]int{0, 1, 2, 5}, code) {
-		return nil, fmt.Errorf("pytest in %s exited %d while recording which tests run the changed lines: %s", relSlash(c.top, unit), code, capText(append(stdout, stderr...)))
+		return nil, fmt.Errorf("pytest in %s exited %d while recording which tests run the changed lines: %s", relSlash(c.top, unit), code, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	_, jerr, jcode, err := runToolEnv(t.unit, env, python, "-m", "coverage", "json", "--show-contexts", "--rcfile="+rc, "--data-file="+data, "-o", report)
 	if err != nil {
 		return nil, err
 	}
 	if jcode != 0 {
-		return nil, fmt.Errorf("coverage json in %s exited %d: %s", relSlash(c.top, unit), jcode, capText(jerr))
+		return nil, fmt.Errorf("coverage json in %s exited %d: %s", relSlash(c.top, unit), jcode, adapterkit.CapText(jerr))
 	}
 	raw, err := os.ReadFile(report)
 	if err != nil {
@@ -163,7 +163,7 @@ func (c runContext) baseline(unit string, t mutationTree, script string) (time.D
 		return 0, err
 	}
 	if code != 0 {
-		return 0, fmt.Errorf("the selected tests of %s fail before mutation (exit %d), so no mutant result would mean anything: %s", relSlash(c.top, unit), code, capText(append(stdout, stderr...)))
+		return 0, fmt.Errorf("the selected tests of %s fail before mutation (exit %d), so no mutant result would mean anything: %s", relSlash(c.top, unit), code, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	return time.Since(started), nil
 }
@@ -175,7 +175,7 @@ func (c runContext) cosmic(unit string, t mutationTree, name string, args ...str
 		return nil, err
 	}
 	if code != 0 {
-		return nil, fmt.Errorf("%s %s exited %d: %s", name, strings.Join(args, " "), code, capText(append(stdout, stderr...)))
+		return nil, fmt.Errorf("%s %s exited %d: %s", name, strings.Join(args, " "), code, adapterkit.CapText(append(stdout, stderr...)))
 	}
 	return stdout, nil
 }

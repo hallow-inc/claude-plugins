@@ -189,7 +189,7 @@ func stryker(c runContext, unit string, mutate []string, seed string) ([]byte, e
 	cmd.Dir = unit
 	cmd.Env = append(os.Environ(), "ASSURE_SEED="+seed)
 	if log, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("stryker run in %s: %w\n%s", relSlash(c.top, unit), err, capText(log))
+		return nil, fmt.Errorf("stryker run in %s: %w\n%s", relSlash(c.top, unit), err, adapterkit.CapText(log))
 	}
 	return os.ReadFile(filepath.Join(dir, "report.json"))
 }

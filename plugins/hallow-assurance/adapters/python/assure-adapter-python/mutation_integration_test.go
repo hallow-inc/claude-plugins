@@ -11,8 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 	"pgregory.net/rapid"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
 const splitBase = `def parts_ok(parts):

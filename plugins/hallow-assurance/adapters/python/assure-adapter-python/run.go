@@ -223,7 +223,7 @@ func pytestArgs(seed, junit string) []string {
 		"--junitxml=" + junit, "-o", "junit_family=xunit1", "-q"}, seedArgs(seed)...)
 }
 
-func (c runContext) pytest(dir, unit, junit, mapRoot, mapTop string, env []string, extra ...string) ([]xmlSuite, []byte, error) {
+func (c runContext) pytest(dir, unit, junit, mapRoot, mapTop string, env []string, extra ...string) ([]adapterkit.XMLSuite, []byte, error) {
 	args := append(pytestArgs(c.seed, junit), extra...)
 	stdout, stderr, code, err := runToolEnv(dir, append([]string{"ASSURE_SEED=" + c.seed}, env...), c.units[unit].python, args...)
 	if err != nil {
@@ -233,18 +233,18 @@ func (c runContext) pytest(dir, unit, junit, mapRoot, mapTop string, env []strin
 	switch code {
 	case 0, 1, 2, 5:
 	default:
-		return nil, nil, fmt.Errorf("pytest in %s exited %d: %s", relSlash(c.top, unit), code, capText(output))
+		return nil, nil, fmt.Errorf("pytest in %s exited %d: %s", relSlash(c.top, unit), code, adapterkit.CapText(output))
 	}
 	if code == 5 {
-		return []xmlSuite{}, output, nil
+		return []adapterkit.XMLSuite{}, output, nil
 	}
 	r, err := readPytestReport(junit)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pytest in %s exited %d without a readable report (%w): %s", relSlash(c.top, unit), code, err, capText(output))
+		return nil, nil, fmt.Errorf("pytest in %s exited %d without a readable report (%w): %s", relSlash(c.top, unit), code, err, adapterkit.CapText(output))
 	}
 	suites := toJUnit(mapRoot, mapTop, dir, r)
 	if code != 0 && !hasFailure(suites) {
-		return nil, nil, fmt.Errorf("pytest in %s exited %d with no failing test or collection error in its report: %s", relSlash(c.top, unit), code, capText(output))
+		return nil, nil, fmt.Errorf("pytest in %s exited %d with no failing test or collection error in its report: %s", relSlash(c.top, unit), code, adapterkit.CapText(output))
 	}
 	return suites, output, nil
 }
@@ -255,7 +255,7 @@ func runTests(c runContext) ([]evidence, string, error) {
 		return nil, "", err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	suites := []xmlSuite{}
+	suites := []adapterkit.XMLSuite{}
 	for i, unit := range slices.Sorted(maps.Keys(c.sel)) {
 		if len(c.sel[unit]) == 0 {
 			continue

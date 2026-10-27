@@ -185,7 +185,7 @@ func unleash(dir, ref, out, seed string) ([]byte, error) {
 		err = nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("gremlins unleash in %s: %w\n%s", dir, err, capText(log))
+		return nil, fmt.Errorf("gremlins unleash in %s: %w\n%s", dir, err, adapterkit.CapText(log))
 	}
 	return os.ReadFile(name)
 }
