@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/adapter-scope.schema.json",
+  "title": "Adapter run scope",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["path"],
+    "properties": {
+      "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+      "ranges": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "array",
+          "prefixItems": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "integer", "minimum": 1 }
+          ],
+          "items": false,
+          "minItems": 2
+        }
+      }
+    }
+  }
+}
