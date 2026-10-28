@@ -615,7 +615,129 @@ var reportGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
+var (
+	findingKinds = []string{"surviving-mutant", "uncovered", "missing-fuzz", "tests-failing"}
+	badFindingID = []any{"0123456789ABCDEF", "0123456789abcde", "0123456789abcdef0", "0123456789abcdef-0", "0123456789abcdef-", 7}
+)
+
+func findingOf(t *rapid.T, r *rec, p string) map[string]any {
+	kind := rapid.SampledFrom(findingKinds).Draw(t, "kind")
+	f := map[string]any{
+		"id":       rapid.StringMatching(`[0-9a-f]{16}(-[1-9][0-9]{0,2})?`).Draw(t, "id"),
+		"kind":     kind,
+		"language": langGen.Draw(t, "lang"),
+		"detail":   textGen.Draw(t, "detail"),
+	}
+	r.closed(p)
+	r.required(p, "id", "kind", "language", "detail")
+	r.bad(p, "id", badFindingID...)
+	r.bad(p, "kind", "flaky", 1)
+	r.bad(p, "language", badLang...)
+	r.bad(p, "detail", badText...)
+	r.bad(p, "path", badPath...)
+	r.bad(p, "line", 0, 1.5, "1")
+	r.bad(p, "level", badLevel...)
+	switch kind {
+	case "surviving-mutant", "uncovered":
+		f["path"], f["line"], f["level"] = pathGen.Draw(t, "path"), rapid.IntRange(1, 5000).Draw(t, "line"), levelGen.Draw(t, "level")
+		r.required(p, "path", "line", "level")
+		r.add(kind+" relabelled tests-failing keeps its location", p, op{at: p, key: "kind", val: "tests-failing"})
+		r.add(kind+" relabelled missing-fuzz keeps its line", p, op{at: p, key: "kind", val: "missing-fuzz"})
+	case "missing-fuzz":
+		f["path"], f["level"] = pathGen.Draw(t, "path"), levelGen.Draw(t, "level")
+		r.required(p, "path", "level")
+		r.add("missing-fuzz carries a line", p+"/line", op{at: p, key: "line", val: rapid.IntRange(1, 5000).Draw(t, "stray line")})
+		r.add("missing-fuzz relabelled "+kind+" lacks a line", p, op{at: p, key: "kind", val: rapid.SampledFrom(findingKinds[:2]).Draw(t, "relabel")})
+	case "tests-failing":
+		r.add("tests-failing carries a path", p+"/path", op{at: p, key: "path", val: pathGen.Draw(t, "stray path")})
+		r.add("tests-failing carries a line", p+"/line", op{at: p, key: "line", val: rapid.IntRange(1, 5000).Draw(t, "stray line")})
+		r.add("tests-failing carries a level", p+"/level", op{at: p, key: "level", val: levelGen.Draw(t, "stray level")})
+		r.add("tests-failing relabelled has no location", p, op{at: p, key: "kind", val: rapid.SampledFrom(findingKinds[:3]).Draw(t, "relabel")})
+	}
+	return f
+}
+
+func scoreOf(t *rapid.T, r *rec, p string) map[string]any {
+	total := rapid.IntRange(1, 500).Draw(t, "total")
+	detected := rapid.IntRange(0, total).Draw(t, "detected")
+	r.closed(p)
+	r.required(p, "language", "level", "detected", "total", "percent", "threshold", "advisory")
+	r.bad(p, "language", badLang...)
+	r.bad(p, "level", badLevel...)
+	r.bad(p, "detected", -1, 1.5, "1")
+	r.bad(p, "total", 0, -1, 1.5, "1")
+	r.bad(p, "percent", -0.5, 100.5, "50")
+	r.bad(p, "threshold", -1, 101, "80")
+	r.bad(p, "advisory", false, "true", 1)
+	return map[string]any{
+		"language":  langGen.Draw(t, "lang"),
+		"level":     levelGen.Draw(t, "level"),
+		"detected":  detected,
+		"total":     total,
+		"percent":   float64(detected) * 100 / float64(total),
+		"threshold": rapid.IntRange(0, 100).Draw(t, "threshold"),
+		"advisory":  true,
+	}
+}
+
+var auditFindingsGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	tv := map[string]any{}
+	for _, lang := range rapid.SliceOfNDistinct(langGen, 0, 2, rapid.ID[string]).Draw(t, "langs") {
+		tv[lang] = map[string]any{textGen.Draw(t, "tool"): textGen.Draw(t, "ver")}
+		r.bad("/tool_versions", lang, "x", map[string]any{"go": ""}, map[string]any{"go": 7})
+	}
+	scope := []any{}
+	for i := range rapid.IntRange(1, 3).Draw(t, "nscope") {
+		scope = append(scope, pathGen.Draw(t, "scope"))
+		r.bad("/scope", idx(i), "", 7)
+	}
+	findings := []any{}
+	for i := range rapid.IntRange(0, 6).Draw(t, "nfindings") {
+		findings = append(findings, findingOf(t, r, "/findings/"+idx(i)))
+		r.bad("/findings", idx(i), "x")
+	}
+	scores := []any{}
+	for i := range rapid.IntRange(0, 3).Draw(t, "nscores") {
+		scores = append(scores, scoreOf(t, r, "/scores/"+idx(i)))
+		r.bad("/scores", idx(i), "x")
+	}
+	unaudited := []any{}
+	for i := range rapid.IntRange(0, 2).Draw(t, "nunaudited") {
+		p := "/unaudited/" + idx(i)
+		unaudited = append(unaudited, map[string]any{"language": langGen.Draw(t, "ulang"), "message": textGen.Draw(t, "umsg")})
+		r.closed(p)
+		r.required(p, "language", "message")
+		r.bad(p, "language", badLang...)
+		r.bad(p, "message", badText...)
+		r.bad("/unaudited", idx(i), "x")
+	}
+	doc := map[string]any{
+		"version":       0,
+		"commit":        shaGen.Draw(t, "commit"),
+		"dirty":         rapid.Bool().Draw(t, "dirty"),
+		"scope":         scope,
+		"tool_versions": tv,
+		"findings":      findings,
+		"scores":        scores,
+		"unaudited":     unaudited,
+	}
+	r.root("x", []any{})
+	r.closed("")
+	r.required("", "version", "commit", "dirty", "scope", "tool_versions", "findings", "scores", "unaudited")
+	r.bad("", "version", 1, "0")
+	r.bad("", "commit", badSHA...)
+	r.bad("", "dirty", "false", 0)
+	r.bad("", "scope", "x", []any{})
+	r.bad("", "tool_versions", "x", map[string]any{"go": "x"})
+	r.bad("", "findings", "x")
+	r.bad("", "scores", "x")
+	r.bad("", "unaudited", "x")
+	return sample{doc, r.cs}
+})
+
 var generators = map[Kind]*rapid.Generator[sample]{
+	AuditFindings:   auditFindingsGen,
 	Report:          reportGen,
 	StopState:       stopStateGen,
 	AdapterCache:    cacheGen,

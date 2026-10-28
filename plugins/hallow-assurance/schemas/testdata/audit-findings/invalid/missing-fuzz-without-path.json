@@ -1,0 +1,1 @@
+{"version":0,"commit":"0123456789abcdef0123456789abcdef01234567","dirty":false,"scope":["."],"tool_versions":{},"findings":[{"id":"0123456789abcdef","kind":"missing-fuzz","language":"go","level":"A","detail":"d"}],"scores":[],"unaudited":[]}

@@ -1,0 +1,1 @@
+{"version":0,"commit":"0123456789abcdef0123456789abcdef01234567","dirty":false,"scope":["."],"tool_versions":{},"findings":[],"scores":[{"language":"go","level":"B","detected":1,"total":2,"percent":50,"threshold":80,"advisory":false}],"unaudited":[]}

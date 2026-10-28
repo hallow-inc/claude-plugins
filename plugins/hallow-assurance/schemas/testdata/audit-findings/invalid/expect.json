@@ -1,0 +1,17 @@
+{
+  "unknown-kind.json": [{"location": "/findings/0/kind", "keyword": "enum"}],
+  "mutant-without-line.json": [{"location": "/findings/0", "keyword": "required"}],
+  "uncovered-without-level.json": [{"location": "/findings/0", "keyword": "required"}],
+  "missing-fuzz-with-line.json": [{"location": "/findings/0/line", "keyword": ""}],
+  "missing-fuzz-without-path.json": [{"location": "/findings/0", "keyword": "required"}],
+  "tests-failing-with-path.json": [{"location": "/findings/0/path", "keyword": ""}],
+  "tests-failing-with-level.json": [{"location": "/findings/0/level", "keyword": ""}],
+  "uppercase-id.json": [{"location": "/findings/0/id", "keyword": "pattern"}],
+  "short-id.json": [{"location": "/findings/0/id", "keyword": "pattern"}],
+  "zero-occurrence-id.json": [{"location": "/findings/0/id", "keyword": "pattern"}],
+  "empty-scope.json": [{"location": "/scope", "keyword": "minItems"}],
+  "zero-total.json": [{"location": "/scores/0/total", "keyword": "minimum"}],
+  "advisory-false.json": [{"location": "/scores/0/advisory", "keyword": "const"}],
+  "missing-unaudited.json": [{"location": "", "keyword": "required"}],
+  "unaudited-without-message.json": [{"location": "/unaudited/0", "keyword": "required"}]
+}
