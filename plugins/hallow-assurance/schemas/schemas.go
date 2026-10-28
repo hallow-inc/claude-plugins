@@ -63,7 +63,7 @@ var kinds = map[Kind]struct {
 	AdapterRun:      {base + "adapter-run.schema.json", jsonDoc},
 	AdapterTools:    {base + "adapter-tools.schema.json", jsonDoc},
 	AdapterCache:    {base + "adapter-cache.schema.json", jsonDoc},
-	AdapterScope:    {base + "adapter-scope.schema.json", jsonDoc},
+	AdapterScope:    {"https://assure.invalid/schemas/v0/adapter-scope.schema.json", jsonDoc},
 	StopState:       {base + "stop-state.schema.json", jsonDoc},
 	Report:          {base + "report.schema.json", jsonDoc},
 	MutationReport:  {strykerID, jsonDoc},

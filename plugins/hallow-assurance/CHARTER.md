@@ -66,7 +66,7 @@ model**, not their paperwork.
 
 In scope:
 
-- `assure` CLI: `check`, `classify`, `context`, `evaluate`, `hook`, `init`, `reference`, `tools`
+- `assure` CLI: `audit`, `check`, `classify`, `context`, `evaluate`, `hook`, `init`, `reference`, `tools`
 - Manifest, catalog, waiver, coverage-resolution, report, stop-state, and adapter-protocol schemas
 - Go adapter (v0), TypeScript adapter (v1 — the language-agnosticism test), Python adapter (v1,
   M6a), Lean adapter (v1, staged M7a–c)
@@ -448,8 +448,10 @@ never reassigned, and new work takes a letter suffix.
 **M4d — Evidence loops**
 - `fuzz-crasher-loop`: a nightly fuzz crasher becomes a committed seed and a
   `/hallow-assurance:bugfix` PR
-- `mutation-sweep`: scheduled, advisory whole-repo mutation run that feeds the verifier and pruner;
-  never a gate
+- `audit`: advisory hardening of any scope, not only the changed set — `assure audit <scope>` on
+  demand for paths, globs, or `path:start-end`, and scheduled `assure audit .` from its own
+  reusable `assure-audit.yml`. Reports mutation survivors, coverage gaps, and missing fuzz targets
+  on input-handling code; feeds the verifier and pruner; never a gate. Replaces `mutation-sweep`
 - Acceptance criteria are set in each change's grill
 
 **M5 — Qualification**
