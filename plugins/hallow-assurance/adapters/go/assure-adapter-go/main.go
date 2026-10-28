@@ -61,7 +61,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | reference | classify <path>... | run <objective> --changed-from <ref> --out <dir> | tools --root <dir>")
+		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go describe | reference | classify <path>... | run <objective> (--changed-from <ref> | --scope <file>) --out <dir> | tools --root <dir>")
 		return 2
 	}
 	var out any

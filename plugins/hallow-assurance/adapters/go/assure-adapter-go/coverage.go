@@ -243,7 +243,7 @@ func moduleCoverage(root, mod, seed, tmp string, pkgs []string) ([]coverFile, er
 	return convertProfile(root, listed, hits)
 }
 
-func runCoverage(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
+func runCoverage(root string, _ adapterkit.RunArgs, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	seed, err := rapidSeed(root)
 	if err != nil {
 		return nil, err

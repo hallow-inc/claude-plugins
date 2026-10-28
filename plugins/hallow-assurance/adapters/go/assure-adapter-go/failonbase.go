@@ -186,7 +186,8 @@ func overlayTests(root, mod, dst string, changedTests []string) error {
 	return nil
 }
 
-func runFailOnBase(root, ref, out string, sel map[string][]string, versions map[string]string) ([]evidence, error) {
+func runFailOnBase(root string, args adapterkit.RunArgs, out string, sel map[string][]string, versions map[string]string) ([]evidence, error) {
+	ref := args.ChangedFrom
 	paths, err := adapterkit.ChangedPaths(root, ref)
 	if err != nil {
 		return nil, err
