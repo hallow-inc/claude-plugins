@@ -32,6 +32,7 @@ const (
 	AdapterRun      Kind = "adapter-run"
 	AdapterTools    Kind = "adapter-tools"
 	AdapterCache    Kind = "adapter-cache"
+	AdapterScope    Kind = "adapter-scope"
 	StopState       Kind = "stop-state"
 	Report          Kind = "report"
 	MutationReport  Kind = "mutation-report"
@@ -62,6 +63,7 @@ var kinds = map[Kind]struct {
 	AdapterRun:      {base + "adapter-run.schema.json", jsonDoc},
 	AdapterTools:    {base + "adapter-tools.schema.json", jsonDoc},
 	AdapterCache:    {base + "adapter-cache.schema.json", jsonDoc},
+	AdapterScope:    {"https://assure.invalid/schemas/v0/adapter-scope.schema.json", jsonDoc},
 	StopState:       {base + "stop-state.schema.json", jsonDoc},
 	Report:          {base + "report.schema.json", jsonDoc},
 	MutationReport:  {strykerID, jsonDoc},

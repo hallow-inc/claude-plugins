@@ -1,0 +1,1 @@
+[{"path":"go.mod"},{"path":"internal/core/eval.go","ranges":[[1,1],[40,72],[100,180]]},{"path":"cmd/assure/main.go","ranges":[[12,30]]}]

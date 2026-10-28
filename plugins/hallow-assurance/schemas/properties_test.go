@@ -452,6 +452,37 @@ var cacheGen = rapid.Custom(func(t *rapid.T) sample {
 	return sample{doc, r.cs}
 })
 
+var scopeGen = rapid.Custom(func(t *rapid.T) sample {
+	r := &rec{}
+	n := rapid.IntRange(1, 4).Draw(t, "nentries")
+	doc := make([]any, n)
+	for i := range n {
+		p := "/" + idx(i)
+		e := map[string]any{"path": pathGen.Draw(t, "path")}
+		r.bad("", idx(i), "x", []any{})
+		r.closed(p)
+		r.required(p, "path")
+		r.bad(p, "path", badPath...)
+		r.bad(p, "ranges", "x", []any{}, map[string]any{})
+		if rapid.Bool().Draw(t, "ranged") {
+			rs := make([]any, rapid.IntRange(1, 3).Draw(t, "nranges"))
+			for j := range rs {
+				start := rapid.IntRange(1, 5000).Draw(t, "start")
+				end := start + rapid.IntRange(0, 200).Draw(t, "span")
+				rs[j] = []any{start, end}
+				rp := p + "/ranges"
+				r.bad(rp, idx(j), "x", 7, []any{}, []any{start}, []any{start, end, end})
+				r.bad(rp+"/"+idx(j), "0", 0, -1, 1.5, "1", nil)
+				r.bad(rp+"/"+idx(j), "1", 0, -1, 1.5, "1", nil)
+			}
+			e["ranges"] = rs
+		}
+		doc[i] = e
+	}
+	r.root("x", 5, map[string]any{"path": "a"}, []any{})
+	return sample{doc, r.cs}
+})
+
 var stopStateGen = rapid.Custom(func(t *rapid.T) sample {
 	r := &rec{}
 	fps := rapid.SliceOfNDistinct(rapid.StringMatching(`[0-9a-f]{64}`), 1, 32, rapid.ID[string]).Draw(t, "fingerprints")
@@ -588,6 +619,7 @@ var generators = map[Kind]*rapid.Generator[sample]{
 	Report:          reportGen,
 	StopState:       stopStateGen,
 	AdapterCache:    cacheGen,
+	AdapterScope:    scopeGen,
 	Manifest:        manifestGen,
 	Catalog:         catalogGen,
 	Waivers:         waiversGen,

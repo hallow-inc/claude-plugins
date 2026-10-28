@@ -1,0 +1,10 @@
+{
+  "empty-ranges.json": [{"location": "/0/ranges", "keyword": "minItems"}],
+  "zero-line.json": [{"location": "/0/ranges/0/0", "keyword": "minimum"}],
+  "one-element-range.json": [{"location": "/0/ranges/0", "keyword": "minItems"}],
+  "three-element-range.json": [{"location": "/0/ranges/0/2", "keyword": ""}],
+  "missing-path.json": [{"location": "/0", "keyword": "required"}],
+  "extra-key.json": [{"location": "/0", "keyword": "additionalProperties"}],
+  "empty-list.json": [{"location": "", "keyword": "minItems"}],
+  "dotdot-path.json": [{"location": "/0/path", "keyword": "not"}]
+}
