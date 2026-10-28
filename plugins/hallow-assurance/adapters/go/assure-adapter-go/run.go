@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -36,7 +35,7 @@ type environmentMessage struct {
 	Message string `json:"message"`
 }
 
-type runner func(root, ref, out string, sel map[string][]string, versions map[string]string) ([]evidence, error)
+type runner func(root string, args adapterkit.RunArgs, out string, sel map[string][]string, versions map[string]string) ([]evidence, error)
 
 var runners = map[string]runner{
 	"VER-TESTS-PASS":          runTests,
@@ -47,25 +46,23 @@ var runners = map[string]runner{
 }
 
 func runObjective(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go run <objective> --changed-from <ref> --out <dir>")
+	ra, err := adapterkit.ParseRun(args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "assure-adapter-go: %v\n", err)
+		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go run <objective> (--changed-from <ref> | --scope <file>) --out <dir>")
 		return 2
 	}
-	obj := args[0]
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	ref := fs.String("changed-from", "", "git ref to diff against")
-	out := fs.String("out", "", "directory for evidence files")
-	if err := fs.Parse(args[1:]); err != nil || *ref == "" || *out == "" || fs.NArg() > 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-go run <objective> --changed-from <ref> --out <dir>")
-		return 2
-	}
+	obj := ra.Objective
 	fn, ok := runners[obj]
 	if !ok {
 		_, _ = fmt.Fprintf(stderr, "assure-adapter-go: objective %q is not implemented\n", obj)
 		return 2
 	}
-	resp, err := execute(fn, obj, *ref, *out)
+	if obj == "VER-FAIL-ON-BASE" && ra.ChangedFrom == "" {
+		_, _ = fmt.Fprintln(stderr, "assure-adapter-go: VER-FAIL-ON-BASE needs a base commit; use --changed-from, not --scope")
+		return 2
+	}
+	resp, err := execute(fn, ra)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "assure-adapter-go: run %s: %v\n", obj, err)
 		return 1
@@ -77,7 +74,8 @@ func runObjective(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func execute(fn runner, obj, ref, out string) (runResponse, error) {
+func execute(fn runner, ra adapterkit.RunArgs) (runResponse, error) {
+	obj, out := ra.Objective, ra.Out
 	root, err := os.Getwd()
 	if err != nil {
 		return runResponse{}, err
@@ -100,18 +98,25 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return environment(env), nil
 	}
 	versions["go"] = v
-	paths, err := adapterkit.ChangedPaths(root, ref)
+	paths, err := selectedPaths(root, ra)
 	if err != nil {
 		return runResponse{}, err
 	}
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return runResponse{}, err
 	}
-	ev, err := fn(root, ref, out, selectPackages(root, paths), versions)
+	ev, err := fn(root, ra, out, selectPackages(root, paths), versions)
 	if err != nil {
 		return runResponse{}, err
 	}
 	return runResponse{Protocol: 2, Evidence: ev, ToolVersions: versions, PinnedBy: pinnedBy, Untracked: untracked}, nil
+}
+
+func selectedPaths(root string, ra adapterkit.RunArgs) ([]string, error) {
+	if ra.Scope != nil {
+		return ra.Scope.Paths(), nil
+	}
+	return adapterkit.ChangedPaths(root, ra.ChangedFrom)
 }
 
 func environment(msg string) runResponse {
@@ -201,7 +206,7 @@ func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int,
 	return o.Bytes(), e.Bytes(), 0, err
 }
 
-func runTests(root, _, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
+func runTests(root string, _ adapterkit.RunArgs, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, mod := range modules(sel) {
 		args := append([]string{"test", "-race", "-shuffle=on", "-short", "-json"}, sel[mod]...)

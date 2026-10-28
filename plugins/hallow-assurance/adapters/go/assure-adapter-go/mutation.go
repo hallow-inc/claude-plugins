@@ -105,6 +105,22 @@ func (r strykerReport) addGremlins(data []byte, modRel string, source func(repoP
 	return nil
 }
 
+func (r strykerReport) keepScoped(s adapterkit.Scope) {
+	for p, f := range r.Files {
+		kept := f.Mutants[:0]
+		for _, m := range f.Mutants {
+			if s.Contains(p, m.Location.Start.Line) {
+				kept = append(kept, m)
+			}
+		}
+		if len(kept) == 0 {
+			delete(r.Files, p)
+			continue
+		}
+		f.Mutants = kept
+	}
+}
+
 func rapidSeed(root string) (string, error) {
 	sha, err := adapterkit.ToolOutput(root, "git", "rev-parse", "HEAD")
 	if err != nil {
@@ -137,7 +153,7 @@ func gremlinsVersion() (string, error) {
 	return "", fmt.Errorf("go version -m %s: no github.com/go-gremlins/gremlins module line", bin)
 }
 
-func runMutation(root, ref, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
+func runMutation(root string, args adapterkit.RunArgs, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	seed, err := rapidSeed(root)
 	if err != nil {
 		return nil, err
@@ -148,13 +164,16 @@ func runMutation(root, ref, out string, sel map[string][]string, _ map[string]st
 		return string(b), err
 	}
 	for _, mod := range modules(sel) {
-		data, err := unleash(filepath.Join(root, mod), ref, out, seed)
+		data, err := unleash(filepath.Join(root, mod), args.ChangedFrom, out, seed)
 		if err != nil {
 			return nil, err
 		}
 		if err := rep.addGremlins(data, mod, source); err != nil {
 			return nil, err
 		}
+	}
+	if args.Scope != nil {
+		rep.keepScoped(args.Scope)
 	}
 	data, err := json.Marshal(rep)
 	if err != nil {
@@ -174,8 +193,12 @@ func unleash(dir, ref, out, seed string) ([]byte, error) {
 	name := f.Name()
 	_ = f.Close()
 	defer func() { _ = os.Remove(name) }()
-	cmd := exec.CommandContext(context.Background(), "gremlins", "unleash", "--diff", ref, "--output", name,
-		"--timeout-coefficient", strconv.Itoa(timeoutCoefficient), "--workers", strconv.Itoa(workers), ".")
+	gargs := []string{"unleash", "--output", name,
+		"--timeout-coefficient", strconv.Itoa(timeoutCoefficient), "--workers", strconv.Itoa(workers)}
+	if ref != "" {
+		gargs = append(gargs, "--diff", ref)
+	}
+	cmd := exec.CommandContext(context.Background(), "gremlins", append(gargs, ".")...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "RAPID_SEED="+seed,
 		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=diff.relative", "GIT_CONFIG_VALUE_0=true")

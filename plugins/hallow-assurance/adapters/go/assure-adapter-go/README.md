@@ -33,6 +33,10 @@ untracked files are not mutated. `git add` a new file to have it tested locally;
 untracked files. Mutants on unchanged lines appear as `Ignored`. Each mutant runs its own package's
 tests only, so code tested only from another package scores `NoCoverage`.
 
+With `--scope`, Gremlins runs on each selected module without `--diff`, and the adapter drops every
+mutant outside the scope's ranges, along with files left with none. The whole module is mutated
+even for a one-line range.
+
 `RAPID_SEED` is set from the `HEAD` commit, so rerunning on one commit generates the same property
 inputs.
 
@@ -41,7 +45,8 @@ inputs.
 The adapter extracts the module at `--changed-from` with `git archive` into a temporary directory,
 copies in the change's `_test.go` files, and runs the top-level `Test*` and `Fuzz*` functions the
 change added or whose text changed. A module whose `go.mod` uses `replace` with a path outside the
-module does not build there, and its tests count as errors.
+module does not build there, and its tests count as errors. A scope has no base commit, so
+`VER-FAIL-ON-BASE` with `--scope` is a usage error.
 
 ## Fuzz seeds
 

@@ -16,8 +16,8 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
-func changedSources(root, ref string) ([]string, error) {
-	paths, err := adapterkit.ChangedPaths(root, ref)
+func selectedSources(root string, ra adapterkit.RunArgs) ([]string, error) {
+	paths, err := selectedPaths(root, ra)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +78,8 @@ func fuzzTargets(dir string) ([]string, error) {
 	return names, nil
 }
 
-func runFuzz(root, ref, out string, _ map[string][]string, _ map[string]string) ([]evidence, error) {
-	sources, err := changedSources(root, ref)
+func runFuzz(root string, args adapterkit.RunArgs, out string, _ map[string][]string, _ map[string]string) ([]evidence, error) {
+	sources, err := selectedSources(root, args)
 	if err != nil {
 		return nil, err
 	}
