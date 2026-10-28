@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assure.invalid/schemas/v0/audit-findings.schema.json",
+  "title": "Audit findings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "commit", "dirty", "scope", "tool_versions", "findings", "scores", "unaudited"],
+  "properties": {
+    "version": { "const": 0 },
+    "commit": { "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$" },
+    "dirty": { "type": "boolean" },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+    },
+    "tool_versions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "language", "detail"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[0-9a-f]{16}(-[1-9][0-9]*)?$" },
+          "kind": { "enum": ["surviving-mutant", "uncovered", "missing-fuzz", "tests-failing"] },
+          "language": { "$ref": "common.schema.json#/$defs/languageId" },
+          "path": { "$ref": "common.schema.json#/$defs/repoPath" },
+          "line": { "type": "integer", "minimum": 1 },
+          "level": { "$ref": "common.schema.json#/$defs/level" },
+          "detail": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        },
+        "allOf": [
+          {
+            "if": { "required": ["kind"], "properties": { "kind": { "enum": ["surviving-mutant", "uncovered"] } } },
+            "then": { "required": ["path", "line", "level"] }
+          },
+          {
+            "if": { "required": ["kind"], "properties": { "kind": { "const": "missing-fuzz" } } },
+            "then": { "required": ["path", "level"], "properties": { "line": false } }
+          },
+          {
+            "if": { "required": ["kind"], "properties": { "kind": { "const": "tests-failing" } } },
+            "then": { "properties": { "path": false, "line": false, "level": false } }
+          }
+        ]
+      }
+    },
+    "scores": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["language", "level", "detected", "total", "percent", "threshold", "advisory"],
+        "properties": {
+          "language": { "$ref": "common.schema.json#/$defs/languageId" },
+          "level": { "$ref": "common.schema.json#/$defs/level" },
+          "detected": { "type": "integer", "minimum": 0 },
+          "total": { "type": "integer", "minimum": 1 },
+          "percent": { "$ref": "common.schema.json#/$defs/percent" },
+          "threshold": { "$ref": "common.schema.json#/$defs/percent" },
+          "advisory": { "const": true }
+        }
+      }
+    },
+    "unaudited": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["language", "message"],
+        "properties": {
+          "language": { "$ref": "common.schema.json#/$defs/languageId" },
+          "message": { "$ref": "common.schema.json#/$defs/nonEmptyString" }
+        }
+      }
+    }
+  }
+}
