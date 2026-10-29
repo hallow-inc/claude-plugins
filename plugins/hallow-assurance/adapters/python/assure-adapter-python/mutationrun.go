@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -23,13 +26,27 @@ func mutationTargets(c runContext, unit string) ([]mutationTarget, error) {
 	if err != nil || len(sources) == 0 {
 		return nil, err
 	}
-	tracked, err := adapterkit.GitPaths(c.root, append([]string{"ls-files", "--"}, sources...)...)
+	ls := []string{"ls-files", "--"}
+	if c.scope != nil {
+		ls = []string{"ls-files", "--cached", "--others", "--exclude-standard", "--"}
+	}
+	listed, err := adapterkit.GitPaths(c.root, append(ls, sources...)...)
 	if err != nil {
 		return nil, err
 	}
 	var out []mutationTarget
 	for _, f := range sources {
-		if !slices.Contains(tracked, f) {
+		if !slices.Contains(listed, f) {
+			continue
+		}
+		if c.scope != nil {
+			tg, ok, err := wholeFile(c.root, f)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out = append(out, tg)
+			}
 			continue
 		}
 		diff, err := adapterkit.ToolOutput(c.root, "git", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", c.ref, "--", f)
@@ -45,6 +62,21 @@ func mutationTargets(c runContext, unit string) ([]mutationTarget, error) {
 		}
 	}
 	return out, nil
+}
+
+func wholeFile(root, rel string) (mutationTarget, bool, error) {
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	if errors.Is(err, fs.ErrNotExist) {
+		return mutationTarget{}, false, nil
+	}
+	if err != nil {
+		return mutationTarget{}, false, err
+	}
+	n := bytes.Count(data, []byte("\n"))
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		n++
+	}
+	return mutationTarget{rel: rel, ranges: []lineRange{{1, n}}}, n > 0, nil
 }
 
 func syntaxGuard(python, unit string, abs []string) (string, error) {
@@ -316,6 +348,9 @@ func runMutation(c runContext) ([]evidence, string, error) {
 	}
 	if err := uniqueIDs(rep); err != nil {
 		return nil, "", err
+	}
+	if c.scope != nil {
+		rep.keepScoped(c.scope)
 	}
 	data, err := rep.encode()
 	if err != nil {
