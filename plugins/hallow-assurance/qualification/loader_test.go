@@ -8,26 +8,31 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"golang.org/x/tools/txtar"
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
 
 type qcase struct {
-	lang    string
-	name    string
-	base    map[string][]byte
-	head    map[string][]byte
-	deletes []string
-	omit    []string
-	msg     string
-	expect  expectation
+	lang      string
+	name      string
+	base      map[string][]byte
+	head      map[string][]byte
+	deletes   []string
+	omit      []string
+	msg       string
+	expect    expectation
+	scope     adapterkit.Scope
+	survivors []string
 }
 
 type expectation struct {
@@ -45,7 +50,8 @@ type expectedObjective struct {
 func parseCase(lang, name string, data []byte) (qcase, error) {
 	c := qcase{lang: lang, name: name, base: map[string][]byte{}, head: map[string][]byte{}}
 	seen := map[string]bool{}
-	var msg, expect, deps []byte
+	var msg, deps []byte
+	outcome := map[string][]byte{}
 	for _, f := range txtar.Parse(data).Files {
 		if seen[f.Name] {
 			return qcase{}, fmt.Errorf("case %s: duplicate section %q", name, f.Name)
@@ -54,8 +60,8 @@ func parseCase(lang, name string, data []byte) (qcase, error) {
 		switch {
 		case f.Name == "head.msg":
 			msg = f.Data
-		case f.Name == "expect.json":
-			expect = f.Data
+		case outcomeSections[f.Name]:
+			outcome[f.Name] = f.Data
 		case f.Name == "delete":
 			c.deletes = nonEmptyLines(f.Data)
 		case f.Name == "omit-tools":
@@ -73,8 +79,8 @@ func parseCase(lang, name string, data []byte) (qcase, error) {
 	if msg == nil {
 		return qcase{}, fmt.Errorf("case %s: missing head.msg section", name)
 	}
-	if expect == nil {
-		return qcase{}, fmt.Errorf("case %s: missing expect.json section", name)
+	if err := checkOutcomeKind(outcome); err != nil {
+		return qcase{}, fmt.Errorf("case %s: %w", name, err)
 	}
 	if err := addDepsSection(&c, deps); err != nil {
 		return qcase{}, fmt.Errorf("case %s: %w", name, err)
@@ -83,12 +89,47 @@ func parseCase(lang, name string, data []byte) (qcase, error) {
 		return qcase{}, fmt.Errorf("case %s: %w", name, err)
 	}
 	c.msg = string(msg)
-	exp, err := parseExpectation(expect)
+	if err := addOutcome(&c, outcome); err != nil {
+		return qcase{}, fmt.Errorf("case %s: %w", name, err)
+	}
+	return c, nil
+}
+
+var outcomeSections = map[string]bool{"expect.json": true, "scope.json": true, "survivors": true}
+
+func checkOutcomeKind(outcome map[string][]byte) error {
+	_, expect := outcome["expect.json"]
+	_, scope := outcome["scope.json"]
+	_, survivors := outcome["survivors"]
+	switch {
+	case expect && (scope || survivors):
+		return fmt.Errorf("expect.json mixes with scope.json or survivors; a case either evaluates or runs a scope")
+	case scope != survivors:
+		return fmt.Errorf("scope.json and survivors come as a pair")
+	case !expect && !scope:
+		return fmt.Errorf("missing expect.json section")
+	}
+	return nil
+}
+
+func addOutcome(c *qcase, outcome map[string][]byte) error {
+	if data, ok := outcome["scope.json"]; ok {
+		s, err := parseScope(data)
+		if err != nil {
+			return fmt.Errorf("scope.json: %w", err)
+		}
+		c.scope = s
+		if c.survivors, err = parseSurvivors(outcome["survivors"]); err != nil {
+			return fmt.Errorf("survivors: %w", err)
+		}
+		return nil
+	}
+	exp, err := parseExpectation(outcome["expect.json"])
 	if err != nil {
-		return qcase{}, fmt.Errorf("case %s: expect.json: %w", name, err)
+		return fmt.Errorf("expect.json: %w", err)
 	}
 	c.expect = exp
-	return c, nil
+	return nil
 }
 
 var (
@@ -199,6 +240,42 @@ func parseExpectation(data []byte) (expectation, error) {
 	return e, nil
 }
 
+func parseScope(data []byte) (adapterkit.Scope, error) {
+	vs, err := schemas.Validate(schemas.AdapterScope, data)
+	if err != nil {
+		return nil, err
+	}
+	if len(vs) > 0 {
+		return nil, fmt.Errorf("schema violations: %v", vs)
+	}
+	var s adapterkit.Scope
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+var survivorLine = regexp.MustCompile(`^(.+):([1-9][0-9]*)$`)
+
+func parseSurvivors(data []byte) ([]string, error) {
+	lines := nonEmptyLines(data)
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("no path:line entries; an empty set passes for an adapter that emits no evidence at all")
+	}
+	seen := map[string]bool{}
+	for _, l := range lines {
+		m := survivorLine.FindStringSubmatch(l)
+		if m == nil || !localPath(m[1]) {
+			return nil, fmt.Errorf("%q is not path:line with a clean relative path and a line from 1", l)
+		}
+		if seen[l] {
+			return nil, fmt.Errorf("%q listed twice", l)
+		}
+		seen[l] = true
+	}
+	return lines, nil
+}
+
 func genText(t *rapid.T, label string) []byte {
 	s := rapid.StringMatching(`([a-z ]{0,12}\n){0,3}`).Draw(t, label)
 	return []byte(s)
@@ -216,6 +293,49 @@ type archiveCase struct {
 	deps       string
 	msg        string
 	expect     expectation
+	scope      adapterkit.Scope
+	survivors  []string
+}
+
+func genScopeArchiveCase(t *rapid.T) archiveCase {
+	a := genArchiveCase(t)
+	a.expect = expectation{}
+	a.scope = genScope(t)
+	a.survivors = rapid.SliceOfNDistinct(rapid.Custom(func(t *rapid.T) string {
+		return fmt.Sprintf("%s:%d", genRelPath(t, "survivor path"), rapid.IntRange(1, 9999).Draw(t, "survivor line"))
+	}), 1, 4, rapid.ID[string]).Draw(t, "survivors")
+	return a
+}
+
+func genScope(t *rapid.T) adapterkit.Scope {
+	n := rapid.IntRange(1, 3).Draw(t, "scope entries")
+	s := make(adapterkit.Scope, n)
+	for i := range s {
+		s[i].Path = genRelPath(t, "scope path")
+		if rapid.Bool().Draw(t, "ranged") {
+			s[i].Ranges = make([][2]int, rapid.IntRange(1, 3).Draw(t, "ranges"))
+			for j := range s[i].Ranges {
+				start := rapid.IntRange(1, 5000).Draw(t, "start")
+				s[i].Ranges[j] = [2]int{start, start + rapid.IntRange(0, 200).Draw(t, "span")}
+			}
+		}
+	}
+	return s
+}
+
+func scopeJSON(s adapterkit.Scope) []byte {
+	entries := make([]map[string]any, len(s))
+	for i, e := range s {
+		entries[i] = map[string]any{"path": e.Path}
+		if e.Ranges != nil {
+			entries[i]["ranges"] = e.Ranges
+		}
+	}
+	b, err := json.Marshal(entries)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func genArchiveCase(t *rapid.T) archiveCase {
@@ -265,9 +385,14 @@ func (a archiveCase) archive(expectJSON []byte) []byte {
 	if a.deps != "" {
 		ar.Files = append(ar.Files, txtar.File{Name: "deps", Data: []byte(a.deps + "\n")})
 	}
+	ar.Files = append(ar.Files, txtar.File{Name: "head.msg", Data: []byte(a.msg)})
+	if a.scope == nil {
+		ar.Files = append(ar.Files, txtar.File{Name: "expect.json", Data: expectJSON})
+		return txtar.Format(ar)
+	}
 	ar.Files = append(ar.Files,
-		txtar.File{Name: "head.msg", Data: []byte(a.msg)},
-		txtar.File{Name: "expect.json", Data: expectJSON},
+		txtar.File{Name: "scope.json", Data: scopeJSON(a.scope)},
+		txtar.File{Name: "survivors", Data: []byte(strings.Join(a.survivors, "\n") + "\n")},
 	)
 	return txtar.Format(ar)
 }
@@ -286,10 +411,13 @@ func equalFiles(a, b map[string][]byte) bool {
 
 func TestParseCaseRoundTrip(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		a := genArchiveCase(t)
+		a := rapid.SampledFrom([]func(*rapid.T) archiveCase{genArchiveCase, genScopeArchiveCase}).Draw(t, "kind")(t)
 		c, err := parseCase(a.lang, "c", a.archive(mustJSON(t, a.expect)))
 		if err != nil {
 			t.Fatalf("parse: %v", err)
+		}
+		if !reflect.DeepEqual(c.scope, a.scope) || !slices.Equal(c.survivors, a.survivors) {
+			t.Fatalf("got scope=%+v survivors=%q, want scope=%+v survivors=%q", c.scope, c.survivors, a.scope, a.survivors)
 		}
 		if c.lang != a.lang {
 			t.Fatalf("language %q, want %q", c.lang, a.lang)
@@ -485,6 +613,74 @@ func TestParseCaseRejectsMalformedArchive(t *testing.T) {
 		}).Draw(t, "malformation")()
 		if _, err := parseCase(a.lang, "c", bad); err == nil {
 			t.Fatalf("malformed archive accepted:\n%s", bad)
+		}
+	})
+}
+
+func TestParseCaseRejectsMalformedScopeCase(t *testing.T) {
+	badScopes := []string{
+		`[]`, `{}`, `[{}]`, `[{"path":"a.go","extra":1}]`, `[{"path":"/a.go"}]`, `[{"path":"a.go","ranges":[]}]`,
+		`[{"path":"a.go","ranges":[[0,3]]}]`, `[{"path":"a.go","ranges":[[3]]}]`, `[{"path":"a.go","ranges":[[1,2,3]]}]`, `[{"path":"a.go","ranges":[[1.5,2]]}]`,
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		a := genScopeArchiveCase(t)
+		ar := txtar.Parse(a.archive(nil))
+		set := func(name string, data []byte) {
+			for i := range ar.Files {
+				if ar.Files[i].Name == name {
+					ar.Files[i].Data = data
+				}
+			}
+		}
+		drop := func(name string) {
+			ar.Files = slices.DeleteFunc(ar.Files, func(f txtar.File) bool { return f.Name == name })
+		}
+		var want string
+		switch rapid.IntRange(0, 4).Draw(t, "malformation") {
+		case 0:
+			ar.Files = append(ar.Files, txtar.File{Name: "expect.json", Data: mustJSON(t, genExpectation(t))})
+			if rapid.Bool().Draw(t, "drop a half") {
+				drop(rapid.SampledFrom([]string{"scope.json", "survivors"}).Draw(t, "dropped"))
+			}
+			want = "mixes"
+		case 1:
+			drop(rapid.SampledFrom([]string{"scope.json", "survivors"}).Draw(t, "dropped"))
+			want = "come as a pair"
+		case 2:
+			set("scope.json", []byte(rapid.SampledFrom(badScopes).Draw(t, "bad scope")))
+			want = "scope.json: schema violations"
+		case 3:
+			bad := rapid.OneOf(
+				rapid.StringMatching(`[a-z]{1,4}\.go(:(0|-[0-9]{1,3}|0[0-9]{1,3}|[a-z]{1,3}|[0-9]{1,3}[a-z]))?`),
+				rapid.StringMatching(`(\.\./|/|[a-z]{1,3}//|)[a-z]{1,4}\.go:[1-9][0-9]{0,3}`).Filter(func(s string) bool { return !localPath(s[:strings.LastIndex(s, ":")]) }),
+				rapid.StringMatching(`:[1-9][0-9]{0,3}`),
+			).Draw(t, "bad survivor")
+			lines := append(slices.Clone(a.survivors), bad)
+			set("survivors", []byte(strings.Join(rapid.Permutation(lines).Draw(t, "order"), "\n")+"\n"))
+			want = "survivors: " + strconv.Quote(bad) + " is not path:line"
+		case 4:
+			dup := rapid.SampledFrom(a.survivors).Draw(t, "duplicate")
+			set("survivors", []byte(strings.Join(append(slices.Clone(a.survivors), dup), "\n")+"\n"))
+			want = "survivors: " + strconv.Quote(dup) + " listed twice"
+		}
+		data := txtar.Format(ar)
+		if _, err := parseCase(a.lang, "c", data); err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("got %v, want an error containing %q:\n%s", err, want, data)
+		}
+	})
+}
+
+func TestParseCaseRejectsEmptySurvivors(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		a := genScopeArchiveCase(t)
+		ar := txtar.Parse(a.archive(nil))
+		for i := range ar.Files {
+			if ar.Files[i].Name == "survivors" {
+				ar.Files[i].Data = []byte(rapid.StringMatching(`[ \t\n]{0,6}`).Draw(t, "blank"))
+			}
+		}
+		if _, err := parseCase(a.lang, "c", txtar.Format(ar)); err == nil || !strings.Contains(err.Error(), "no path:line entries") {
+			t.Fatalf("blank survivors accepted (err %v); an empty expected set passes for an adapter that drops all mutation evidence", err)
 		}
 	})
 }

@@ -1,0 +1,83 @@
+VER-MUTATION-CHANGED with --scope: src/qual/bounds.py has surviving mutants on line 10 and line 50,
+both covered by a test that asserts nothing. The scope's range [40, 72] keeps line 50 and drops 10.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/bounds.py --
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+def low(x): return x < 3
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+# pad
+def high(x): return x > 7
+-- base/tests/test_bounds.py --
+from qual.bounds import high, low
+
+
+def test_bounds_run():
+    for x in [0, 3, 5, 7, 9]:
+        low(x)
+        high(x)
+-- head.msg --
+chore: nothing changes; the scope names committed code
+-- scope.json --
+[{"path": "src/qual/bounds.py", "ranges": [[40, 72]]}]
+-- survivors --
+src/qual/bounds.py:50

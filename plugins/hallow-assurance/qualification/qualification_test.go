@@ -271,6 +271,10 @@ func writeLayout(rt *rapid.T, l layout) {
 
 func runCase(t *testing.T, c qcase) {
 	t.Helper()
+	if c.scope != nil {
+		runScopeCase(t, c)
+		return
+	}
 	ms, log := evaluateCase(t, c, filepath.Join(binDir, adapterName(c.lang)), nil)
 	for _, m := range ms {
 		t.Error(m)
@@ -325,7 +329,12 @@ func TestFixChangingNoTestPassesFailOnBase(t *testing.T) {
 	}
 }
 
-func evaluateReport(t *testing.T, c qcase, adapter string, env []string) (report, string) {
+type preparedCase struct {
+	root, base, path string
+	tools            map[string]string
+}
+
+func prepareCase(t *testing.T, c qcase, adapter string) preparedCase {
 	t.Helper()
 	root := realTempDir(t)
 	base, err := buildRepo(t.Context(), root, c)
@@ -346,6 +355,13 @@ func evaluateReport(t *testing.T, c qcase, adapter string, env []string) (report
 	if err := setupCase(t.Context(), root, c.lang, tools, path); err != nil {
 		t.Fatal(err)
 	}
+	return preparedCase{root: root, base: base, path: path, tools: tools}
+}
+
+func evaluateReport(t *testing.T, c qcase, adapter string, env []string) (report, string) {
+	t.Helper()
+	p := prepareCase(t, c, adapter)
+	root, base, path, tools := p.root, p.base, p.path, p.tools
 	report := filepath.Join(t.TempDir(), "report.json")
 	cmd := exec.CommandContext(t.Context(), tools["assure"], "evaluate", "--changed-from", base, "--report", report, "--date", "2026-01-01")
 	cmd.Dir = root
@@ -353,7 +369,7 @@ func evaluateReport(t *testing.T, c qcase, adapter string, env []string) (report
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	err = cmd.Run()
+	err := cmd.Run()
 	var exit *exec.ExitError
 	if err != nil && (!errors.As(err, &exit) || exit.ExitCode() != 1) {
 		t.Fatalf("assure evaluate: %v\n%s", err, out.String())
