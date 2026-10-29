@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -35,6 +34,7 @@ type runResponse struct {
 
 type runContext struct {
 	root, top, ref, out string
+	scope               adapterkit.Scope
 	sel                 map[string][]string
 	tools               map[string]map[string]resolved
 }
@@ -49,28 +49,26 @@ var runners = map[string]runner{
 	"VER-COVERAGE-RESOLUTION": runCoverage,
 }
 
-const runUsage = "usage: assure-adapter-typescript run <objective> --changed-from <ref> --out <dir>"
+const runUsage = "usage: assure-adapter-typescript run <objective> (--changed-from <ref> | --scope <file>) --out <dir>"
 
 func runObjective(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
+	ra, err := adapterkit.ParseRun(args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "assure-adapter-typescript: %v\n", err)
 		_, _ = fmt.Fprintln(stderr, runUsage)
 		return 2
 	}
-	obj := args[0]
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	ref := fs.String("changed-from", "", "git ref to diff against")
-	out := fs.String("out", "", "directory for evidence files")
-	if err := fs.Parse(args[1:]); err != nil || *ref == "" || *out == "" || fs.NArg() > 0 {
-		_, _ = fmt.Fprintln(stderr, runUsage)
-		return 2
-	}
+	obj := ra.Objective
 	fn, ok := runners[obj]
 	if !ok {
 		_, _ = fmt.Fprintf(stderr, "assure-adapter-typescript: objective %q is not implemented\n", obj)
 		return 2
 	}
-	resp, err := execute(fn, obj, *ref, *out)
+	if obj == "VER-FAIL-ON-BASE" && ra.ChangedFrom == "" {
+		_, _ = fmt.Fprintln(stderr, "assure-adapter-typescript: VER-FAIL-ON-BASE needs a base commit; use --changed-from, not --scope")
+		return 2
+	}
+	resp, err := execute(fn, ra)
 	if err == nil {
 		err = json.NewEncoder(stdout).Encode(resp)
 	}
@@ -94,12 +92,13 @@ func record(m map[string]string, k, v string) {
 	}
 }
 
-func execute(fn runner, obj, ref, out string) (runResponse, error) {
+func execute(fn runner, ra adapterkit.RunArgs) (runResponse, error) {
+	obj, out := ra.Objective, ra.Out
 	wd, err := os.Getwd()
 	if err != nil {
 		return runResponse{}, err
 	}
-	c := runContext{root: realPath(wd), ref: ref, out: out, tools: map[string]map[string]resolved{}}
+	c := runContext{root: realPath(wd), ref: ra.ChangedFrom, scope: ra.Scope, out: out, tools: map[string]map[string]resolved{}}
 	if !onPath("node") {
 		return environment("node is not on PATH; install the Node version the repository's CI uses"), nil
 	}
@@ -112,7 +111,7 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return runResponse{}, err
 	}
 	c.top = realPath(top)
-	paths, err := adapterkit.ChangedPaths(c.root, ref)
+	paths, err := selectedPaths(c.root, ra)
 	if err != nil {
 		return runResponse{}, err
 	}
@@ -143,6 +142,13 @@ func execute(fn runner, obj, ref, out string) (runResponse, error) {
 		return environment(env), nil
 	}
 	return resp, nil
+}
+
+func selectedPaths(root string, ra adapterkit.RunArgs) ([]string, error) {
+	if ra.Scope != nil {
+		return ra.Scope.Paths(), nil
+	}
+	return adapterkit.ChangedPaths(root, ra.ChangedFrom)
 }
 
 func (c *runContext) resolveUnits(obj string) (runResponse, string, error) {

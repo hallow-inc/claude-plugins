@@ -51,6 +51,11 @@ func mutateEntries(c runContext, unit string) ([]string, error) {
 		if role != "source" {
 			continue
 		}
+		rel := adapterkit.RelSlash(unit, filepath.Join(c.root, filepath.FromSlash(f)))
+		if c.scope != nil {
+			out = append(out, rel)
+			continue
+		}
 		diff, err := adapterkit.ToolOutput(c.root, "git", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", c.ref, "--", f)
 		if err != nil {
 			return nil, err
@@ -59,7 +64,6 @@ func mutateEntries(c runContext, unit string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		rel := adapterkit.RelSlash(unit, filepath.Join(c.root, filepath.FromSlash(f)))
 		for _, r := range ranges {
 			out = append(out, fmt.Sprintf("%s:%d-%d", rel, r.start, r.end))
 		}
@@ -143,6 +147,22 @@ func (r strykerReport) addStryker(data []byte, rel func(string) (string, error))
 	return nil
 }
 
+func (r strykerReport) keepScoped(s adapterkit.Scope) {
+	for p, f := range r.Files {
+		kept := f.Mutants[:0]
+		for _, m := range f.Mutants {
+			if s.Contains(p, m.Location.Start.Line) {
+				kept = append(kept, m)
+			}
+		}
+		if len(kept) == 0 {
+			delete(r.Files, p)
+			continue
+		}
+		f.Mutants = kept
+	}
+}
+
 func (r strykerReport) encode() ([]byte, error) {
 	data, err := json.Marshal(r)
 	if err != nil {
@@ -222,6 +242,9 @@ func runMutation(c runContext) ([]evidence, string, error) {
 		if err := rep.addStryker(data, rel); err != nil {
 			return nil, "", err
 		}
+	}
+	if c.scope != nil {
+		rep.keepScoped(c.scope)
 	}
 	data, err := rep.encode()
 	if err != nil {

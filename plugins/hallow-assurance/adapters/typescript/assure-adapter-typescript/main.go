@@ -87,7 +87,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-typescript describe | reference | classify <path>... | tools --root <dir> | run <objective> --changed-from <ref> --out <dir>")
+		_, _ = fmt.Fprintln(stderr, "usage: assure-adapter-typescript describe | reference | classify <path>... | tools --root <dir> | run <objective> (--changed-from <ref> | --scope <file>) --out <dir>")
 		return 2
 	}
 	var out any
