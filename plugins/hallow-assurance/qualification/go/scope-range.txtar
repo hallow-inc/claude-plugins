@@ -1,0 +1,82 @@
+VER-MUTATION-CHANGED with --scope: p/bounds.go has a surviving mutant on line 10 and one on line 50,
+both covered by a test that asserts nothing. The scope's range [40, 72] keeps line 50 and drops 10.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/bounds.go --
+package p
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+func Low(x int) bool { return x < 3 }
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+// pad
+func High(x int) bool { return x > 7 }
+-- base/p/bounds_test.go --
+package p
+
+import "testing"
+
+func TestBoundsRun(t *testing.T) {
+	for _, x := range []int{0, 3, 5, 7, 9} {
+		_, _ = Low(x), High(x)
+	}
+}
+-- head.msg --
+chore: nothing changes; the scope names committed code
+-- scope.json --
+[{"path": "p/bounds.go", "ranges": [[40, 72]]}]
+-- survivors --
+p/bounds.go:50
