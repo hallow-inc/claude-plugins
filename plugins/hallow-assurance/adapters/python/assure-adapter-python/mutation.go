@@ -289,6 +289,22 @@ func mutantID(file string, m strykerMutant) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func (r strykerReport) keepScoped(s adapterkit.Scope) {
+	for p, f := range r.Files {
+		kept := f.Mutants[:0]
+		for _, m := range f.Mutants {
+			if s.Contains(p, m.Location.Start.Line) {
+				kept = append(kept, m)
+			}
+		}
+		if len(kept) == 0 {
+			delete(r.Files, p)
+			continue
+		}
+		f.Mutants = kept
+	}
+}
+
 func (r strykerReport) encode() ([]byte, error) {
 	data, err := json.Marshal(r)
 	if err != nil {
