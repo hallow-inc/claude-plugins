@@ -315,10 +315,34 @@ const (
 
 var targetKinds = []targetKind{kindTracked, kindUntracked, kindIgnored, kindMissing, kindTest, kindGenerated}
 
+type wantTarget struct {
+	rel             string
+	lines           int
+	whole, optional bool
+}
+
 type drawnTargets struct {
 	sel                  []string
-	scoped               []mutationTarget
+	scope                adapterkit.Scope
+	want                 []wantTarget
 	tracked, uncommitted map[string]string
+}
+
+func (d *drawnTargets) addScope(t *rapid.T, p string) bool {
+	whole := false
+	for range rapid.IntRange(1, 2).Draw(t, "entries") {
+		e := adapterkit.ScopeEntry{Path: p}
+		if rapid.Bool().Draw(t, "wholeEntry") {
+			whole = true
+		} else {
+			for range rapid.IntRange(1, 2).Draw(t, "ranges") {
+				lo := rapid.IntRange(1, 8).Draw(t, "lo")
+				e.Ranges = append(e.Ranges, [2]int{lo, lo + rapid.IntRange(0, 4).Draw(t, "span")})
+			}
+		}
+		d.scope = append(d.scope, e)
+	}
+	return whole
 }
 
 func (d *drawnTargets) add(t *rapid.T, iter, j int) {
@@ -340,13 +364,52 @@ func (d *drawnTargets) add(t *rapid.T, iter, j int) {
 	case kindUntracked, kindIgnored, kindTest, kindGenerated:
 		d.uncommitted[p] = body
 	}
+	whole := d.addScope(t, p)
 	n := lineCount(body)
-	if (kind == kindTracked || kind == kindUntracked) && n > 0 {
-		d.scoped = append(d.scoped, mutationTarget{rel: p, ranges: []lineRange{{1, n}}})
+	if (kind == kindTracked || kind == kindUntracked) && (n > 0 || !whole) {
+		d.want = append(d.want, wantTarget{rel: p, lines: n, whole: whole, optional: n == 0})
 	}
 }
 
-func TestScopedMutationTargetsAreWholeListedSourceFiles(t *testing.T) {
+func checkScopedTarget(t *rapid.T, s adapterkit.Scope, w wantTarget, got mutationTarget) {
+	if !got.scoped {
+		t.Fatalf("target %+v is not marked scoped; a --scope run keeps every mutant starting in range wherever it ends, and only the scoped flag tells mutantsFromDump to", got)
+	}
+	for l := 0; l <= scopedMaxLine+1; l++ {
+		want := l >= 1 && l <= w.lines
+		if !w.whole {
+			want = s.Contains(w.rel, l)
+		}
+		if inLineRanges(got.ranges, l) != want {
+			t.Fatalf("%s (%d lines, whole entry %v) under scope %+v: target ranges %v put line %d in range %v, want %v; a ranged entry mutates only its ranges, so the tests selected and the mutants executed are the ones the audit asked about, while an entry without ranges is the whole file", w.rel, w.lines, w.whole, s, got.ranges, l, !want, want)
+		}
+	}
+}
+
+func checkRefTargetsNotScoped(t *rapid.T, top string, d drawnTargets) {
+	edited := map[string]string{}
+	for p, body := range d.tracked {
+		edited[p] = body + "\nz = 0\n"
+	}
+	writeTree(t, top, edited)
+	ref, err := mutationTargets(runContext{root: top, top: top, ref: "HEAD", sel: map[string][]string{top: d.sel}}, top)
+	writeTree(t, top, d.tracked)
+	if err != nil {
+		t.Fatalf("mutationTargets in ref mode: %v", err)
+	}
+	var rels []string
+	for _, tg := range ref {
+		rels = append(rels, tg.rel)
+		if tg.scoped || len(tg.ranges) == 0 {
+			t.Fatalf("ref-mode target %+v; a --changed-from target carries its diff hunks and is not scoped, so a mutant reaching an unchanged line is dropped", tg)
+		}
+	}
+	if want := slices.Sorted(maps.Keys(d.tracked)); !slices.Equal(slices.Sorted(slices.Values(rels)), want) {
+		t.Fatalf("ref mode with every tracked file edited targeted %q, want %q", rels, want)
+	}
+}
+
+func TestScopedMutationTargetsTakeScopeRanges(t *testing.T) {
 	isolateGit(t)
 	top := realTempDir(t)
 	writeTree(t, top, map[string]string{".gitignore": "app/ignored/\n", "pyproject.toml": "[project]\nname = \"x\"\n"})
@@ -357,7 +420,7 @@ func TestScopedMutationTargetsAreWholeListedSourceFiles(t *testing.T) {
 	iter := 0
 	rapid.Check(t, func(rt *rapid.T) {
 		iter++
-		d := drawnTargets{tracked: map[string]string{}, uncommitted: map[string]string{}}
+		d := drawnTargets{tracked: map[string]string{}, uncommitted: map[string]string{}, scope: adapterkit.Scope{{Path: "app/other.py", Ranges: [][2]int{{1, 1}}}}}
 		for j := range rapid.IntRange(0, 6).Draw(rt, "files") {
 			d.add(rt, iter, j)
 		}
@@ -365,13 +428,23 @@ func TestScopedMutationTargetsAreWholeListedSourceFiles(t *testing.T) {
 		git(rt, top, "add", "-A")
 		git(rt, top, "commit", "-q", "--allow-empty", "-m", fmt.Sprint(iter))
 		writeTree(rt, top, d.uncommitted)
-		s := adapterkit.Scope{{Path: "unused", Ranges: [][2]int{{1, 1}}}}
-		got, err := mutationTargets(runContext{root: top, top: top, ref: "no-such-ref", scope: s, sel: map[string][]string{top: d.sel}}, top)
+		got, err := mutationTargets(runContext{root: top, top: top, ref: "no-such-ref", scope: d.scope, sel: map[string][]string{top: d.sel}}, top)
 		if err != nil {
 			rt.Fatalf("mutationTargets in scope mode: %v; a scoped run has no ref, so it must not ask git for a diff", err)
 		}
-		if !reflect.DeepEqual(got, d.scoped) {
-			rt.Fatalf("selected %q gave targets %+v, want %+v; a scoped run mutates every tracked or untracked, not ignored, non-empty source file whole, and the scope filters afterwards", d.sel, got, d.scoped)
+		i := 0
+		for _, w := range d.want {
+			if i < len(got) && got[i].rel == w.rel {
+				checkScopedTarget(rt, d.scope, w, got[i])
+				i++
+				continue
+			}
+			if !w.optional {
+				rt.Fatalf("selected %q under scope %+v gave targets %+v, missing %s; every tracked or untracked, not ignored source file the scope names is a target, a whole-file entry needing at least one line", d.sel, d.scope, got, w.rel)
+			}
+		}
+		if i != len(got) {
+			rt.Fatalf("selected %q under scope %+v gave targets %+v; %+v are ignored, missing, test, generated or empty whole-file targets, none of which a scoped run mutates", d.sel, d.scope, got, got[i:])
 		}
 		ref, err := mutationTargets(runContext{root: top, top: top, ref: "HEAD", sel: map[string][]string{top: d.sel}}, top)
 		if err != nil {
@@ -380,6 +453,7 @@ func TestScopedMutationTargetsAreWholeListedSourceFiles(t *testing.T) {
 		if len(ref) != 0 {
 			rt.Fatalf("ref mode on the same selection targeted %+v; every tracked file matches HEAD and the rest are untracked, so a diff against HEAD has nothing to mutate, and whole files and untracked files belong to scoped runs only", ref)
 		}
+		checkRefTargetsNotScoped(rt, top, d)
 	})
 }
 
@@ -529,6 +603,185 @@ func TestIntegrationScopedMutation(t *testing.T) {
 	}
 	if len(rep.Files["app/fresh.py"].Mutants) == 0 {
 		t.Fatal("no mutants on the untracked app/fresh.py; a scope entry without ranges is the whole file, tracked or not")
+	}
+	if after := repoState(t, top); after != before {
+		t.Fatalf("the run changed the repository\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+const dumpLineText = "abcdefgh"
+
+type drawnMutant struct{ start, end [2]int }
+
+func drawDumpMutant(t *rapid.T, lines int) drawnMutant {
+	sl := rapid.IntRange(1, lines).Draw(t, "startLine")
+	el := rapid.IntRange(sl, min(lines, sl+3)).Draw(t, "endLine")
+	sc := rapid.IntRange(0, len(dumpLineText)-1).Draw(t, "startCol")
+	lo := 0
+	if el == sl {
+		lo = sc + 1
+	}
+	return drawnMutant{[2]int{sl, sc}, [2]int{el, rapid.IntRange(lo, len(dumpLineText)).Draw(t, "endCol")}}
+}
+
+func dumpLineFor(t fataler, m drawnMutant) string {
+	k := m.end[0] - m.start[0] + 1
+	var diff strings.Builder
+	fmt.Fprintf(&diff, "--- mutation diff ---\n--- a/mod.py\n+++ b/mod.py\n@@ -%d,%d +%d,1 @@\n", m.start[0], k, m.start[0])
+	for range k {
+		diff.WriteString("-" + dumpLineText + "\n")
+	}
+	diff.WriteString("+" + dumpLineText[:m.start[1]] + "Z" + dumpLineText[m.end[1]:] + "\n")
+	item := map[string]any{"mutations": []map[string]any{{"module_path": "mod.py", "operator_name": "core/NumberReplacer", "start_pos": m.start, "end_pos": m.end}}}
+	res := map[string]any{"worker_outcome": "normal", "output": exitSentinel + "1\n", "test_outcome": "killed", "diff": diff.String()}
+	data, err := json.Marshal([]any{item, res})
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	return string(data)
+}
+
+func inLineRanges(rs []lineRange, line int) bool {
+	for _, r := range rs {
+		if r.start <= line && line <= r.end {
+			return true
+		}
+	}
+	return false
+}
+
+func TestScopedDumpKeepsMutantsStartingInRange(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		lines := rapid.IntRange(1, 10).Draw(t, "lines")
+		orig := strings.Repeat(dumpLineText+"\n", lines)
+		var ranges []lineRange
+		for range rapid.IntRange(1, 3).Draw(t, "ranges") {
+			lo := rapid.IntRange(1, lines).Draw(t, "lo")
+			ranges = append(ranges, lineRange{lo, rapid.IntRange(lo, lines).Draw(t, "hi")})
+		}
+		var dump []string
+		var wantScoped, wantRef []strykerPosition
+		for range rapid.IntRange(0, 6).Draw(t, "mutants") {
+			m := drawDumpMutant(t, lines)
+			dump = append(dump, dumpLineFor(t, m))
+			start := strykerPosition{m.start[0], m.start[1] + 1}
+			if inLineRanges(ranges, m.start[0]) {
+				wantScoped = append(wantScoped, start)
+			}
+			last := m.end[0]
+			if m.end[1] == 0 && last > m.start[0] {
+				last--
+			}
+			every := true
+			for l := m.start[0]; l <= last; l++ {
+				every = every && inLineRanges(ranges, l)
+			}
+			if every {
+				wantRef = append(wantRef, start)
+			}
+		}
+		for _, scoped := range []bool{true, false} {
+			muts, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: ranges, scoped: scoped}, orig, []byte(strings.Join(dump, "\n")), true)
+			if err != nil {
+				t.Fatalf("scoped %v: %v", scoped, err)
+			}
+			var got []strykerPosition
+			for _, m := range muts {
+				got = append(got, m.Location.Start)
+			}
+			want, why := wantRef, "a --changed-from run keeps a mutant only when every line of its span changed, since a mutant reaching into unchanged code is not evidence about the change"
+			if scoped {
+				want, why = wantScoped, "a --scope run keeps a mutant whose start line is in a scope range wherever it ends, the rule keepScoped applies, so dropping it here loses mutants the audit asked about"
+			}
+			if !slices.Equal(got, want) {
+				t.Fatalf("scoped %v, ranges %v: kept mutants starting at %v, want %v; %s\ndump:\n%s", scoped, ranges, got, want, why, strings.Join(dump, "\n"))
+			}
+		}
+	})
+}
+
+const selSource = "def a(x):\n    return x + 1\n\n\ndef b(x):\n    return x * 2\n"
+
+func selTest(log, name string, arg, want int) string {
+	return fmt.Sprintf(`import json
+
+import app.sel
+
+
+def test_%[2]s():
+    with open(app.sel.__file__) as src, open(%[1]q, "a") as out:
+        out.write(json.dumps({"test": %[2]q, "source": src.read()}) + "\n")
+    assert app.sel.%[2]s(%[3]d) == %[4]d
+`, log, name, arg, want)
+}
+
+type selRun struct{ Test, Source string }
+
+func readSelLog(t *testing.T, log string) []selRun {
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runs []selRun
+	for line := range strings.Lines(string(data)) {
+		var r selRun
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			t.Fatalf("log line %q: %v", line, err)
+		}
+		runs = append(runs, r)
+	}
+	return runs
+}
+
+func changedLines(orig, mutated string) []int {
+	o, m := strings.Split(orig, "\n"), strings.Split(mutated, "\n")
+	var out []int
+	for i := range max(len(o), len(m)) {
+		if i >= len(o) || i >= len(m) || o[i] != m[i] {
+			out = append(out, i+1)
+		}
+	}
+	return out
+}
+
+func TestIntegrationScopedRangeSelectsTestsAndMutants(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "runs.jsonl")
+	top := realPyRepo(t, map[string]string{
+		"app/sel.py":          selSource,
+		"tests/test_sel_a.py": selTest(log, "a", 1, 2),
+		"tests/test_sel_b.py": selTest(log, "b", 3, 6),
+	})
+	before := repoState(t, top)
+	scope := writeScopeFile(t, t.TempDir(), scopeJSON(t, adapterkit.Scope{{Path: "app/sel.py", Ranges: [][2]int{{2, 2}}}}))
+	out := t.TempDir()
+	rep := readMutationReport(t, out, runScoped(t, "VER-MUTATION-CHANGED", scope, out))
+	runs := readSelLog(t, log)
+	counts := map[string]int{}
+	mutantRuns := 0
+	for _, r := range runs {
+		counts[r.Test]++
+		lines := changedLines(selSource, r.Source)
+		if len(lines) > 0 && !slices.Equal(lines, []int{2}) {
+			t.Fatalf("test_%s ran against app/sel.py mutated on lines %v:\n%s\nthe scope names line 2 only, so cosmic-ray's line filter must get the scope's range and never execute a mutant elsewhere; filtering afterwards still pays for every out-of-scope run", r.Test, lines, r.Source)
+		}
+		if len(lines) > 0 {
+			mutantRuns++
+		}
+	}
+	if mutantRuns == 0 {
+		t.Fatalf("no test ran against a mutant of line 2 (runs %v); `return x + 1` yields mutants and test_a executes it, so the checks above prove nothing", counts)
+	}
+	if counts["b"] != 1 {
+		t.Fatalf("test_b ran %d times (runs %v), want once, while recording coverage contexts; line 2 is executed only by test_a, so the baseline and every mutant run test_a alone, and running the whole suite per mutant is what makes a scoped audit of a real repository take over half an hour", counts["b"], counts)
+	}
+	f := rep.Files["app/sel.py"]
+	if f == nil || len(f.Mutants) == 0 {
+		t.Fatalf("report files %v; app/sel.py line 2 must yield mutants", slices.Sorted(maps.Keys(rep.Files)))
+	}
+	for _, m := range f.Mutants {
+		if m.Location.Start.Line != 2 || m.Status != "Killed" {
+			t.Fatalf("mutant %+v; every mutant starts on the scoped line 2 and test_a, asserting a(1) == 2, kills it", m)
+		}
 	}
 	if after := repoState(t, top); after != before {
 		t.Fatalf("the run changed the repository\nbefore:\n%s\nafter:\n%s", before, after)
