@@ -38,17 +38,17 @@ func runAudit(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(1, err)
 	}
+	outcomes, err := app.Audit(m, scope)
+	if err != nil {
+		return fail(1, err)
+	}
 	var b strings.Builder
-	for _, f := range scope {
-		ranges := "-"
-		if len(f.Ranges) > 0 {
-			rs := make([]string, len(f.Ranges))
-			for i, r := range f.Ranges {
-				rs[i] = fmt.Sprintf("%d-%d", r[0], r[1])
-			}
-			ranges = strings.Join(rs, ",")
+	for _, o := range outcomes {
+		fmt.Fprintf(&b, "%s\t%s\t%s", o.Lang, o.Objective, o.Status)
+		if o.Reason != "" {
+			fmt.Fprintf(&b, "\t%s", strings.Join(strings.Fields(o.Reason), " "))
 		}
-		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\n", f.Path, f.Lang, f.Role, ranges)
+		b.WriteString("\n")
 	}
 	if _, err := io.WriteString(stdout, b.String()); err != nil {
 		return fail(1, err)

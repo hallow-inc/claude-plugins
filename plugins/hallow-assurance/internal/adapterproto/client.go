@@ -254,12 +254,20 @@ func Classify(dir, lang string, paths []string) ([]File, error) {
 }
 
 func RunObjective(dir, lang, objective, ref, out string, timeout time.Duration) (Run, error) {
+	return runObjective(dir, lang, timeout, objective, "--changed-from", ref, "--out", out)
+}
+
+func RunObjectiveScope(dir, lang, objective, scopeFile, out string, timeout time.Duration) (Run, error) {
+	return runObjective(dir, lang, timeout, objective, "--scope", scopeFile, "--out", out)
+}
+
+func runObjective(dir, lang string, timeout time.Duration, args ...string) (Run, error) {
 	exe, err := Resolve(lang)
 	if err != nil {
 		return Run{}, err
 	}
 	name := Executable(lang)
-	raw, err := invoke(exe, dir, name, "run", timeout, objective, "--changed-from", ref, "--out", out)
+	raw, err := invoke(exe, dir, name, "run", timeout, args...)
 	if err != nil {
 		return Run{}, err
 	}
