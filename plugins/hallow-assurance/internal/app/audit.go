@@ -84,10 +84,7 @@ func writeAuditScope(dir string, files []ScopeFile) (string, error) {
 	for i, f := range files {
 		s[i] = adapterkit.ScopeEntry{Path: f.Path, Ranges: f.Ranges}
 	}
-	data, err := json.Marshal(s)
-	if err != nil {
-		return "", err
-	}
+	data, _ := json.Marshal(s)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
