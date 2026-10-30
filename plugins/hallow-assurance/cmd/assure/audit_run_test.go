@@ -503,3 +503,23 @@ func checkAdapterErrorNotAudited(t *rapid.T, got map[string]string, lang, kind s
 		}
 	}
 }
+
+func TestAuditThatCannotWriteItsStateExitsOneNamingTheCause(t *testing.T) {
+	f := newAuditPlanFixture(t)
+	for _, lang := range auditLangs {
+		f.install(t, lang, auditable, map[string]string{objTests + ".json": testsRun, objTests + ".ev": greenJUnit})
+	}
+	state := filepath.Dir(auditStateDir)
+	f.write(state, "a file where the state directory belongs\n")
+
+	code, out, stderr := assure("audit", "p/a.xx", "q/d.yy")
+
+	if code != 1 || out != "" || !strings.Contains(stderr, state) {
+		t.Fatalf("exit %d stdout %q stderr %q; an audit that cannot write its scope files is an environment failure (exit 1) naming the path, never a clean empty audit", code, out, stderr)
+	}
+	for _, lang := range auditLangs {
+		if runs, _, _ := f.runsOf(t, lang); len(runs) > 0 {
+			t.Fatalf("%s adapter ran %+v though no scope file could be written", lang, runs)
+		}
+	}
+}

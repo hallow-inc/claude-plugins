@@ -122,18 +122,18 @@ func auditLanguage(m *core.Manifest, lang string, jobs []job, reasons []string) 
 	record := func(j job, ev core.Evidence, run adapterproto.Run) {
 		mu.Lock()
 		defer mu.Unlock()
-		switch {
-		case run.Environment != nil:
+		if run.Environment != nil {
 			reasons = append(reasons, run.Environment.Message)
-		case len(ev.Errs) > 0:
+		} else if len(ev.Errs) > 0 {
 			reasons = append(reasons, ev.Errs[0].Error())
-		default:
+		} else {
 			out = append(out, AuditOutcome{Lang: lang, Objective: j.obj.ID, Status: auditRan})
 		}
 	}
 	rest := jobs
 	skipMutation := skipTestsUnknown
-	if i := slices.IndexFunc(jobs, func(j job) bool { return j.obj.ID == auditTests }); i >= 0 {
+	i := slices.IndexFunc(jobs, func(j job) bool { return j.obj.ID == auditTests })
+	if i >= 0 {
 		rest = slices.Delete(slices.Clone(jobs), i, i+1)
 		ev, run := collect(m, jobs[i], "", EvaluateTimeout)
 		record(jobs[i], ev, run)
@@ -160,12 +160,13 @@ func auditLanguage(m *core.Manifest, lang string, jobs []job, reasons []string) 
 }
 
 func suiteState(ev core.Evidence, run adapterproto.Run) string {
-	switch {
-	case run.Environment != nil || len(ev.Errs) > 0:
+	if run.Environment != nil || len(ev.Errs) > 0 {
 		return skipTestsUnknown
-	case len(ev.Failing) > 0:
+	}
+	if len(ev.Failing) > 0 {
 		return skipTestsFailing
-	case len(ev.Problems) > 0:
+	}
+	if len(ev.Problems) > 0 {
 		return skipTestsUnknown
 	}
 	return ""
