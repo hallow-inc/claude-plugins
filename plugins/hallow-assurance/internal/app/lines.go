@@ -37,13 +37,9 @@ func AddedLines(root, ref string) (map[string][]int, error) {
 		if p == "" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
+		n, err := lineCount(filepath.Join(root, filepath.FromSlash(p)))
 		if err != nil {
 			return nil, err
-		}
-		n := bytes.Count(data, []byte("\n"))
-		if len(data) > 0 && data[len(data)-1] != '\n' {
-			n++
 		}
 		all := make([]int, n)
 		for i := range all {
@@ -52,6 +48,18 @@ func AddedLines(root, ref string) (map[string][]int, error) {
 		lines[p] = all
 	}
 	return lines, nil
+}
+
+func lineCount(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	n := bytes.Count(data, []byte("\n"))
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		n++
+	}
+	return n, nil
 }
 
 func parseZeroContextDiff(diff string) (map[string][]int, error) {

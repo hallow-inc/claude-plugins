@@ -17,6 +17,7 @@ Usage:
   assure <command> [arguments]
 
 Commands:
+  audit      Measure test strength of a scope (advisory)
   check      Run the fast objectives on changed files
   classify   Print level, language, and role for each path
   context    Print the level map and applicable objectives
@@ -34,6 +35,7 @@ func main() {
 }
 
 var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
+	"audit":     runAudit,
 	"context":   runContext,
 	"check":     runCheck,
 	"evaluate":  runEvaluate,
