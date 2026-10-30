@@ -19,6 +19,7 @@ import (
 type mutationTarget struct {
 	rel    string
 	ranges []lineRange
+	scoped bool
 }
 
 func mutationTargets(c runContext, unit string) ([]mutationTarget, error) {
@@ -40,11 +41,12 @@ func mutationTargets(c runContext, unit string) ([]mutationTarget, error) {
 			continue
 		}
 		if c.scope != nil {
-			tg, ok, err := wholeFile(c.root, f)
+			tg, ok, err := scopedTarget(c.root, c.scope, f)
 			if err != nil {
 				return nil, err
 			}
 			if ok {
+				tg.scoped = true
 				out = append(out, tg)
 			}
 			continue
@@ -62,6 +64,27 @@ func mutationTargets(c runContext, unit string) ([]mutationTarget, error) {
 		}
 	}
 	return out, nil
+}
+
+func scopedTarget(root string, s adapterkit.Scope, rel string) (mutationTarget, bool, error) {
+	var ranges []lineRange
+	for _, e := range s {
+		if e.Path != rel {
+			continue
+		}
+		if len(e.Ranges) == 0 {
+			return wholeFile(root, rel)
+		}
+		for _, r := range e.Ranges {
+			ranges = append(ranges, lineRange{r[0], r[1]})
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); errors.Is(err, fs.ErrNotExist) {
+		return mutationTarget{}, false, nil
+	} else if err != nil {
+		return mutationTarget{}, false, err
+	}
+	return mutationTarget{rel: rel, ranges: ranges}, len(ranges) > 0, nil
 }
 
 func wholeFile(root, rel string) (mutationTarget, bool, error) {
@@ -265,7 +288,7 @@ func (c runContext) mutateFile(unit string, t mutationTree, i int, tg mutationTa
 	if err != nil {
 		return nil, "", err
 	}
-	muts, err := mutantsFromDump(tg.rel, string(orig), dump, tg.ranges, covered)
+	muts, err := mutantsFromDump(tg, string(orig), dump, covered)
 	return muts, string(orig), err
 }
 

@@ -475,7 +475,7 @@ const recordedSource = "def zero():\n    return 0  # é\n"
 // TestTwoMutantsOnOneSpanFromRecordedDump is spec scenario "Two mutants on
 // one span" from a recorded NumberReplacer dump.
 func TestTwoMutantsOnOneSpanFromRecordedDump(t *testing.T) {
-	muts, err := mutantsFromDump("app/mod.py", recordedSource, []byte(recordedNumberReplacer), []lineRange{{2, 2}}, true)
+	muts, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: []lineRange{{2, 2}}}, recordedSource, []byte(recordedNumberReplacer), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -494,11 +494,11 @@ func TestTwoMutantsOnOneSpanFromRecordedDump(t *testing.T) {
 }
 
 func checkRecordedDumpFilters(t *testing.T) {
-	uncovered, err := mutantsFromDump("app/mod.py", recordedSource, []byte(recordedNumberReplacer), []lineRange{{2, 2}}, false)
+	uncovered, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: []lineRange{{2, 2}}}, recordedSource, []byte(recordedNumberReplacer), false)
 	if err != nil || len(uncovered) != 2 || uncovered[0].Status != "NoCoverage" || uncovered[1].Status != "NoCoverage" {
 		t.Fatalf("uncovered = %+v, %v; a file no test executes reports NoCoverage whatever its run printed", uncovered, err)
 	}
-	if none, err := mutantsFromDump("app/mod.py", recordedSource, []byte(recordedNumberReplacer), []lineRange{{1, 1}}, true); err != nil || len(none) != 0 {
+	if none, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: []lineRange{{1, 1}}}, recordedSource, []byte(recordedNumberReplacer), true); err != nil || len(none) != 0 {
 		t.Fatalf("mutants on unchanged line 2 = %+v, %v; want none", none, err)
 	}
 }
@@ -523,17 +523,17 @@ func TestMutantsFromDumpSpanFilter(t *testing.T) {
 	}
 	for _, c := range cases {
 		line := dumpMutation.ReplaceAllString(first, c.span)
-		muts, err := mutantsFromDump("app/mod.py", recordedSource, []byte(line), c.ranges, true)
+		muts, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: c.ranges}, recordedSource, []byte(line), true)
 		if err != nil || c.keep != (len(muts) == 1) {
 			t.Fatalf("span %s with changed lines %v: kept %d (%v), want kept %v; the spec drops a mutant spanning an unchanged line", c.span, c.ranges, len(muts), err, c.keep)
 		}
 	}
 	skipped := strings.Replace(first, `"worker_outcome": "normal"`, `"worker_outcome": "skipped"`, 1)
-	if muts, err := mutantsFromDump("app/mod.py", recordedSource, []byte(skipped), []lineRange{{2, 2}}, true); err != nil || len(muts) != 0 {
+	if muts, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: []lineRange{{2, 2}}}, recordedSource, []byte(skipped), true); err != nil || len(muts) != 0 {
 		t.Fatalf("skipped job gave %+v, %v; cr-filter-operators marks excluded operators skipped, and they are not mutants", muts, err)
 	}
 	noDiff := strings.Replace(first, `"diff": "--- mutation diff`, `"nodiff": "`, 1)
-	if _, err := mutantsFromDump("app/mod.py", recordedSource, []byte(noDiff), []lineRange{{2, 2}}, true); err == nil {
+	if _, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: []lineRange{{2, 2}}}, recordedSource, []byte(noDiff), true); err == nil {
 		t.Fatal("a job without a diff was accepted; without its diff two twins on one span cannot be told apart")
 	}
 }
@@ -544,7 +544,7 @@ func TestMutantsFromDumpSpanFilter(t *testing.T) {
 // failed validation and with it the whole objective.
 func TestChangedFileWithoutMutantsValidates(t *testing.T) {
 	for name, dump := range map[string]string{"empty dump": "", "out of range": recordedNumberReplacer} {
-		muts, err := mutantsFromDump("app/mod.py", recordedSource, []byte(dump), []lineRange{{1, 1}}, true)
+		muts, err := mutantsFromDump(mutationTarget{rel: "app/mod.py", ranges: []lineRange{{1, 1}}}, recordedSource, []byte(dump), true)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

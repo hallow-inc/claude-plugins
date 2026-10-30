@@ -383,7 +383,7 @@ func strykerFor(file, orig string, mu cosmicMutation, res *cosmicResult, covered
 	return m, nil
 }
 
-func mutantsFromDump(file, orig string, dump []byte, ranges []lineRange, covered bool) ([]strykerMutant, error) {
+func mutantsFromDump(tg mutationTarget, orig string, dump []byte, covered bool) ([]strykerMutant, error) {
 	out := []strykerMutant{}
 	for line := range strings.SplitSeq(strings.TrimSpace(string(dump)), "\n") {
 		if line == "" {
@@ -393,10 +393,14 @@ func mutantsFromDump(file, orig string, dump []byte, ranges []lineRange, covered
 		if err != nil {
 			return nil, err
 		}
-		if (res != nil && res.WorkerOutcome == "skipped") || !within(ranges, mu) {
+		kept := within(tg.ranges, mu)
+		if tg.scoped {
+			kept = inRanges(tg.ranges, mu.StartPos[0])
+		}
+		if (res != nil && res.WorkerOutcome == "skipped") || !kept {
 			continue
 		}
-		m, err := strykerFor(file, orig, mu, res, covered)
+		m, err := strykerFor(tg.rel, orig, mu, res, covered)
 		if err != nil {
 			return nil, err
 		}
