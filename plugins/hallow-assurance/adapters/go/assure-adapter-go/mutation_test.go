@@ -175,7 +175,7 @@ func TestMutationGremlinsMissingIsEnvironment(t *testing.T) {
 	environmentIn(t, resp, out, "gremlins", gremlinsDefaultInstall)
 }
 
-func unleashArgv(t *testing.T, ref string) []string {
+func unleashArgv(t *testing.T, ref, target string) []string {
 	t.Helper()
 	argv := filepath.Join(t.TempDir(), "argv")
 	narrowPath(t, nil, map[string]string{"gremlins": `printf '%s\n' "$@" >| '` + argv + `'
@@ -184,7 +184,7 @@ while [ $# -gt 0 ]; do
 	shift
 done
 `})
-	if _, err := unleash(t.TempDir(), ref, t.TempDir(), "1"); err != nil {
+	if _, err := unleash(t.TempDir(), ref, target, t.TempDir(), "1"); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(argv)
@@ -208,7 +208,7 @@ func flagValue(args []string, name string) string {
 
 func TestMutationGivesGremlinsTimeoutHeadroom(t *testing.T) {
 	const minCoefficient = 100
-	args := unleashArgv(t, "HEAD")
+	args := unleashArgv(t, "HEAD", ".")
 	coef := flagValue(args, "--timeout-coefficient")
 	if n, err := strconv.Atoi(coef); err != nil || n < minCoefficient {
 		t.Fatalf("gremlins argv %q: --timeout-coefficient %q, want an integer >= %d; a mutant whose test run outlasts the coefficient is reported TIMED OUT, and TIMED OUT counts as detected, so a tight coefficient turns real survivors into false kills and VER-MUTATION-CHANGED fails open on packages with slow tests (measured on internal/hookio at --workers 2: coefficient 10 gave 15 timed out / 0 lived, coefficient 100 gave 68 killed / 9 lived / 0 timed out)", args, coef, minCoefficient)
@@ -224,7 +224,7 @@ while [ $# -gt 0 ]; do
 	shift
 done
 `})
-	if _, err := unleash(t.TempDir(), "HEAD", t.TempDir(), "1"); err != nil {
+	if _, err := unleash(t.TempDir(), "HEAD", ".", t.TempDir(), "1"); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(argv)

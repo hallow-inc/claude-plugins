@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -164,12 +165,18 @@ func runMutation(root string, args adapterkit.RunArgs, out string, sel map[strin
 		return string(b), err
 	}
 	for _, mod := range modules(sel) {
-		data, err := unleash(filepath.Join(root, mod), args.ChangedFrom, out, seed)
-		if err != nil {
-			return nil, err
+		targets := []string{"."}
+		if args.Scope != nil && !slices.Contains(sel[mod], "./...") {
+			targets = outermost(sel[mod])
 		}
-		if err := rep.addGremlins(data, mod, source); err != nil {
-			return nil, err
+		for _, target := range targets {
+			data, err := unleash(filepath.Join(root, mod), args.ChangedFrom, target, out, seed)
+			if err != nil {
+				return nil, err
+			}
+			if err := rep.addGremlins(data, path.Join(mod, target), source); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if args.Scope != nil {
@@ -185,7 +192,22 @@ func runMutation(root string, args adapterkit.RunArgs, out string, sel map[strin
 	return []evidence{{Type: "mutation.report", Path: "mutation.json"}}, nil
 }
 
-func unleash(dir, ref, out, seed string) ([]byte, error) {
+func outermost(pkgs []string) []string {
+	var kept []string
+	for _, p := range pkgs {
+		c := path.Clean(p)
+		covered := slices.ContainsFunc(pkgs, func(q string) bool {
+			d := path.Clean(q)
+			return d != c && (d == "." || strings.HasPrefix(c, d+"/"))
+		})
+		if !covered {
+			kept = append(kept, p)
+		}
+	}
+	return kept
+}
+
+func unleash(dir, ref, target, out, seed string) ([]byte, error) {
 	f, err := os.CreateTemp(out, "gremlins-*.json")
 	if err != nil {
 		return nil, err
@@ -198,7 +220,7 @@ func unleash(dir, ref, out, seed string) ([]byte, error) {
 	if ref != "" {
 		gargs = append(gargs, "--diff", ref)
 	}
-	cmd := exec.CommandContext(context.Background(), "gremlins", append(gargs, ".")...)
+	cmd := exec.CommandContext(context.Background(), "gremlins", append(gargs, target)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "RAPID_SEED="+seed,
 		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=diff.relative", "GIT_CONFIG_VALUE_0=true")
