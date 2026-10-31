@@ -292,3 +292,21 @@ func TestParseRunRejectsMalformedInvocations(t *testing.T) {
 		}
 	})
 }
+
+func TestMarshalledScopeReadsBackThroughTheSchema(t *testing.T) {
+	dir := t.TempDir()
+	rapid.Check(t, func(t *rapid.T) {
+		want := scopeGen().Draw(t, "scope")
+		data, err := json.Marshal(want)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		got, err := ReadScope(writeScope(t, dir, data))
+		if err != nil {
+			t.Fatalf("ReadScope rejected json.Marshal(%#v) = %s: %v; assure audit writes scope files with json.Marshal, so a whole-file entry must omit ranges rather than send null, or every whole-file audit dies in the adapter", want, data, err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("ReadScope(json.Marshal(%#v)) = %#v; the adapter must run against exactly the scope assure wrote", want, got)
+		}
+	})
+}

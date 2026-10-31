@@ -2,12 +2,15 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
 const auditManifest = "version: 0\ncatalog: v0\nlanguages: [go]\ndefault_level: B\ncomponents: []\n"
@@ -38,48 +41,8 @@ func auditRepo(t *testing.T, manifest string) repo {
 }
 
 type auditLine struct {
-	lang, role string
-	whole      bool
-	lines      []int
-}
-
-func parseAuditOutput(t *testing.T, out string) (paths []string, byPath map[string]auditLine) {
-	t.Helper()
-	byPath = map[string]auditLine{}
-	for line := range strings.SplitSeq(strings.TrimSuffix(out, "\n"), "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) != 4 {
-			t.Fatalf("line %q: want path, lang, role, ranges separated by tabs", line)
-		}
-		l := auditLine{lang: f[1], role: f[2], whole: f[3] == "-"}
-		if !l.whole {
-			set := map[int]bool{}
-			for r := range strings.SplitSeq(f[3], ",") {
-				s, e, ok := strings.Cut(r, "-")
-				a, err1 := strconv.Atoi(s)
-				b, err2 := strconv.Atoi(e)
-				if !ok || err1 != nil || err2 != nil || a > b {
-					t.Fatalf("line %q: range %q is not start-end", line, r)
-				}
-				for i := a; i <= b; i++ {
-					set[i] = true
-				}
-			}
-			l.lines = slices.Sorted(func(yield func(int) bool) {
-				for k := range set {
-					if !yield(k) {
-						return
-					}
-				}
-			})
-		}
-		paths = append(paths, f[0])
-		byPath[f[0]] = l
-	}
-	if !slices.IsSorted(paths) {
-		t.Fatalf("output not sorted by path:\n%s", out)
-	}
-	return paths, byPath
+	whole bool
+	lines []int
 }
 
 func span(a, b int) []int {
@@ -103,24 +66,27 @@ func TestAuditIsACommandWithUsage(t *testing.T) {
 }
 
 func TestAuditFunctionSizedRange(t *testing.T) {
-	auditRepo(t, auditManifest)
-	code, out, stderr := assure("audit", "internal/chat/parse.go:40-72")
-	if code != 0 || out != "internal/chat/parse.go\tgo\tsource\t40-72\n" {
-		t.Fatalf("exit %d stdout %q stderr %q; want only lines 40-72 of parse.go in scope", code, out, stderr)
+	f := scopeAuditRepo(t)
+	code, out, stderr, scope := f.auditScope("internal/chat/parse.go:40-72")
+	if want := map[string]auditLine{"internal/chat/parse.go": {lines: span(40, 72)}}; code != 0 || !reflect.DeepEqual(scope, want) {
+		t.Fatalf("exit %d stdout %q stderr %q; adapter received scope %+v, want only lines 40-72 of parse.go so mutation findings stay inside the named function", code, out, stderr, scope)
 	}
 }
 
 func TestAuditRejectsBadScopeNamingIt(t *testing.T) {
-	auditRepo(t, auditManifest)
+	f := scopeAuditRepo(t)
 	for _, arg := range []string{"does/not/exist", "a.go:30-10", "a.go:40-41", "a.go:0-3", "a.go:x-3", "gen/z.go", "README.md", "README.md:1-1", "../outside", "nomatch/**", "a.go["} {
-		code, out, stderr := assure("audit", "a.go", arg)
+		code, out, stderr, _ := f.auditScope("a.go", arg)
 		if code != 2 || out != "" || !strings.Contains(stderr, arg) {
 			t.Errorf("assure audit a.go %s: exit %d stdout %q stderr %q; want exit 2 naming %q", arg, code, out, stderr, arg)
 		}
+		if !f.ranNothing() {
+			t.Errorf("assure audit a.go %s ran the adapter; a usage error must stop before any tool runs on a scope the user did not mean", arg)
+		}
 	}
-	code, out, stderr := assure("audit", "a.go:40-40")
-	if code != 0 || out != "a.go\tgo\tsource\t40-40\n" {
-		t.Fatalf("a.go:40-40 (the last line): exit %d stdout %q stderr %q; a range ending on the last line is valid", code, out, stderr)
+	code, out, stderr, scope := f.auditScope("a.go:40-40")
+	if want := map[string]auditLine{"a.go": {lines: []int{40}}}; code != 0 || !reflect.DeepEqual(scope, want) {
+		t.Fatalf("a.go:40-40 (the last line): exit %d stdout %q stderr %q scope %+v; a range ending on the last line is valid", code, out, stderr, scope)
 	}
 }
 
@@ -134,42 +100,41 @@ func TestAuditWithoutManifestAdvisesInit(t *testing.T) {
 }
 
 func TestAuditGlobMatchesFromManifestRootNotCwd(t *testing.T) {
-	r := auditRepo(t, auditManifest)
-	t.Chdir(filepath.Join(r.root, "internal", "chat"))
-	code, out, stderr := assure("audit", "*.go")
-	if code != 0 || out != "a.go\tgo\tsource\t-\n" {
-		t.Fatalf("*.go from internal/chat: exit %d stdout %q stderr %q; a glob matches manifest-root-relative paths, so only a.go", code, out, stderr)
+	f := scopeAuditRepo(t)
+	t.Chdir(filepath.Join(f.root, "internal", "chat"))
+	code, out, stderr, scope := f.auditScope("*.go")
+	if want := map[string]auditLine{"a.go": {whole: true}}; code != 0 || !reflect.DeepEqual(scope, want) {
+		t.Fatalf("*.go from internal/chat: exit %d stdout %q stderr %q scope %+v; a glob matches manifest-root-relative paths, so only a.go", code, out, stderr, scope)
 	}
 }
 
 func TestAuditPathsAreRelativeToCwdAndMergePerFile(t *testing.T) {
-	r := auditRepo(t, auditManifest)
-	t.Chdir(filepath.Join(r.root, "internal", "chat"))
-	code, out, stderr := assure("audit", "parse_test.go", "../../a.go:10-12", "../../a.go:3-5", "../../a.go:4-6", "parse.go:1-2", "parse.go")
+	f := scopeAuditRepo(t)
+	t.Chdir(filepath.Join(f.root, "internal", "chat"))
+	code, out, stderr, got := f.auditScope("parse_test.go", "../../a.go:10-12", "../../a.go:3-5", "../../a.go:4-6", "parse.go:1-2", "parse.go")
 	if code != 0 {
-		t.Fatalf("exit %d stderr %q", code, stderr)
+		t.Fatalf("exit %d stdout %q stderr %q", code, out, stderr)
 	}
-	paths, got := parseAuditOutput(t, out)
-	if want := []string{"a.go", "internal/chat/parse.go", "internal/chat/parse_test.go"}; !slices.Equal(paths, want) {
-		t.Fatalf("paths %q, want %q:\n%s", paths, want, out)
+	if paths, want := scopePaths(got), []string{"a.go", "internal/chat/parse.go", "internal/chat/parse_test.go"}; !slices.Equal(paths, want) {
+		t.Fatalf("adapter received paths %q, want %q; arguments are relative to the current directory and each file appears once", paths, want)
 	}
-	if a := got["a.go"]; a.whole || a.lang != "go" || a.role != "source" || !slices.Equal(a.lines, append(span(3, 6), span(10, 12)...)) {
-		t.Errorf("a.go: %+v; want go source covering 3-6 and 10-12", a)
+	if a := got["a.go"]; a.whole || !slices.Equal(a.lines, append(span(3, 6), span(10, 12)...)) {
+		t.Errorf("a.go: %+v; want lines 3-6 and 10-12", a)
 	}
-	if p := got["internal/chat/parse.go"]; !p.whole || p.role != "source" {
-		t.Errorf("parse.go: %+v; the whole-file argument must absorb parse.go:1-2 and print -", p)
+	if p := got["internal/chat/parse.go"]; !p.whole {
+		t.Errorf("parse.go: %+v; the whole-file argument must absorb parse.go:1-2 and send no ranges", p)
 	}
-	if p := got["internal/chat/parse_test.go"]; !p.whole || p.role != "test" {
-		t.Errorf("parse_test.go: %+v; want whole test file", p)
+	if p := got["internal/chat/parse_test.go"]; !p.whole {
+		t.Errorf("parse_test.go: %+v; want the whole test file", p)
 	}
 }
 
 func TestAuditDirectoryExcludesGeneratedAndUnclassified(t *testing.T) {
-	auditRepo(t, auditManifest)
-	code, out, stderr := assure("audit", ".")
-	want := "a.go\tgo\tsource\t-\ninternal/chat/parse.go\tgo\tsource\t-\ninternal/chat/parse_test.go\tgo\ttest\t-\n"
-	if code != 0 || out != want {
-		t.Fatalf("exit %d stdout %q stderr %q; want only source and test files, not gen/z.go or README.md", code, out, stderr)
+	f := scopeAuditRepo(t)
+	code, out, stderr, scope := f.auditScope(".")
+	want := map[string]auditLine{"a.go": {whole: true}, "internal/chat/parse.go": {whole: true}, "internal/chat/parse_test.go": {whole: true}}
+	if code != 0 || !reflect.DeepEqual(scope, want) {
+		t.Fatalf("exit %d stdout %q stderr %q scope %+v; want only source and test files, not gen/z.go or README.md, since mutating generated code reports weaknesses nobody can fix", code, out, stderr, scope)
 	}
 }
 
@@ -202,37 +167,38 @@ func TestAuditRangeOnDirectoryIsUsageError(t *testing.T) {
 }
 
 func TestAuditDeletedTrackedFileNamedIsUsageGlobDropsIt(t *testing.T) {
-	r := auditRepo(t, auditManifest)
-	if err := os.Remove(filepath.Join(r.root, "internal", "chat", "parse.go")); err != nil {
+	f := scopeAuditRepo(t)
+	if err := os.Remove(filepath.Join(f.root, "internal", "chat", "parse.go")); err != nil {
 		t.Fatal(err)
 	}
 	for _, arg := range []string{"internal/chat/parse.go", "internal/chat/parse.go:1-2"} {
-		code, out, stderr := assure("audit", "a.go", arg)
-		if code != 2 || out != "" || !strings.Contains(stderr, arg) {
-			t.Errorf("assure audit a.go %s after deleting it: exit %d stdout %q stderr %q; want exit 2 naming it, since there is nothing on disk to mutate", arg, code, out, stderr)
+		code, out, stderr, _ := f.auditScope("a.go", arg)
+		if code != 2 || out != "" || !strings.Contains(stderr, arg) || !f.ranNothing() {
+			t.Errorf("assure audit a.go %s after deleting it: exit %d stdout %q stderr %q ran nothing %v; want exit 2 naming it before any adapter runs, since there is nothing on disk to mutate", arg, code, out, stderr, f.ranNothing())
 		}
 	}
 	for _, arg := range []string{"**/*.go", "internal", "."} {
-		code, out, stderr := assure("audit", arg)
-		if code != 0 || strings.Contains(out, "parse.go\t") || !strings.Contains(out, "internal/chat/parse_test.go\tgo\ttest\t-\n") {
-			t.Errorf("assure audit %s after deleting parse.go: exit %d stdout %q stderr %q; git still lists it, but a deleted file must drop out of a broad scope without failing it", arg, code, out, stderr)
+		code, out, stderr, scope := f.auditScope(arg)
+		_, deleted := scope["internal/chat/parse.go"]
+		if code != 0 || deleted || !scope["internal/chat/parse_test.go"].whole {
+			t.Errorf("assure audit %s after deleting parse.go: exit %d stdout %q stderr %q scope %+v; git still lists it, but a deleted file must drop out of a broad scope without failing it", arg, code, out, stderr, scope)
 		}
 	}
 }
 
 func TestAuditAbsolutePathMatchesRelativeForm(t *testing.T) {
-	r := auditRepo(t, auditManifest)
-	t.Chdir(filepath.Join(r.root, "internal"))
+	f := scopeAuditRepo(t)
+	t.Chdir(filepath.Join(f.root, "internal"))
 	for _, pair := range [][2]string{
-		{"chat/parse.go:40-72", filepath.Join(r.root, "internal", "chat", "parse.go") + ":40-72"},
-		{"../a.go", filepath.Join(r.root, "a.go")},
-		{"chat", filepath.Join(r.root, "internal", "chat")},
-		{"..", r.root},
+		{"chat/parse.go:40-72", filepath.Join(f.root, "internal", "chat", "parse.go") + ":40-72"},
+		{"../a.go", filepath.Join(f.root, "a.go")},
+		{"chat", filepath.Join(f.root, "internal", "chat")},
+		{"..", f.root},
 	} {
-		rc, rout, rerr := assure("audit", pair[0])
-		ac, aout, aerr := assure("audit", pair[1])
-		if rc != 0 || ac != 0 || rout == "" || aout != rout {
-			t.Errorf("relative %s: exit %d %q %q; absolute %s: exit %d %q %q; both name the same files, so both must print the same root-relative scope", pair[0], rc, rout, rerr, pair[1], ac, aout, aerr)
+		rc, rout, rerr, rel := f.auditScope(pair[0])
+		ac, aout, aerr, abs := f.auditScope(pair[1])
+		if rc != 0 || ac != 0 || len(rel) == 0 || !reflect.DeepEqual(abs, rel) {
+			t.Errorf("relative %s: exit %d %q %q scope %+v; absolute %s: exit %d %q %q scope %+v; both name the same files, so the adapter must receive the same root-relative scope", pair[0], rc, rout, rerr, rel, pair[1], ac, aout, aerr, abs)
 		}
 	}
 }
@@ -282,4 +248,60 @@ func TestAuditUnparseableManifestIsManifestError(t *testing.T) {
 	if code != 2 || out != "" || !strings.Contains(stderr, "invalid manifest") {
 		t.Fatalf("exit %d stdout %q stderr %q; spec assure-audit 'Audit is advisory' says exit 2 on usage and manifest errors", code, out, stderr)
 	}
+}
+
+func scopeAuditRepo(t *testing.T) auditPlanFixture {
+	t.Helper()
+	f := fakeAdapterFixture(t, auditRepo(t, auditManifest), "go")
+	f.install(t, "go", []string{objTests}, map[string]string{objTests + ".json": testsRun, objTests + ".ev": greenJUnit})
+	return f
+}
+
+// auditScope runs assure audit against the fake go adapter and returns the scope that adapter
+// received, so these tests survive the 5.3 change of stdout to findings.json.
+func (f auditPlanFixture) auditScope(args ...string) (code int, stdout, stderr string, scope map[string]auditLine) {
+	f.t.Helper()
+	d := f.logs["go"]
+	for _, name := range []string{"log", "scope." + objTests + ".json"} {
+		if err := os.Remove(filepath.Join(d, name)); err != nil && !os.IsNotExist(err) {
+			f.t.Fatal(err)
+		}
+	}
+	code, stdout, stderr = assure(append([]string{"audit"}, args...)...)
+	file := filepath.Join(d, "scope."+objTests+".json")
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		return code, stdout, stderr, nil
+	}
+	s, err := adapterkit.ReadScope(file)
+	if err != nil {
+		f.t.Fatalf("assure audit %q: the adapter received a scope file it cannot read: %v", args, err)
+	}
+	scope = map[string]auditLine{}
+	for _, e := range s {
+		if _, dup := scope[e.Path]; dup {
+			f.t.Fatalf("assure audit %q: scope file lists %s twice", args, e.Path)
+		}
+		l := auditLine{whole: len(e.Ranges) == 0}
+		set := map[int]bool{}
+		for _, r := range e.Ranges {
+			for i := r[0]; i <= r[1]; i++ {
+				set[i] = true
+			}
+		}
+		for i := range set {
+			l.lines = append(l.lines, i)
+		}
+		slices.Sort(l.lines)
+		scope[e.Path] = l
+	}
+	return code, stdout, stderr, scope
+}
+
+func (f auditPlanFixture) ranNothing() bool {
+	_, err := os.Stat(filepath.Join(f.logs["go"], "log"))
+	return os.IsNotExist(err)
+}
+
+func scopePaths(scope map[string]auditLine) []string {
+	return slices.Sorted(maps.Keys(scope))
 }

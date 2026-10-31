@@ -133,6 +133,7 @@ type job struct {
 	obj   core.Objective
 	files []core.ChangedFile
 	out   string
+	scope string
 }
 
 func problem(lang, id string, err error) Result {
@@ -242,7 +243,13 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 }
 
 func collect(m *core.Manifest, j job, ref string, timeout time.Duration) (core.Evidence, adapterproto.Run) {
-	run, err := adapterproto.RunObjective(m.Root, j.lang, j.obj.ID, ref, j.out, timeout)
+	var run adapterproto.Run
+	var err error
+	if j.scope != "" {
+		run, err = adapterproto.RunObjectiveScope(m.Root, j.lang, j.obj.ID, j.scope, j.out, timeout)
+	} else {
+		run, err = adapterproto.RunObjective(m.Root, j.lang, j.obj.ID, ref, j.out, timeout)
+	}
 	if err != nil {
 		return core.Evidence{Problems: []string{err.Error()}, Errs: []error{err}}, adapterproto.Run{}
 	}

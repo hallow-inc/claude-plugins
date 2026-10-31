@@ -15,7 +15,7 @@ import (
 
 type ScopeEntry struct {
 	Path   string   `json:"path"`
-	Ranges [][2]int `json:"ranges"`
+	Ranges [][2]int `json:"ranges,omitempty"`
 }
 
 type Scope []ScopeEntry
