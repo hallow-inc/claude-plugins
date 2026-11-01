@@ -271,7 +271,7 @@ func TestParseRunRejectsMalformedInvocations(t *testing.T) {
 		ref := []string{"--changed-from", "HEAD~1"}
 		scope := []string{"--scope", file}
 		var args []string
-		switch kind := rapid.SampledFrom([]string{"both", "neither", "no-out", "no-objective", "extra", "empty", "unknown-flag"}).Draw(t, "kind"); kind {
+		switch kind := rapid.SampledFrom([]string{"both", "neither", "no-out", "no-objective", "extra", "delimited-extra", "empty", "unknown-flag"}).Draw(t, "kind"); kind {
 		case "both":
 			args = append([]string{"VER-TESTS-PASS"}, shuffled(t, out, ref, scope)...)
 		case "neither":
@@ -281,7 +281,9 @@ func TestParseRunRejectsMalformedInvocations(t *testing.T) {
 		case "no-objective":
 			args = nil
 		case "extra":
-			args = append(append([]string{"VER-TESTS-PASS"}, shuffled(t, out, rapid.SampledFrom([][]string{ref, scope}).Draw(t, "selector"))...), repoPath().Draw(t, "extra"))
+			args = append(append([]string{"VER-TESTS-PASS"}, shuffled(t, out, rapid.SampledFrom([][]string{ref, scope}).Draw(t, "selector"))...), repoPath().Filter(func(s string) bool { return s != "--" }).Draw(t, "extra"))
+		case "delimited-extra":
+			args = append(append([]string{"VER-TESTS-PASS"}, shuffled(t, out, rapid.SampledFrom([][]string{ref, scope}).Draw(t, "selector"))...), "--", repoPath().Draw(t, "extra"))
 		case "empty":
 			args = append([]string{"VER-TESTS-PASS"}, shuffled(t, out, []string{"--changed-from", ""}, []string{"--scope", ""})...)
 		case "unknown-flag":
