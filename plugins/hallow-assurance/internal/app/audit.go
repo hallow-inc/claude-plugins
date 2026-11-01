@@ -36,13 +36,20 @@ type AuditOutcome struct {
 	Reason    string
 }
 
-func Audit(m *core.Manifest, scope []ScopeFile) ([]AuditOutcome, error) {
+func Audit(m *core.Manifest, args []string, scope []ScopeFile) ([]AuditOutcome, error) {
+	commit, err := revParse(m.Root, "HEAD")
+	if err != nil {
+		return nil, err
+	}
 	byLang := map[string][]ScopeFile{}
 	for _, f := range scope {
 		byLang[f.Lang] = append(byLang[f.Lang], f)
 	}
 	outRoot := filepath.Join(m.Root, AuditDir)
 	if err := os.RemoveAll(outRoot); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(outRoot, 0o755); err != nil {
 		return nil, err
 	}
 	langs := slices.Sorted(maps.Keys(byLang))
@@ -59,23 +66,52 @@ func Audit(m *core.Manifest, scope []ScopeFile) ([]AuditOutcome, error) {
 	for _, o := range m.Catalog.Objectives {
 		byID[o.ID] = o
 	}
-	results := make([][]AuditOutcome, len(langs))
+	results := make([]*langAudit, len(langs))
 	var wg sync.WaitGroup
 	for i, lang := range langs {
+		la := newLangAudit(m.Root, lang)
+		results[i] = la
 		if err := errs[lang]; err != nil {
-			results[i] = []AuditOutcome{{Lang: lang, Objective: "-", Status: auditNotAudited, Reason: err.Error()}}
+			la.reasons = []string{err.Error()}
 			continue
 		}
 		jobs, missing := planAudit(m, byID, lang, descs[lang], byLang[lang], filepath.Join(outRoot, lang), scopeFiles[lang])
+		la.reasons = missing
 		wg.Go(func() {
-			results[i] = auditLanguage(m, lang, jobs, missing)
+			la.run(m, jobs)
 		})
 	}
 	wg.Wait()
-	out := slices.Concat(results...)
+	findings := AuditFindings{Commit: commit, Scope: args, ToolVersions: map[string]map[string]string{}}
+	var out []AuditOutcome
+	var drafts []draftFinding
+	for _, la := range results {
+		out = append(out, la.outcomes...)
+		drafts = append(drafts, la.findings...)
+		findings.Scores = append(findings.Scores, la.sortedScores()...)
+		mergeInto(findings.ToolVersions, la.lang, la.versions)
+		if len(la.reasons) > 0 {
+			reason := strings.Join(la.reasons, "; ")
+			out = append(out, AuditOutcome{Lang: la.lang, Objective: "-", Status: auditNotAudited, Reason: reason})
+			findings.Unaudited = append(findings.Unaudited, AuditUnaudited{Language: la.lang, Message: reason})
+		}
+	}
 	slices.SortFunc(out, func(a, b AuditOutcome) int {
 		return cmp.Or(cmp.Compare(a.Lang, b.Lang), cmp.Compare(a.Objective, b.Objective))
 	})
+	findings.Findings = finalizeFindings(drafts)
+	status, err := git(m.Root, "status", "--porcelain", "--", ".", ":(exclude).assure/state")
+	if err != nil {
+		return nil, err
+	}
+	findings.Dirty = len(status) > 0
+	data, err := findings.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(outRoot, auditFindingsFile), data, 0o644); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -96,6 +132,12 @@ func planAudit(m *core.Manifest, byID map[string]core.Objective, lang string, d 
 	changed := make([]core.ChangedFile, len(files))
 	for i, f := range files {
 		changed[i] = m.ChangedFile(f.Path)
+		changed[i].Role = core.Role(f.Role)
+		for _, r := range f.Ranges {
+			for l := r[0]; l <= r[1]; l++ {
+				changed[i].Lines = append(changed[i].Lines, l)
+			}
+		}
 	}
 	for _, id := range auditObjectives {
 		if _, listed := d.Objectives[id]; !listed {
@@ -113,58 +155,41 @@ func planAudit(m *core.Manifest, byID map[string]core.Objective, lang string, d 
 	return jobs, missing
 }
 
-func auditLanguage(m *core.Manifest, lang string, jobs []job, reasons []string) []AuditOutcome {
-	var out []AuditOutcome
-	var mu sync.Mutex
-	record := func(j job, ev core.Evidence, run adapterproto.Run) {
-		mu.Lock()
-		defer mu.Unlock()
-		if run.Environment != nil {
-			reasons = append(reasons, run.Environment.Message)
-		} else if len(ev.Errs) > 0 {
-			reasons = append(reasons, ev.Errs[0].Error())
-		} else {
-			out = append(out, AuditOutcome{Lang: lang, Objective: j.obj.ID, Status: auditRan})
-		}
-	}
+func (la *langAudit) run(m *core.Manifest, jobs []job) {
 	rest := jobs
 	skipMutation := skipTestsUnknown
 	i := slices.IndexFunc(jobs, func(j job) bool { return j.obj.ID == auditTests })
 	if i >= 0 {
 		rest = slices.Delete(slices.Clone(jobs), i, i+1)
 		ev, run := collect(m, jobs[i], "", EvaluateTimeout)
-		record(jobs[i], ev, run)
+		la.record(jobs[i], ev, run)
 		skipMutation = suiteState(ev, run)
 	}
 	var wg sync.WaitGroup
 	for _, j := range rest {
 		if j.obj.ID == auditMutation && skipMutation != "" {
-			mu.Lock()
-			out = append(out, AuditOutcome{Lang: lang, Objective: j.obj.ID, Status: auditSkipped, Reason: skipMutation})
-			mu.Unlock()
+			la.mu.Lock()
+			la.outcomes = append(la.outcomes, AuditOutcome{Lang: la.lang, Objective: j.obj.ID, Status: auditSkipped, Reason: skipMutation})
+			la.mu.Unlock()
 			continue
 		}
 		wg.Go(func() {
 			ev, run := collect(m, j, "", EvaluateTimeout)
-			record(j, ev, run)
+			la.record(j, ev, run)
 		})
 	}
 	wg.Wait()
-	if len(reasons) > 0 {
-		out = append(out, AuditOutcome{Lang: lang, Objective: "-", Status: auditNotAudited, Reason: strings.Join(reasons, "; ")})
-	}
-	return out
 }
 
 func suiteState(ev core.Evidence, run adapterproto.Run) string {
 	if run.Environment != nil || len(ev.Errs) > 0 {
 		return skipTestsUnknown
 	}
-	if len(ev.Failing) > 0 {
-		return skipTestsFailing
-	}
 	if len(ev.Problems) > 0 {
 		return skipTestsUnknown
+	}
+	if len(ev.Failing) > 0 {
+		return skipTestsFailing
 	}
 	return ""
 }

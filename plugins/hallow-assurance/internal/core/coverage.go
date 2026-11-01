@@ -39,7 +39,23 @@ func (f CoverFile) functionAt(line int) string {
 	return name
 }
 
+type Uncovered struct {
+	Finding
+	Line     int
+	Function string
+}
+
 func coverageFindings(o Objective, changed []ChangedFile, c Coverage) (out []Finding, used []Resolution) {
+	us, used := UncoveredLines(o, changed, c)
+	for _, u := range us {
+		out = append(out, u.Finding)
+	}
+	slices.SortFunc(out, compareFindings)
+	return out, used
+}
+
+// UncoveredLines reports a file with no coverage record as Line 0.
+func UncoveredLines(o Objective, changed []ChangedFile, c Coverage) (out []Uncovered, used []Resolution) {
 	byPath := map[string]CoverFile{}
 	for _, f := range c.Files {
 		byPath[f.Path] = f
@@ -48,12 +64,12 @@ func coverageFindings(o Objective, changed []ChangedFile, c Coverage) (out []Fin
 		if f.Role != Source || !inScope(o, f) || o.Levels[f.Level] == "" {
 			continue
 		}
-		at := func(text string) {
-			out = append(out, Finding{Path: f.Path, Level: f.Level, Located: true, Text: text})
+		at := func(line int, fn, text string) {
+			out = append(out, Uncovered{Finding: Finding{Path: f.Path, Level: f.Level, Located: true, Text: text}, Line: line, Function: fn})
 		}
 		cf, ok := byPath[f.Path]
 		if !ok {
-			at(fmt.Sprintf("%s: no coverage record for this file", f.Path))
+			at(0, "", fmt.Sprintf("%s: no coverage record for this file", f.Path))
 			continue
 		}
 		for _, line := range f.Lines {
@@ -62,12 +78,12 @@ func coverageFindings(o Objective, changed []ChangedFile, c Coverage) (out []Fin
 			}
 			fn := cf.functionAt(line)
 			if fn == "" {
-				at(fmt.Sprintf("%s:%d: uncovered, outside any function, so no resolution can apply", f.Path, line))
+				at(line, fn, fmt.Sprintf("%s:%d: uncovered, outside any function, so no resolution can apply", f.Path, line))
 				continue
 			}
 			i := slices.IndexFunc(c.Resolutions, func(r Resolution) bool { return r.Path == f.Path && r.Function == fn })
 			if i < 0 {
-				at(fmt.Sprintf("%s:%d: uncovered in %s, which has no coverage resolution", f.Path, line, fn))
+				at(line, fn, fmt.Sprintf("%s:%d: uncovered in %s, which has no coverage resolution", f.Path, line, fn))
 				continue
 			}
 			if !slices.Contains(used, c.Resolutions[i]) {
@@ -75,7 +91,6 @@ func coverageFindings(o Objective, changed []ChangedFile, c Coverage) (out []Fin
 			}
 		}
 	}
-	slices.SortFunc(out, compareFindings)
 	slices.SortFunc(used, compareResolutions)
 	return out, used
 }

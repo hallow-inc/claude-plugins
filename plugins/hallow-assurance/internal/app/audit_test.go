@@ -56,8 +56,8 @@ var (
 	auditPool      = []string{"p/a.xx", "q/b_test.xx", "p/c.yy", "q/d.yy"}
 	auditListable  = append(slices.Clone(auditObjectives), "VER-FAIL-ON-BASE", "FM-COMPLETE")
 	auditLevels    = rapid.SampledFrom([]string{"A", "B", "C", "D"})
-	suiteKinds     = []string{"green", "red", "no-junit", "unreadable-junit", "environment", "error"}
-	otherKinds     = []string{"ok", "environment", "error"}
+	suiteKinds     = []string{"green", "red", "red-with-problems", "no-junit", "unreadable-junit", "environment", "error"}
+	otherKinds     = []string{"ok", "no-evidence", "environment", "error"}
 )
 
 type auditFixture struct {
@@ -69,10 +69,14 @@ func newAuditFixture(t *testing.T) auditFixture {
 	t.Helper()
 	bin := t.TempDir()
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin:/bin")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
+	auditGit(t, root, "init", "-q")
+	commitFixture(t, root)
 	return auditFixture{root: root, bin: bin}
 }
 
@@ -142,10 +146,16 @@ func (f auditFixture) runs(t fataler, lang string) (runs []auditAdapterRun, test
 
 func responsesFor(lang, id, kind string) map[string]string {
 	switch kind {
+	case "ok":
+		return okEvidence(id)
+	case "no-evidence":
+		return map[string]string{id + ".json": auditEmptyRun}
 	case "green":
 		return map[string]string{id + ".json": auditTestsRun, id + ".ev": auditGreenJUnit}
 	case "red":
 		return map[string]string{id + ".json": auditTestsRun, id + ".ev": auditRedJUnit}
+	case "red-with-problems":
+		return map[string]string{id + ".json": `{"protocol":2,"evidence":[{"type":"test.junit","path":"ev"},{"type":"test.junit","path":"absent.xml"}],"tool_versions":{"t":"1"},"pinned_by":{}}`, id + ".ev": auditRedJUnit}
 	case "no-junit":
 		return map[string]string{id + ".json": auditEmptyRun}
 	case "unreadable-junit":
@@ -266,10 +276,9 @@ func (d auditDraw) expect(t *rapid.T, m *core.Manifest, lang string, files []Sco
 	}
 	ran := func(id string) {
 		e.invoked = append(e.invoked, id)
-		switch k := ld.kinds[id]; k {
-		case "environment", "error":
-			e.reasons = append(e.reasons, kindMessage(lang, id, k))
-		default:
+		if reason := kindReason(lang, id, ld.kinds[id]); reason != "" {
+			e.reasons = append(e.reasons, reason)
+		} else {
 			e.outcomes[id] = AuditOutcome{Lang: lang, Objective: id, Status: auditRan}
 		}
 	}
@@ -413,11 +422,14 @@ func (f auditFixture) checkLanguage(t *rapid.T, d auditDraw, m *core.Manifest, l
 
 func (f auditFixture) checkAuditDir(t *rapid.T, langsInScope []string) {
 	entries, err := os.ReadDir(filepath.Join(f.root, AuditDir))
-	if err != nil && (!os.IsNotExist(err) || len(langsInScope) > 0) {
-		t.Fatalf("reading the audit dir: %v", err)
+	if err != nil {
+		t.Fatalf("reading the audit dir: %v; every successful audit writes its findings file there", err)
 	}
 	var dirs []string
 	for _, e := range entries {
+		if e.Name() == "findings.json" && e.Type().IsRegular() {
+			continue
+		}
 		dirs = append(dirs, e.Name())
 	}
 	if !slices.Equal(dirs, langsInScope) {
@@ -444,7 +456,9 @@ func TestAuditRunsListedApplicableObjectivesTestsFirstAndReportsEveryLanguage(t 
 		f.installDraw(t, d)
 		f.seedStaleAuditDir(t)
 
-		got, err := Audit(m, slices.Clone(d.scope))
+		args := d.args()
+
+		got, err := Audit(m, slices.Clone(args), slices.Clone(d.scope))
 
 		context := fmt.Sprintf("draw %+v", d)
 		if err != nil {
@@ -463,6 +477,7 @@ func TestAuditRunsListedApplicableObjectivesTestsFirstAndReportsEveryLanguage(t 
 			}
 		}
 		f.checkAuditDir(t, langsInScope)
+		f.checkDrawnFindings(t, d, m, got, args, context)
 	})
 }
 
@@ -513,10 +528,13 @@ func TestAuditThatCannotWriteItsScopeFilesFailsBeforeRunningAnyAdapter(t *testin
 			}
 		}
 
-		got, err := Audit(m, scope)
+		got, err := Audit(m, []string{"."}, scope)
 
 		if err == nil || got != nil {
 			t.Fatalf("Audit with %s: outcomes %+v, error %v; an audit that cannot hand adapters their scope must fail rather than report a partial audit", kind, got, err)
+		}
+		if _, err := os.Stat(findingsPath(f.root)); err == nil {
+			t.Fatalf("Audit with %s wrote findings.json though it failed before any adapter ran; it would be read as this audit's result", kind)
 		}
 		for _, lang := range auditTestLangs {
 			if runs, _ := f.runs(t, lang); len(runs) > 0 {
@@ -538,9 +556,117 @@ func TestAuditFailsWhenAScopeFilePathIsADirectory(t *testing.T) {
 		{Path: "p/a.xx", Lang: "xx", Role: "source"},
 	}
 
-	got, err := Audit(m, scope)
+	got, err := Audit(m, []string{"p/a.xx"}, scope)
 
 	if err == nil || got != nil {
 		t.Fatalf("outcomes %+v, error %v; the second language's scope.json is a directory the first created, and an unwritten scope file must fail the audit", got, err)
 	}
+	if _, err := os.Stat(findingsPath(f.root)); !os.IsNotExist(err) {
+		t.Fatalf("findings.json exists after an audit that failed before any adapter ran (%v); it would be read as this audit's result", err)
+	}
+}
+
+func (d auditDraw) args() []string {
+	if len(d.scope) == 0 {
+		return []string{"."}
+	}
+	var args []string
+	for _, sf := range d.scope {
+		arg := sf.Path
+		for _, r := range sf.Ranges {
+			arg += fmt.Sprintf(":%d-%d", r[0], r[1])
+		}
+		args = append(args, arg)
+	}
+	return args
+}
+
+func (f auditFixture) checkDrawnFindings(t *rapid.T, d auditDraw, m *core.Manifest, outcomes []AuditOutcome, args []string, where string) {
+	got := readFindings(t, f.root, where)
+	checkFindingsHeader(t, f.root, got, args, where)
+	inScope := map[string]bool{}
+	red := map[string]bool{}
+	for _, lang := range auditTestLangs {
+		files := slices.DeleteFunc(slices.Clone(d.scope), func(sf ScopeFile) bool { return sf.Lang != lang })
+		inScope[lang] = len(files) > 0
+		if inScope[lang] {
+			e := d.expect(t, m, lang, files)
+			red[lang] = slices.Contains(e.invoked, auditTests) && d.langs[lang].kinds[auditTests] == "red"
+		}
+	}
+	checkTestsFailingFindings(t, got.Findings, red, where)
+	unaudited := map[string]string{}
+	for _, u := range got.Unaudited {
+		if !inScope[u.Language] {
+			t.Fatalf("unaudited entry %+v for a language with no file in scope (%s)", u, where)
+		}
+		unaudited[u.Language] = u.Message
+	}
+	for _, o := range outcomes {
+		if o.Status != auditNotAudited {
+			continue
+		}
+		if msg, ok := unaudited[o.Lang]; !ok || !strings.Contains(msg, o.Reason) {
+			t.Fatalf("%s could not be audited (%q) but findings.json has unaudited %+v (%s); a missing tool hides weaknesses, so the file must say what was not audited and why", o.Lang, o.Reason, got.Unaudited, where)
+		}
+	}
+}
+
+func checkTestsFailingFindings(t *rapid.T, findings []AuditFinding, red map[string]bool, where string) {
+	failing := map[string]int{}
+	for _, g := range findings {
+		switch g.Kind {
+		case kindTestsFailing:
+			failing[g.Language]++
+			if g.Path != "" || g.Line != 0 || g.Level != "" || !strings.Contains(g.Detail, "TestBroken") {
+				t.Fatalf("tests-failing finding %+v, want no path, line or level and a detail naming TestBroken (%s); the user needs to know which test to fix before mutation can run", g, where)
+			}
+		case kindMutant:
+			t.Fatalf("surviving-mutant finding %+v though no adapter reported a mutant (%s)", g, where)
+		}
+	}
+	for _, lang := range auditTestLangs {
+		if want := map[bool]int{true: 1}[red[lang]]; failing[lang] != want {
+			t.Fatalf("%s has %d tests-failing findings, want %d (%s); a red suite is one finding for the language, and only a suite that ran and failed is red\nfindings %+v", lang, failing[lang], want, where, findings)
+		}
+	}
+}
+
+func okEvidence(id string) map[string]string {
+	var typ string
+	var ev strings.Builder
+	switch id {
+	case auditMutation:
+		typ = "mutation.report"
+		ev.WriteString(`{"schemaVersion":"1","thresholds":{"high":80,"low":60},"files":{}}`)
+	case auditCoverage:
+		typ = "coverage.resolution"
+		for _, p := range auditPool {
+			fmt.Fprintf(&ev, "SF:%s\nend_of_record\n", p)
+		}
+	case auditFuzz:
+		typ = "fuzz.run"
+		ev.WriteString("<testsuites>")
+		for _, p := range auditPool {
+			fmt.Fprintf(&ev, `<testsuite name="%s"><properties><property name="assure.source" value="%s"/></properties><testcase name="FuzzOK"/></testsuite>`, p, p)
+		}
+		ev.WriteString("</testsuites>")
+	default:
+		return nil
+	}
+	return map[string]string{id + ".json": `{"protocol":2,"evidence":[{"type":"` + typ + `","path":"ev"}],"tool_versions":{"t":"1"},"pinned_by":{}}`, id + ".ev": ev.String()}
+}
+
+func kindReason(lang, id, kind string) string {
+	switch kind {
+	case "environment", "error":
+		return kindMessage(lang, id, kind)
+	case "no-evidence", "no-junit":
+		return "run " + id + " produced no"
+	case "unreadable-junit":
+		return "XML syntax error"
+	case "red-with-problems":
+		return "absent.xml"
+	}
+	return ""
 }

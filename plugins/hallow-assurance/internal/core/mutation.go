@@ -51,6 +51,11 @@ func classify(status string) mutantClass {
 	return excluded
 }
 
+func ScoredMutant(status string) (scored, killed bool) {
+	c := classify(status)
+	return c == detected || c == undetected, c == detected
+}
+
 type levelScore struct {
 	detected   int
 	undetected []Mutant
