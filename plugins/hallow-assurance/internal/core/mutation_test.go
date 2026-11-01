@@ -259,3 +259,43 @@ func TestMutationListsEachWaiverOnce(t *testing.T) {
 		t.Fatalf("got %+v; both waivers excused level B, so each must be listed once with the waived score, or the report hides a waiver the result relies on", got)
 	}
 }
+
+var gateStatuses = []string{"Killed", "Timeout", "Survived", "NoCoverage", "CompileError", "RuntimeError", "Ignored"}
+
+func TestScoredMutantAgreesWithHowTheGateCounts(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		status := rapid.OneOf(rapid.SampledFrom(gateStatuses), rapid.String()).Filter(func(s string) bool { return s != "Pending" })
+		statuses := rapid.SliceOfN(status, 1, 12).Draw(t, "statuses")
+		var ms []Mutant
+		scored, killed := 0, 0
+		for i, s := range statuses {
+			ms = append(ms, Mutant{Path: "a.go", Level: "B", Line: i + 1, Mutator: "M", Status: s})
+			sc, k := ScoredMutant(s)
+			if k && !sc {
+				t.Fatalf("ScoredMutant(%q) = unscored but killed; a killed mutant is always part of the score", s)
+			}
+			scored += map[bool]int{true: 1}[sc]
+			killed += map[bool]int{true: 1}[k]
+		}
+		o := mutation
+		o.Threshold = map[Level]float64{"B": 100}
+
+		got := decideMutation(o, ms, nil)
+
+		head := fmt.Sprintf("level B: %d of %d mutants detected (", killed, scored)
+		if _, ok := statedPercent(got.Details, head); scored > killed && !ok {
+			t.Fatalf("statuses %q: gate details %q, want %q; audit scores mutants with ScoredMutant, so its score must count exactly what the gate counts", statuses, got.Details, head)
+		}
+		if scored == killed && got.Status != Pass {
+			t.Fatalf("statuses %q: ScoredMutant leaves no undetected mutant, but the gate decided %+v", statuses, got)
+		}
+	})
+}
+
+func TestPendingMutantIsNeverScored(t *testing.T) {
+	ms := mutants("a.go", "B", map[string]int{"Killed": 3, "Pending": 1})
+	got := decideMutation(mutation, ms, nil)
+	if scored, killed := ScoredMutant("Pending"); scored || killed || got.Status != Fail || strings.Contains(strings.Join(got.Details, "\n"), "mutants detected") {
+		t.Fatalf("ScoredMutant(Pending) = %v, %v; gate %+v; a mutant that never ran fails the gate before any score is taken, so audit must not count it either", scored, killed, got)
+	}
+}

@@ -21,6 +21,10 @@ type FuzzCase struct {
 
 const fuzzPassed = "passed"
 
+func FuzzFindings(o Objective, changed []ChangedFile, run FuzzRun) []Finding {
+	return fuzzFindings(o, changed, run)
+}
+
 func fuzzFindings(o Objective, changed []ChangedFile, run FuzzRun) []Finding {
 	var out []Finding
 	for _, f := range changed {

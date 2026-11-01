@@ -89,6 +89,14 @@ func (f auditPlanFixture) install(t fataler, lang string, listed []string, respo
 		writeOrFail(t, filepath.Join(d, name), body)
 	}
 	writeOrFail(t, filepath.Join(d, "default.json"), emptyRun)
+	for id, ev := range okEvidence() {
+		_, hasRun := responses[id+".json"]
+		_, fail := responses[id+".fail"]
+		if !hasRun && !fail {
+			writeOrFail(t, filepath.Join(d, id+".json"), ev[0])
+			writeOrFail(t, filepath.Join(d, id+".ev"), ev[1])
+		}
+	}
 	objs := make([]string, len(listed))
 	for i, o := range listed {
 		objs[i] = fmt.Sprintf(`"%s":{"tool":"t","fast":false}`, o)
@@ -328,6 +336,11 @@ func TestAuditEnvironmentResponseMarksLanguageNotAuditedAndEverythingElseStillRu
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("outcomes %q, want %q besides the not-audited line (environment on %s %s)\nstdout:\n%s", got, want, envLang, envObj, out)
 		}
+		findings := f.readFindingsFile(t, "environment on "+envLang+" "+envObj)
+		i := slices.IndexFunc(findings.Unaudited, func(u cliUnaudited) bool { return u.Language == envLang })
+		if i < 0 || !strings.Contains(findings.Unaudited[i].Message, envMessage) {
+			t.Fatalf("findings.json unaudited %+v, want an entry for %s naming %q; the findings file must not read as a clean audit of a language whose tool was missing", findings.Unaudited, envLang, envMessage)
+		}
 	})
 }
 
@@ -391,9 +404,11 @@ func TestAuditRunsOnlyApplicableListedAuditObjectivesTestsFirst(t *testing.T) {
 			t.Fatalf("assure audit %q: exit %d stdout %q stderr %q; every language ran, and a red suite is a finding, not a failure to audit", args, code, out, stderr)
 		}
 		want := map[string]string{}
+		ranRed := map[string]bool{}
 		for _, lang := range auditLangs {
 			files := slices.DeleteFunc(slices.Clone(scope), func(sf app.ScopeFile) bool { return sf.Lang != lang })
 			planned := plannedAudit(m, listed[lang], files)
+			ranRed[lang] = red[lang] && slices.Contains(planned, objTests)
 			suiteState := map[bool]string{true: "tests-failing", false: "tests-unknown"}[red[lang]]
 			stopMutation := red[lang] || !slices.Contains(planned, objTests)
 			var invoked []string
@@ -410,6 +425,7 @@ func TestAuditRunsOnlyApplicableListedAuditObjectivesTestsFirst(t *testing.T) {
 		if got := auditOutcomes(t, out); !reflect.DeepEqual(got, want) {
 			t.Fatalf("assure audit %q: outcomes %q, want %q\nstdout:\n%s", args, got, want, out)
 		}
+		f.checkFindingsFile(t, args, ranRed, fmt.Sprintf("assure audit %q, red %v", args, ranRed))
 	})
 }
 
@@ -431,15 +447,16 @@ func envExpectation(lang string, listed []string, envLang, envObj string, want m
 }
 
 type unconfirmedSuite struct {
-	responses map[string]string
-	errorText []string
+	responses    map[string]string
+	errorText    []string
+	namesAdapter bool
 }
 
 var unconfirmedSuites = map[string]unconfirmedSuite{
-	"non-zero exit":      {map[string]string{objTests + ".fail": "suite-runner-crashed"}, []string{"suite-runner-crashed"}},
-	"protocol violation": {map[string]string{objTests + ".json": `{"protocol":2,"evidence":[]}`}, []string{"violates the protocol"}},
-	"no junit evidence":  {map[string]string{objTests + ".json": emptyRun}, nil},
-	"unreadable junit":   {map[string]string{objTests + ".json": testsRun, objTests + ".ev": "<testsuite"}, nil},
+	"non-zero exit":      {map[string]string{objTests + ".fail": "suite-runner-crashed"}, []string{"suite-runner-crashed"}, true},
+	"protocol violation": {map[string]string{objTests + ".json": `{"protocol":2,"evidence":[]}`}, []string{"violates the protocol"}, true},
+	"no junit evidence":  {map[string]string{objTests + ".json": emptyRun}, []string{"produced no test.junit evidence"}, true},
+	"unreadable junit":   {map[string]string{objTests + ".json": testsRun, objTests + ".ev": "<testsuite"}, []string{"XML syntax error"}, false},
 }
 
 func TestAuditMutationWaitsForAConfirmedGreenSuite(t *testing.T) {
@@ -481,9 +498,12 @@ func TestAuditMutationWaitsForAConfirmedGreenSuite(t *testing.T) {
 			}
 		}
 		got := auditOutcomes(t, out)
-		if suite.errorText != nil {
-			checkAdapterErrorNotAudited(t, got, bad, kind, suite.errorText, out)
+		parts := suite.errorText
+		if suite.namesAdapter {
+			parts = append([]string{"assure-adapter-" + bad}, parts...)
 		}
+		checkAdapterErrorNotAudited(t, got, bad, kind, parts, out)
+		f.checkUnauditedNames(t, bad, suite.errorText, kind)
 		delete(got, bad+"\t"+objTests)
 		delete(got, bad+"\t-")
 		if !reflect.DeepEqual(got, want) {
@@ -497,7 +517,7 @@ func checkAdapterErrorNotAudited(t *rapid.T, got map[string]string, lang, kind s
 		t.Fatalf("%s VER-TESTS-PASS reported ran though the adapter failed (%s)\nstdout:\n%s", lang, kind, out)
 	}
 	notAudited := got[lang+"\t-"]
-	for _, part := range append([]string{"assure-adapter-" + lang}, errorText...) {
+	for _, part := range errorText {
 		if !strings.HasPrefix(notAudited, "not-audited\t") || !strings.Contains(notAudited, part) {
 			t.Fatalf("%s outcome %q, want not-audited containing %q (%s); a failed adapter hides weaknesses, so the user must see why\nstdout:\n%s", lang, notAudited, part, kind, out)
 		}

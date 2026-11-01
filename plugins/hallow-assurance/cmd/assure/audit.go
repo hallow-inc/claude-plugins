@@ -38,7 +38,7 @@ func runAudit(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(1, err)
 	}
-	outcomes, err := app.Audit(m, scope)
+	outcomes, err := app.Audit(m, args, scope)
 	if err != nil {
 		return fail(1, err)
 	}
