@@ -134,8 +134,8 @@ func planAudit(m *core.Manifest, byID map[string]core.Objective, lang string, d 
 		changed[i] = m.ChangedFile(f.Path)
 		changed[i].Role = core.Role(f.Role)
 		for _, r := range f.Ranges {
-			for l := r[0]; l <= r[1]; l++ {
-				changed[i].Lines = append(changed[i].Lines, l)
+			for l := range r[1] - r[0] + 1 {
+				changed[i].Lines = append(changed[i].Lines, r[0]+l)
 			}
 		}
 	}
