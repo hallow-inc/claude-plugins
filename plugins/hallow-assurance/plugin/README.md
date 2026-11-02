@@ -31,6 +31,7 @@ prompts say which files each should edit, and nothing enforces it.
 | `assure-testing` | by the model, when it writes tests or reads `assure` output | How tests are written here: properties over examples, fail-first bug fixes, coverage resolutions, reading `assure` output, deterministic simulation, formal models. Points to `assure reference <lang>` for the language detail, which ships inside each adapter |
 | `/hallow-assurance:check` | by you | Runs `assure check --fast`, then offers `assure evaluate` against the merge-base |
 | `/hallow-assurance:bugfix <issue\|seed>` | by you | Verifier writes a failing test, implementer fixes it, fast check passes; you commit with a `fix(<scope>):` subject |
+| `audit` | by the model when you ask to audit or harden tests, or `/hallow-assurance:audit <scope>` | Runs `assure audit` on what you name (down to one function), then walks each finding: pass, act (verifier hardens it), or document (to the file or command destination you configure). You commit hardening tests with a `test(<scope>):` subject, separate from any `fix` commit |
 
 ## Solo, local-only
 

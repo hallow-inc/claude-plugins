@@ -9,7 +9,7 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/decode"
 )
 
-var skillUserOnly = map[string]bool{"assure-testing": false, "check": true, "bugfix": true}
+var skillUserOnly = map[string]bool{"assure-testing": false, "check": true, "bugfix": true, "audit": false}
 
 func skillFile(t *testing.T, p string) (map[string]any, string, bool) {
 	t.Helper()
@@ -42,7 +42,7 @@ func checkSkillFront(t *testing.T, p, dir string, m map[string]any) {
 		t.Errorf("%s: disable-model-invocation %v; a workflow the model starts on its own can spawn agents unasked", p, got)
 	}
 	if listed && !want && set {
-		t.Errorf("%s sets disable-model-invocation; the testing guidance must stay model-invocable", p)
+		t.Errorf("%s sets disable-model-invocation; guidance the model reaches for on its own (testing rules, audit) must stay model-invocable", p)
 	}
 }
 
@@ -76,6 +76,16 @@ func TestSkillFilesDeclareTheirInvocation(t *testing.T) {
 	for _, s := range []string{"fix(<scope>):", "hallow-assurance:verifier", "hallow-assurance:implementer"} {
 		if !strings.Contains(bodies["bugfix"], s) {
 			t.Errorf("bugfix does not contain %q", s)
+		}
+	}
+	for s, why := range map[string]string{
+		"assure audit":                "the command that measures test strength and writes findings.json",
+		"hallow-assurance:verifier":   "the agent that hardens tests and changes tests only; any other agent may edit code to make a finding vanish",
+		"hallow-assurance.local.md":   "the untracked repository destination config; without it documented findings skip the repository's chosen destination",
+		"`test:` or `test(<scope>):`": "the commit typing for hardening tests; any fix subject in the range makes evaluate demand every changed test fail on base, and a hardening test passes there",
+	} {
+		if !strings.Contains(bodies["audit"], s) {
+			t.Errorf("audit does not contain %q, %s", s, why)
 		}
 	}
 	if strings.Contains(bodies["bugfix"], "Assure-Kind") {
