@@ -91,7 +91,7 @@ func Audit(m *core.Manifest, args []string, scope []ScopeFile) ([]AuditOutcome, 
 		findings.Scores = append(findings.Scores, la.sortedScores()...)
 		mergeInto(findings.ToolVersions, la.lang, la.versions)
 		if len(la.reasons) > 0 {
-			reason := strings.Join(la.reasons, "; ")
+			reason := notAuditedReason(la.lang, la.reasons)
 			out = append(out, AuditOutcome{Lang: la.lang, Objective: "-", Status: auditNotAudited, Reason: reason})
 			findings.Unaudited = append(findings.Unaudited, AuditUnaudited{Language: la.lang, Message: reason})
 		}
@@ -109,10 +109,18 @@ func Audit(m *core.Manifest, args []string, scope []ScopeFile) ([]AuditOutcome, 
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(outRoot, auditFindingsFile), data, 0o644); err != nil {
+	if err := os.WriteFile(AuditFindingsPath(m.Root), data, 0o644); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+func notAuditedReason(lang string, reasons []string) string {
+	reason := strings.Join(reasons, "; ")
+	if name := adapterproto.Executable(lang); !strings.HasPrefix(reason, name+" ") {
+		return name + ": " + reason
+	}
+	return reason
 }
 
 func writeAuditScope(dir string, files []ScopeFile) (string, error) {

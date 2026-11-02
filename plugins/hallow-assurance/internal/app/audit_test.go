@@ -344,9 +344,24 @@ func (f auditFixture) checkRunScope(t *rapid.T, lang string, r auditAdapterRun, 
 	}
 }
 
+func adapterLeadProblem(lang, msg string) string {
+	exe := "assure-adapter-" + lang
+	rest, ok := strings.CutPrefix(msg, exe)
+	switch {
+	case !ok || (!strings.HasPrefix(rest, ": ") && !strings.HasPrefix(rest, " ")):
+		return `does not start with ` + exe + ` followed by ": " or " "`
+	case strings.HasPrefix(rest, ": "+exe):
+		return "names " + exe + " twice at its start"
+	}
+	return ""
+}
+
 func checkNotAudited(t *rapid.T, lang string, o AuditOutcome, reasons []string, context string) {
 	if o.Status != auditNotAudited || o.Objective != "-" {
 		t.Fatalf("%s outcome %+v, want one not-audited line for the language (%s)", lang, o, context)
+	}
+	if p := adapterLeadProblem(lang, o.Reason); p != "" {
+		t.Fatalf("%s not-audited reason %q %s (%s); the adapter's name, said once, tells the user which tool to fix", lang, o.Reason, p, context)
 	}
 	for _, part := range reasons {
 		if n := strings.Count(o.Reason, part); n != 1 {
@@ -599,6 +614,9 @@ func (f auditFixture) checkDrawnFindings(t *rapid.T, d auditDraw, m *core.Manife
 	for _, u := range got.Unaudited {
 		if !inScope[u.Language] {
 			t.Fatalf("unaudited entry %+v for a language with no file in scope (%s)", u, where)
+		}
+		if p := adapterLeadProblem(u.Language, u.Message); p != "" {
+			t.Fatalf("findings.json unaudited message %q for %s %s (%s); the adapter's name, said once, tells the user which tool to fix", u.Message, u.Language, p, where)
 		}
 		unaudited[u.Language] = u.Message
 	}

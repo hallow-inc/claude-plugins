@@ -95,13 +95,30 @@ func okEvidence() map[string][2]string {
 	}
 }
 
+func adapterLeadProblem(lang, msg string) string {
+	exe := "assure-adapter-" + lang
+	rest, ok := strings.CutPrefix(msg, exe)
+	switch {
+	case !ok || (!strings.HasPrefix(rest, ": ") && !strings.HasPrefix(rest, " ")):
+		return `does not start with ` + exe + ` followed by ": " or " "`
+	case strings.HasPrefix(rest, ": "+exe):
+		return "names " + exe + " twice at its start"
+	}
+	return ""
+}
+
 func (f auditPlanFixture) checkUnauditedNames(t fataler, lang string, parts []string, where string) {
 	t.Helper()
 	got := f.readFindingsFile(t, where)
 	i := slices.IndexFunc(got.Unaudited, func(u cliUnaudited) bool { return u.Language == lang })
+	if i >= 0 {
+		if p := adapterLeadProblem(lang, got.Unaudited[i].Message); p != "" {
+			t.Fatalf("findings.json unaudited message %q for %s %s (%s); the adapter's name, said once, tells the user which tool to fix", got.Unaudited[i].Message, lang, p, where)
+		}
+	}
 	for _, part := range parts {
 		if i < 0 || !strings.Contains(got.Unaudited[i].Message, part) {
-			t.Fatalf("findings.json unaudited %+v, want an entry for %s containing %q (%s); a suite whose colour is unknown was not audited, and the findings file must not read as clean", got.Unaudited, lang, part, where)
+			t.Fatalf("findings.json unaudited %+v, want an entry for %s containing %q (%s); a language whose tool failed was not audited, and the findings file must not read as clean", got.Unaudited, lang, part, where)
 		}
 	}
 }

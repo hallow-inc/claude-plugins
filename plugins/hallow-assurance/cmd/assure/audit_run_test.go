@@ -187,14 +187,52 @@ func flagValue(argv []string, flag string) (string, bool) {
 	return argv[i+1], true
 }
 
-// auditOutcomes parses the interim 5.2 stdout. Task 5.3 replaces stdout with findings.json; only
-// this helper should need to change then.
+type auditStdout struct {
+	outcomes   map[string]string
+	count      string
+	notAudited []string
+}
+
 func auditOutcomes(t fataler, out string) map[string]string {
+	return parseAuditStdout(t, out).outcomes
+}
+
+func parseAuditStdout(t fataler, out string) auditStdout {
+	body, summary := "", out
+	if !strings.HasPrefix(out, "audit: ") {
+		var found bool
+		body, summary, found = strings.Cut(out, "\n\n")
+		if !found {
+			t.Fatalf("stdout has no blank line between the outcome lines and the summary:\n%s", out)
+		}
+		body += "\n"
+	}
+	if !strings.HasSuffix(summary, "\n") {
+		t.Fatalf("stdout summary does not end in a newline:\n%s", out)
+	}
+	lines := strings.Split(strings.TrimSuffix(summary, "\n"), "\n")
+	s := auditStdout{outcomes: auditOutcomeLines(t, body, out), count: lines[0]}
+	if !strings.HasPrefix(s.count, "audit: ") || strings.Contains(s.count, " not audited: ") {
+		t.Fatalf("stdout summary starts %q, want the `audit: N findings ...` count line first:\n%s", s.count, out)
+	}
+	for _, l := range lines[1:] {
+		if !strings.HasPrefix(l, "audit: ") || !strings.Contains(l, " not audited: ") {
+			t.Fatalf("stdout summary line %q after the count line, want `audit: <lang> not audited: <adapter>: <message>`:\n%s", l, out)
+		}
+		s.notAudited = append(s.notAudited, l)
+	}
+	return s
+}
+
+func auditOutcomeLines(t fataler, body, out string) map[string]string {
 	got := map[string]string{}
 	var keys []string
-	for line := range strings.SplitSeq(strings.TrimSuffix(out, "\n"), "\n") {
+	if body == "" {
+		return got
+	}
+	for line := range strings.SplitSeq(strings.TrimSuffix(body, "\n"), "\n") {
 		if line == "" {
-			continue
+			t.Fatalf("stdout has a blank line where an outcome line belongs:\n%s", out)
 		}
 		f := strings.SplitN(line, "\t", 3)
 		if len(f) < 3 {
@@ -309,8 +347,11 @@ func TestAuditEnvironmentResponseMarksLanguageNotAuditedAndEverythingElseStillRu
 			f.install(t, lang, listed[lang], resp)
 		}
 
-		_, out, stderr := assure("audit", ".")
+		code, out, stderr := assure("audit", ".")
 
+		if code != 1 {
+			t.Fatalf("exit %d, want 1 (environment on %s %s); findings are advisory, but a language whose tool was missing was not audited and must not exit like a clean run\nstdout:\n%s\nstderr:\n%s", code, envLang, envObj, out, stderr)
+		}
 		want := map[string]string{}
 		for _, lang := range auditLangs {
 			invoked := envExpectation(lang, listed[lang], envLang, envObj, want)
@@ -336,11 +377,7 @@ func TestAuditEnvironmentResponseMarksLanguageNotAuditedAndEverythingElseStillRu
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("outcomes %q, want %q besides the not-audited line (environment on %s %s)\nstdout:\n%s", got, want, envLang, envObj, out)
 		}
-		findings := f.readFindingsFile(t, "environment on "+envLang+" "+envObj)
-		i := slices.IndexFunc(findings.Unaudited, func(u cliUnaudited) bool { return u.Language == envLang })
-		if i < 0 || !strings.Contains(findings.Unaudited[i].Message, envMessage) {
-			t.Fatalf("findings.json unaudited %+v, want an entry for %s naming %q; the findings file must not read as a clean audit of a language whose tool was missing", findings.Unaudited, envLang, envMessage)
-		}
+		f.checkUnauditedNames(t, envLang, []string{envMessage}, "environment on "+envLang+" "+envObj)
 	})
 }
 
@@ -474,8 +511,11 @@ func TestAuditMutationWaitsForAConfirmedGreenSuite(t *testing.T) {
 			f.install(t, lang, auditable, resp)
 		}
 
-		_, out, stderr := assure("audit", ".")
+		code, out, stderr := assure("audit", ".")
 
+		if code != 1 {
+			t.Fatalf("exit %d, want 1 (%s on %s VER-TESTS-PASS); a language whose suite could not be confirmed was not audited, so the run must not exit like a clean one\nstdout:\n%s\nstderr:\n%s", code, kind, bad, out, stderr)
+		}
 		want := map[string]string{}
 		for _, lang := range auditLangs {
 			invoked := auditable
@@ -517,6 +557,9 @@ func checkAdapterErrorNotAudited(t *rapid.T, got map[string]string, lang, kind s
 		t.Fatalf("%s VER-TESTS-PASS reported ran though the adapter failed (%s)\nstdout:\n%s", lang, kind, out)
 	}
 	notAudited := got[lang+"\t-"]
+	if p := adapterLeadProblem(lang, strings.TrimPrefix(notAudited, "not-audited\t")); p != "" {
+		t.Fatalf("%s not-audited reason %q %s (%s)\nstdout:\n%s", lang, notAudited, p, kind, out)
+	}
 	for _, part := range errorText {
 		if !strings.HasPrefix(notAudited, "not-audited\t") || !strings.Contains(notAudited, part) {
 			t.Fatalf("%s outcome %q, want not-audited containing %q (%s); a failed adapter hides weaknesses, so the user must see why\nstdout:\n%s", lang, notAudited, part, kind, out)
