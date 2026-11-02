@@ -153,7 +153,7 @@ plugins/hallow-assurance/
     hooks/hooks.json
     bin/assure-hook              # shim: no manifest → exit 0; assure missing → exit 2; else exec
     agents/{implementer,verifier,pruner}.md
-    skills/{assure-testing,check,bugfix}/SKILL.md   # no commands/: Claude Code lists it as legacy
+    skills/{assure-testing,check,bugfix,audit}/SKILL.md   # no commands/: Claude Code lists it as legacy
   qualification/
     go/                          # seeded-bug fixture repos + expected results
   testdata/
@@ -352,7 +352,8 @@ were used.
 
 Skills: one generic `assure-testing` skill (philosophy, fail-first loop, coverage resolutions,
 how to read `assure` output, designing for deterministic simulation, formal model + differential
-testing). Per-language references ship inside each adapter (`assure-adapter-<lang> reference`), so the
+testing), and an `audit` skill that runs `assure audit` on a named scope and walks each finding
+(pass, act, or document). Per-language references ship inside each adapter (`assure-adapter-<lang> reference`), so the
 plugin carries no language text; `assure reference <lang>` prints one.
 
 Commands: `/hallow-assurance:check`, `/hallow-assurance:bugfix <issue|seed>`, shipped as user-invoked skills. Claude Code always prefixes plugin skills with the plugin name.
