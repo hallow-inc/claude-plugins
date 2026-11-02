@@ -324,6 +324,56 @@ func TestEvaluateReportIsReproducible(t *testing.T) {
 	}
 }
 
+func TestEvaluateIgnoresAuditFindings(t *testing.T) {
+	r := waivedGoRepo(t)
+	r.write("p/p.go", "package p\n\nfunc Add(a, b int) int {\n\tif a > 0 {\n\t\treturn a + b\n\t}\n\treturn b + a\n}\n")
+	args := []string{"evaluate", "--changed-from", "HEAD", "--date", "2026-01-02"}
+	code, before, stderr := assure(args...)
+	if code != 0 {
+		t.Fatalf("without findings.json: %d\n%s\n%s", code, before, stderr)
+	}
+	_, want := readReport(t, r)
+
+	head, err := exec.Command("git", "-C", r.root, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings, err := app.AuditFindings{
+		Version:      0,
+		Commit:       strings.TrimSpace(string(head)),
+		Dirty:        true,
+		Scope:        []string{"p"},
+		ToolVersions: map[string]map[string]string{"go": {"gremlins": "v0.6.0"}},
+		Findings: []app.AuditFinding{
+			{ID: "0123456789abcdef", Kind: "surviving-mutant", Language: "go", Path: "p/p.go", Line: 4, Level: "B", Detail: "CONDITIONALS_BOUNDARY LIVED"},
+			{ID: "fedcba9876543210", Kind: "surviving-mutant", Language: "go", Path: "p/p.go", Line: 5, Level: "B", Detail: "ARITHMETIC_BASE LIVED"},
+		},
+		Scores: []app.AuditScore{{Language: "go", Level: "B", Detected: 1, Total: 3, Percent: 33.33, Threshold: 80, Advisory: true}},
+	}.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vs, err := schemas.Validate(schemas.AuditFindings, findings); err != nil || len(vs) > 0 {
+		t.Fatalf("fixture findings.json is not what audit writes: %v %v\n%s", err, vs, findings)
+	}
+	path := app.AuditFindingsPath(r.root)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, findings, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code, after, stderr := assure(args...)
+	if code != 0 {
+		t.Fatalf("with findings.json: %d\n%s\n%s; audit is advisory, so its surviving mutants must never fail evaluation", code, after, stderr)
+	}
+	_, got := readReport(t, r)
+	if !bytes.Equal(got, want) || after != before {
+		t.Fatalf("report or summary changed once %s existed; audit is advisory and findings.json must never feed evaluation\nwithout:\n%s\n%s\nwith:\n%s\n%s", path, want, before, got, after)
+	}
+}
+
 func TestEvaluateExpiredWaiverBlocksEvenWithNothingChanged(t *testing.T) {
 	r := goRepo(t)
 	r.write(".assure/waivers.yaml", "- {objective: VER-FAIL-ON-BASE, scope: 'nowhere/**', rationale: fail-on-base runner arrives in M3b, approver: owner, expires: 2026-01-01}\n- {objective: VER-ROBUST-FUZZ, scope: 'nowhere/**', rationale: fuzz evidence arrives in M3b, approver: owner, expires: 2026-01-02}\n")
