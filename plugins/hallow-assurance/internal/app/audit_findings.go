@@ -65,6 +65,10 @@ type AuditUnaudited struct {
 	Message  string `json:"message"`
 }
 
+func AuditFindingsPath(root string) string {
+	return filepath.Join(root, AuditDir, auditFindingsFile)
+}
+
 func (f AuditFindings) Marshal() ([]byte, error) {
 	if f.ToolVersions == nil {
 		f.ToolVersions = map[string]map[string]string{}
