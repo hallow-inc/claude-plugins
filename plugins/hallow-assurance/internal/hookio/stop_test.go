@@ -164,10 +164,9 @@ func stopInputGen(t *rapid.T) stopInput {
 		fmt.Errorf("adapter exited 1"),
 	}
 	for i := range rapid.IntRange(0, 4).Draw(t, "results") {
-		res := app.Result{Lang: "l", Outcome: core.Outcome{
+		res := app.Result{Lang: "l",
 			ID:     fmt.Sprintf("OBJ-%d", i),
-			Status: rapid.SampledFrom([]core.Status{core.Pass, core.Fail, core.AdvisoryFail}).Draw(t, "status"),
-		}}
+			Status: rapid.SampledFrom([]core.Status{core.Pass, core.Fail, core.AdvisoryFail}).Draw(t, "status")}
 		for range rapid.IntRange(0, 2).Draw(t, "errs") {
 			res.Errs = append(res.Errs, rapid.SampledFrom(errs).Draw(t, "err"))
 		}

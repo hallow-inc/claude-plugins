@@ -65,7 +65,7 @@ func UncoveredLines(o Objective, changed []ChangedFile, c Coverage) (out []Uncov
 			continue
 		}
 		at := func(line int, fn, text string) {
-			out = append(out, Uncovered{Finding: Finding{Path: f.Path, Level: f.Level, Located: true, Text: text}, Line: line, Function: fn})
+			out = append(out, Uncovered{Path: f.Path, Level: f.Level, Located: true, Text: text, Line: line, Function: fn})
 		}
 		cf, ok := byPath[f.Path]
 		if !ok {

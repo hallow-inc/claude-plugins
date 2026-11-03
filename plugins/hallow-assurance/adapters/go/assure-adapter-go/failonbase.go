@@ -9,6 +9,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -88,9 +89,7 @@ func baseTestFuncs(root, ref, dir string) (map[string]string, error) {
 		if err != nil {
 			continue
 		}
-		for k, v := range fns {
-			out[k] = v
-		}
+		maps.Copy(out, fns)
 	}
 	return out, nil
 }
@@ -269,8 +268,7 @@ func baseSuites(root, ref, mod, seed string, changedTests []string, dirs map[str
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		if err := cmd.Run(); err != nil {
-			var exit *exec.ExitError
-			if !errors.As(err, &exit) {
+			if _, ok := errors.AsType[*exec.ExitError](err); !ok {
 				return nil, err
 			}
 		}

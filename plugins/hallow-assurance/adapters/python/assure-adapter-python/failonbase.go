@@ -86,8 +86,8 @@ func selectChanged(python, root, baseRoot string, files []string) ([]selectedTes
 }
 
 func baseName(caseName string) string {
-	if i := strings.Index(caseName, "["); i >= 0 {
-		return caseName[:i]
+	if before, _, ok := strings.Cut(caseName, "["); ok {
+		return before
 	}
 	return caseName
 }

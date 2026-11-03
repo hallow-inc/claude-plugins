@@ -192,7 +192,7 @@ func parseInitLevels(t interface {
 	out := map[Level]map[string]initLine{}
 	var cur Level
 	inSection := false
-	for _, l := range strings.Split(tmpl, "\n") {
+	for l := range strings.SplitSeq(tmpl, "\n") {
 		if strings.HasPrefix(l, "#   ") && len(l) == 6 && l[5] == ':' {
 			cur = Level(l[4:5])
 			if _, dup := out[cur]; dup {

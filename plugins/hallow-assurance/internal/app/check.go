@@ -138,7 +138,7 @@ type job struct {
 }
 
 func problem(lang, id string, err error) Result {
-	return Result{Lang: lang, Outcome: core.Outcome{ID: id, Status: core.Fail, Details: []string{err.Error()}}, Errs: []error{err}}
+	return Result{Lang: lang, ID: id, Status: core.Fail, Details: []string{err.Error()}, Errs: []error{err}}
 }
 
 func fastRef(root, ref string) string {
