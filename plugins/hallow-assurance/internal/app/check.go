@@ -20,6 +20,7 @@ import (
 const (
 	RunTimeout      = 150 * time.Second
 	EvaluateTimeout = 10 * time.Minute
+	AuditTimeout    = 0
 	EvidenceDir     = ".assure/state/evidence"
 )
 

@@ -169,7 +169,7 @@ func (la *langAudit) run(m *core.Manifest, jobs []job) {
 	i := slices.IndexFunc(jobs, func(j job) bool { return j.obj.ID == auditTests })
 	if i >= 0 {
 		rest = slices.Delete(slices.Clone(jobs), i, i+1)
-		ev, run := collect(m, jobs[i], "", EvaluateTimeout)
+		ev, run := collect(m, jobs[i], "", AuditTimeout)
 		la.record(jobs[i], ev, run)
 		skipMutation = suiteState(ev, run)
 	}
@@ -182,7 +182,7 @@ func (la *langAudit) run(m *core.Manifest, jobs []job) {
 			continue
 		}
 		wg.Go(func() {
-			ev, run := collect(m, j, "", EvaluateTimeout)
+			ev, run := collect(m, j, "", AuditTimeout)
 			la.record(j, ev, run)
 		})
 	}
