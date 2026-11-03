@@ -3,3 +3,6 @@ paths:
     ignore:
       # job.workflow_{ref,sha,repository} are documented (github/docs contexts.md) but unknown to actionlint v1.7.12.
       - 'property "workflow_(ref|sha|repository)" is not defined'
+  .github/workflows/assure-audit.yml:
+    ignore:
+      - 'property "workflow_(ref|sha|repository)" is not defined'

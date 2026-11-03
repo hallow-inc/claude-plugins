@@ -9,6 +9,7 @@ on:
       - 'plugins/hallow-assurance/**'
       - '.github/workflows/hallow-assurance.yml'
       - '.github/workflows/assure-evaluate.yml'
+      - '.github/workflows/assure-audit.yml'
 
 permissions:
   contents: read
@@ -53,10 +54,10 @@ jobs:
             exit 0
           fi
           base=$(git merge-base HEAD "origin/$BASE_REF")
-          changed=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml .github/workflows/assure-evaluate.yml)
+          changed=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml .github/workflows/assure-evaluate.yml .github/workflows/assure-audit.yml)
           if [ -n "$changed" ]; then run=true; else run=false; fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
-          qualifying=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml .github/workflows/assure-evaluate.yml \
+          qualifying=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance .github/workflows/hallow-assurance.yml .github/workflows/assure-evaluate.yml .github/workflows/assure-audit.yml \
             ':(exclude)plugins/hallow-assurance/plugin/**' ':(exclude,glob)**/*.md')
           if [ -n "$qualifying" ]; then qualify=true; else qualify=false; fi
           echo "qualify=$qualify" >> "$GITHUB_OUTPUT"
