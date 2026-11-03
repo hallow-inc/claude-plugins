@@ -133,7 +133,13 @@ func invoke(exe, dir, name, sub string, timeout time.Duration, args ...string) (
 }
 
 func invokeCapped(exe, dir, name, sub string, timeout time.Duration, limit int, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), timeout)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 	defer cancel()
 	cmd := exec.CommandContext(ctx, exe, append([]string{sub}, args...)...)
 	cmd.Dir = dir

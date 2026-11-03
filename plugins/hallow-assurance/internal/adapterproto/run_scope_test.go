@@ -134,3 +134,15 @@ func TestRunObjectiveScopeTimeoutKillsTheAdapter(t *testing.T) {
 		t.Fatalf("got %v after %s; a scoped mutation run over a large scope must still be bounded by the timeout", err, time.Since(start))
 	}
 }
+
+func TestRunObjectiveScopeZeroTimeoutRunsToCompletion(t *testing.T) {
+	fakeAdapter(t, "go", `sleep 0.2
+echo '{"protocol":2,"evidence":[{"type":"mutation.report","path":"m/report.json"}],"tool_versions":{"go":"go1.26.7","gremlins":"0.6.0"},"pinned_by":{"gremlins":"mise.toml"}}'`)
+	got, err := RunObjectiveScope(t.TempDir(), "go", "VER-MUTATION-CHANGED", "scope.json", "out", 0)
+	if err != nil {
+		t.Fatalf("timeout 0 returned %v; audit passes 0 because a broad mutation run can take hours and only the CI job timeout or the human may bound it, so 0 must mean no deadline", err)
+	}
+	if len(got.Evidence) != 1 || got.Evidence[0].Path != "m/report.json" || got.PinnedBy["gremlins"] != "mise.toml" {
+		t.Fatalf("got %+v; a run with no deadline must return the adapter's response, not an empty run", got)
+	}
+}
