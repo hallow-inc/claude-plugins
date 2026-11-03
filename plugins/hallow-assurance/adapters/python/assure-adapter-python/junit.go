@@ -23,11 +23,12 @@ func joinTexts(texts []adapterkit.XMLText) *adapterkit.XMLText {
 	if len(texts) == 0 {
 		return nil
 	}
-	body := texts[0].Body
+	var body strings.Builder
+	body.WriteString(texts[0].Body)
 	for _, t := range texts[1:] {
-		body += "\n\n" + t.Message + "\n" + t.Body
+		body.WriteString("\n\n" + t.Message + "\n" + t.Body)
 	}
-	return &adapterkit.XMLText{Message: texts[0].Message, Body: adapterkit.CapText([]byte(body))}
+	return &adapterkit.XMLText{Message: texts[0].Message, Body: adapterkit.CapText([]byte(body.String()))}
 }
 
 type pytestReport struct {

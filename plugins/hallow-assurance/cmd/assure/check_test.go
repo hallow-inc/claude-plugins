@@ -103,7 +103,7 @@ func TestCheckCleanChangePasses(t *testing.T) {
 		t.Fatalf("got %d\n%s\n%s", code, stdout, stderr)
 	}
 	var ran []string
-	for _, line := range strings.Split(stdout, "\n") {
+	for line := range strings.SplitSeq(stdout, "\n") {
 		if f := strings.Split(line, "\t"); len(f) == 3 && (f[0] == "pass" || f[0] == "fail" || f[0] == "advisory-fail") {
 			ran = append(ran, f[1]+" "+f[2])
 		}

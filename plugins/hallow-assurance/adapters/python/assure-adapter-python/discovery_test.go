@@ -75,7 +75,7 @@ func drawConfig(t *rapid.T, file string) (string, []string) {
 // "a/pyproject.toml".
 func linesFor(msg, rel string, candidates []string) []string {
 	var out []string
-	for _, line := range strings.Split(msg, "\n") {
+	for line := range strings.SplitSeq(msg, "\n") {
 		best := ""
 		for _, c := range candidates {
 			if strings.Contains(line, c) && len(c) > len(best) {

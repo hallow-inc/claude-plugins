@@ -11,7 +11,7 @@ import (
 func contextSections(out string) map[string][]string {
 	sections := map[string][]string{}
 	header := ""
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		switch {
 		case strings.HasPrefix(l, "Objectives "):
 			header = l

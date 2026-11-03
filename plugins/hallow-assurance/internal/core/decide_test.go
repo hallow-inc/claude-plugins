@@ -384,7 +384,7 @@ func TestContextListsFixObjectivesAsCommitsTypedFix(t *testing.T) {
 	}
 	out := RenderContext(&Manifest{DefaultLevel: "B", Catalog: c}, nil)
 	var line string
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		if strings.Contains(l, "VER-FAIL-ON-BASE") {
 			line = l
 		}
@@ -405,7 +405,7 @@ func TestReferencesListOneSortedCommandPerLanguage(t *testing.T) {
 			return
 		}
 		var cmds []string
-		for _, l := range strings.Split(out, "\n") {
+		for l := range strings.SplitSeq(out, "\n") {
 			if _, cmd, ok := strings.Cut(l, "assure reference "); ok {
 				cmds = append(cmds, cmd)
 			}

@@ -3,6 +3,7 @@ package evidence
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -63,10 +64,5 @@ func repoRelative(p string) bool {
 	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, `\`) {
 		return false
 	}
-	for _, seg := range strings.Split(p, "/") {
-		if seg == ".." {
-			return false
-		}
-	}
-	return true
+	return !slices.Contains(strings.Split(p, "/"), "..")
 }

@@ -26,9 +26,9 @@ func TestReportSeparatesFailuresTheAgentCannotFix(t *testing.T) {
 		var wantRemedies []string
 		wantOutside := true
 		for i := range rapid.IntRange(0, 5).Draw(t, "results") {
-			res := Result{Lang: rapid.SampledFrom([]string{"go", "ts"}).Draw(t, "lang"), Keys: []string{fmt.Sprintf("k%d", i)}}
-			res.ID = fmt.Sprintf("OBJ-%d", i)
-			res.Status = rapid.SampledFrom([]core.Status{core.Pass, core.Fail}).Draw(t, "status")
+			res := Result{Lang: rapid.SampledFrom([]string{"go", "ts"}).Draw(t, "lang"), Keys: []string{fmt.Sprintf("k%d", i)},
+				ID:     fmt.Sprintf("OBJ-%d", i),
+				Status: rapid.SampledFrom([]core.Status{core.Pass, core.Fail}).Draw(t, "status")}
 			kinds := rapid.SliceOfN(rapid.SampledFrom([]string{"unstartable", "environment", "plain"}), 0, 2).Draw(t, "errs")
 			for _, k := range kinds {
 				res.Errs = append(res.Errs, errs[k])
@@ -77,9 +77,9 @@ func TestRenderSaysNoChangedFilesOnlyWhenNothingChangedAndNothingRan(t *testing.
 	rapid.Check(t, func(t *rapid.T) {
 		rep := Report{Changed: rapid.IntRange(0, 2).Draw(t, "changed")}
 		for i := range rapid.IntRange(0, 2).Draw(t, "results") {
-			res := Result{Lang: "go"}
-			res.ID = fmt.Sprintf("OBJ-%d", i)
-			res.Status = rapid.SampledFrom([]core.Status{core.Pass, core.Fail}).Draw(t, "status")
+			res := Result{Lang: "go",
+				ID:     fmt.Sprintf("OBJ-%d", i),
+				Status: rapid.SampledFrom([]core.Status{core.Pass, core.Fail}).Draw(t, "status")}
 			rep.Results = append(rep.Results, res)
 		}
 		out := rep.Render()

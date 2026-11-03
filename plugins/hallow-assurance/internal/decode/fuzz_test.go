@@ -47,8 +47,7 @@ func addFixtureSeeds(f *testing.F, exts ...string) {
 
 func requireDecodeError(t *testing.T, err error) {
 	t.Helper()
-	var de *Error
-	if !errors.As(err, &de) {
+	if _, ok := errors.AsType[*Error](err); !ok {
 		t.Fatalf("error %v (%T) is not a *decode.Error", err, err)
 	}
 }

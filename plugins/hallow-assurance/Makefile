@@ -4,7 +4,9 @@ BINS := assure assure-adapter-go assure-adapter-typescript assure-adapter-python
 # $HOME/go/bin must carry the same build; a stale copy in either one wins depending on PATH order.
 GOBINS := $(sort $(HOME)/go/bin $(shell go env GOBIN))
 
-.PHONY: install verify
+GOFILES = $(shell git ls-files '*.go')
+
+.PHONY: install verify nice vuln lint vet fmt fix test mod-verify tidy
 
 install:
 	@for d in $(GOBINS); do \
@@ -27,3 +29,34 @@ verify:
 		done; \
 	done; \
 	exit $$status
+
+nice: vuln lint vet fmt fix test mod-verify tidy
+
+vuln:
+	@command -v govulncheck >/dev/null 2>&1 || GOTOOLCHAIN=auto go install golang.org/x/vuln/cmd/govulncheck@latest
+	govulncheck ./...
+
+lint:
+	golangci-lint run
+
+vet:
+	go vet ./...
+
+fmt: tidy
+	@echo "gofmt -s -w <tracked .go files>"
+	@gofmt -s -w $(GOFILES)
+	@gofmt -w -r 'interface{} -> any' $(GOFILES)
+	@command -v goimports >/dev/null 2>&1 && goimports -w -local github.com/hallow-inc/claude-plugins/plugins/hallow-assurance $(GOFILES) || true
+
+fix:
+	go fix ./...
+
+test:
+	go test -race -shuffle=on ./...
+
+mod-verify:
+	go mod download
+	go mod verify
+
+tidy:
+	go mod tidy
