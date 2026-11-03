@@ -4,11 +4,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/core"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/decode"
@@ -205,5 +208,71 @@ func TestEvidenceReadsOnlyStandardMutationFormat(t *testing.T) {
 		for _, hit := range scan(t, dir, keep, gremlinsFormat) {
 			t.Errorf("Gremlins' own output format outside the Go adapter (charter invariant 10: Stryker report only): %s", hit)
 		}
+	}
+}
+
+var sharedSetupSteps = []string{
+	"Setup Go",
+	"Let go.mod choose the toolchain",
+	"Install assure",
+	"Setup mise",
+	"Install pinned tools",
+}
+
+func workflowSteps(t *testing.T, path string) (names []string, byName map[string]map[string]any) {
+	t.Helper()
+	var wf struct {
+		Jobs map[string]struct {
+			Steps []map[string]any `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(read(t, path), &wf); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	if len(wf.Jobs) != 1 {
+		t.Fatalf("%s: want exactly one job, got %d", path, len(wf.Jobs))
+	}
+	byName = map[string]map[string]any{}
+	for _, job := range wf.Jobs {
+		for _, step := range job.Steps {
+			name, _ := step["name"].(string)
+			if _, dup := byName[name]; dup {
+				t.Fatalf("%s: step name %q appears twice", path, name)
+			}
+			names = append(names, name)
+			byName[name] = step
+		}
+	}
+	return names, byName
+}
+
+func TestAuditWorkflowSetupMatchesEvaluate(t *testing.T) {
+	const why = "assure-audit.yml copies its tool setup from assure-evaluate.yml (design D12); " +
+		"a fix applied to one copy and not the other makes scheduled audits run a different assure or different tools from the PR gate"
+	dir := filepath.Join("..", "..", ".github", "workflows")
+	evalPath := filepath.Join(dir, "assure-evaluate.yml")
+	auditPath := filepath.Join(dir, "assure-audit.yml")
+	evalNames, evalSteps := workflowSteps(t, evalPath)
+	auditNames, auditSteps := workflowSteps(t, auditPath)
+
+	for _, name := range sharedSetupSteps {
+		e, inEval := evalSteps[name]
+		a, inAudit := auditSteps[name]
+		if !inEval || !inAudit {
+			t.Errorf("step %q: in evaluate=%v, in audit=%v; %s", name, inEval, inAudit, why)
+			continue
+		}
+		if !reflect.DeepEqual(e, a) {
+			eb, _ := yaml.Marshal(e)
+			ab, _ := yaml.Marshal(a)
+			t.Errorf("step %q differs; %s\n--- assure-evaluate.yml\n%s--- assure-audit.yml\n%s", name, why, eb, ab)
+		}
+	}
+
+	shared := func(names []string) []string {
+		return slices.DeleteFunc(slices.Clone(names), func(n string) bool { return !slices.Contains(sharedSetupSteps, n) })
+	}
+	if e, a := shared(evalNames), shared(auditNames); !slices.Equal(e, a) {
+		t.Errorf("shared setup steps run in a different order: evaluate %q, audit %q; %s", e, a, why)
 	}
 }

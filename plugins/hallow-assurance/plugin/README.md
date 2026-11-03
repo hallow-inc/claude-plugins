@@ -171,6 +171,32 @@ Run the same verdict locally:
 assure evaluate --merge-base-with origin/master
 ```
 
+### Scheduled audit
+
+A second shared workflow runs `assure audit` on a schedule and uploads
+`.assure/state/audit/findings.json` as the `assure-audit-findings` artifact. It is advisory: do not
+require it in branch protection. The job fails when a language could not be audited (a missing
+adapter or tool), and the findings are uploaded either way.
+
+```yaml
+on:
+  schedule:
+    - cron: '41 7 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    permissions:
+      contents: read
+    uses: hallow-inc/claude-plugins/.github/workflows/assure-audit.yml@<ref>
+```
+
+No release includes `assure audit` yet (v0.2.0 predates it), so `<ref>` is a commit SHA from
+`master` until the next tag, then that tag. Pass `with: {working-directory: <dir>}` when
+`assurance.yaml` is not at the repository root, and
+`scope: <args>` to audit less than the whole repository. A whole-repository audit can take hours;
+the job allows six.
+
 ## Releases
 
 A tag `plugins/hallow-assurance/vX.Y.Z` on `master` versions `assure`, every adapter, and the

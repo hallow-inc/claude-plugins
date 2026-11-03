@@ -1,0 +1,103 @@
+name: assure-audit
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Directory holding the caller's assurance.yaml
+        type: string
+        default: .
+      scope:
+        description: Space-separated assure audit scope arguments, relative to working-directory
+        type: string
+        default: .
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Let go.mod choose the toolchain
+        working-directory: .
+        # setup-go writes GOTOOLCHAIN=local to GITHUB_ENV, which overrides a job-level env.
+        run: echo "GOTOOLCHAIN=auto" >> "$GITHUB_ENV"
+
+      - name: Install assure
+        working-directory: .
+        env:
+          REPO: ${{ github.repository }}
+          WORKFLOW_REPO: ${{ job.workflow_repository }}
+          WORKFLOW_REF: ${{ job.workflow_ref }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/assure-bin"
+          mkdir -p "$bin"
+          module=github.com/hallow-inc/claude-plugins/plugins/hallow-assurance
+          ref=${WORKFLOW_REF#*@}
+          if [ "$WORKFLOW_REPO" = "$REPO" ]; then
+            echo "Building assure from the checkout"
+            (cd plugins/hallow-assurance && go build -o "$bin/" ./...)
+          else
+            case "$ref" in
+              refs/tags/plugins/hallow-assurance/v*) version=${ref#refs/tags/plugins/hallow-assurance/} ;;
+              *) version=$WORKFLOW_SHA ;;
+            esac
+            echo "go install $module/...@$version"
+            GOBIN="$bin" go install "$module/...@$version"
+          fi
+          echo "$bin" >> "$GITHUB_PATH"
+          gobin="$(go env GOPATH)/bin"
+          echo "$gobin" >> "$GITHUB_PATH"
+          # mise's Go sets GOBIN to its own install dir, off PATH, unless GOBIN is already set.
+          echo "GOBIN=$gobin" >> "$GITHUB_ENV"
+          "$bin/assure" version
+
+      - name: Setup mise
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca  # v5.1.1
+        with:
+          version: 2026.8.14
+          install: false
+          cache: false
+
+      - name: Install pinned tools
+        run: |
+          set -euo pipefail
+          if [ -n "$(git ls-files -- mise.toml .mise.toml .config/mise.toml .tool-versions)" ]; then
+            mise install
+            echo "${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims" >> "$GITHUB_PATH"
+            export PATH="${MISE_DATA_DIR:-$HOME/.local/share/mise}/shims:$PATH"
+          fi
+          assure tools --install-script | sh
+
+      - name: Audit
+        env:
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          set -euo pipefail
+          read -ra args <<< "$SCOPE"
+          assure audit "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: assure-audit-findings
+          path: ${{ inputs.working-directory }}/.assure/state/audit/findings.json
+          if-no-files-found: warn

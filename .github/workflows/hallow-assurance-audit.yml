@@ -1,0 +1,21 @@
+name: hallow-assurance-audit
+
+on:
+  schedule:
+    - cron: '41 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hallow-assurance-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/assure-audit.yml
+    with:
+      working-directory: plugins/hallow-assurance
