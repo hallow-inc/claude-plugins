@@ -6,16 +6,26 @@ GOBINS := $(sort $(HOME)/go/bin $(shell go env GOBIN))
 
 GOFILES = $(shell git ls-files '*.go')
 
-.PHONY: install verify nice vuln lint vet fmt fix test mod-verify tidy
+.PHONY: help install verify nice vuln lint vet fmt fix test mod-verify tidy
 
-install:
+.DEFAULT_GOAL := help
+
+help: ## Show available commands
+	@echo "hallow-assurance - Development Commands"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+install: ## Install assure and adapters to $HOME/go/bin and mise's GOBIN, then verify
 	@for d in $(GOBINS); do \
 		echo "go install -> $$d"; \
 		GOBIN=$$d go install $(PKGS) || exit 1; \
 	done
 	@$(MAKE) --no-print-directory verify
+	@echo "✓ Installed $(BINS)"
 
-verify:
+verify: ## Check every assure binary on PATH matches $HOME/go/bin
 	@status=0; \
 	for b in $(BINS); do \
 		want=$$(shasum -a 256 $(HOME)/go/bin/$$b | cut -d' ' -f1); \
@@ -30,33 +40,33 @@ verify:
 	done; \
 	exit $$status
 
-nice: vuln lint vet fmt fix test mod-verify tidy
+nice: vuln lint vet fmt fix test mod-verify tidy ## Run every check and formatter
 
-vuln:
+vuln: ## Run govulncheck
 	@command -v govulncheck >/dev/null 2>&1 || GOTOOLCHAIN=auto go install golang.org/x/vuln/cmd/govulncheck@latest
 	govulncheck ./...
 
-lint:
+lint: ## Run golangci-lint
 	golangci-lint run
 
-vet:
+vet: ## Run go vet
 	go vet ./...
 
-fmt: tidy
+fmt: tidy ## Format tracked Go files (gofmt -s, interface{}->any, goimports)
 	@echo "gofmt -s -w <tracked .go files>"
 	@gofmt -s -w $(GOFILES)
 	@gofmt -w -r 'interface{} -> any' $(GOFILES)
 	@command -v goimports >/dev/null 2>&1 && goimports -w -local github.com/hallow-inc/claude-plugins/plugins/hallow-assurance $(GOFILES) || true
 
-fix:
+fix: ## Apply go fix rewrites
 	go fix ./...
 
-test:
+test: ## Run tests with race detector and shuffle
 	go test -race -shuffle=on ./...
 
-mod-verify:
+mod-verify: ## Download and verify module dependencies
 	go mod download
 	go mod verify
 
-tidy:
+tidy: ## Tidy go.mod
 	go mod tidy
