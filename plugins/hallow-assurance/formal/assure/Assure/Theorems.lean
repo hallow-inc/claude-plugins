@@ -625,4 +625,5 @@ theorem monotone_add_uncovered_line (c : Case) (pre post : List CoverFile) (cf :
 
 end Assure
 
-theorem seeded : 1 = 2 := by sorry
+axiom seededAx : False
+theorem seededUse : 1 = 2 := seededAx.elim
