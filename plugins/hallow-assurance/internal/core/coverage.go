@@ -56,10 +56,7 @@ func coverageFindings(o Objective, changed []ChangedFile, c Coverage) (out []Fin
 
 // UncoveredLines reports a file with no coverage record as Line 0.
 func UncoveredLines(o Objective, changed []ChangedFile, c Coverage) (out []Uncovered, used []Resolution) {
-	byPath := map[string]CoverFile{}
-	for _, f := range c.Files {
-		byPath[f.Path] = f
-	}
+	byPath := mergedByPath(c.Files)
 	for _, f := range changed {
 		if f.Role != Source || !inScope(o, f) || o.Levels[f.Level] == "" {
 			continue
@@ -99,11 +96,33 @@ func compareResolutions(a, b Resolution) int {
 	return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Function, b.Function))
 }
 
-func RemovableResolutions(c Coverage) []Resolution {
+func mergedByPath(files []CoverFile) map[string]CoverFile {
 	byPath := map[string]CoverFile{}
-	for _, f := range c.Files {
-		byPath[f.Path] = f
+	for _, f := range files {
+		m, ok := byPath[f.Path]
+		if !ok {
+			m = CoverFile{Path: f.Path, Lines: map[int]int{}}
+		}
+		for _, fn := range f.Funcs {
+			if !slices.Contains(m.Funcs, fn) {
+				m.Funcs = append(m.Funcs, fn)
+			}
+		}
+		for line, hits := range f.Lines {
+			m.Lines[line] += hits
+		}
+		byPath[f.Path] = m
 	}
+	for _, m := range byPath {
+		slices.SortFunc(m.Funcs, func(a, b CoverFunc) int {
+			return cmp.Or(cmp.Compare(a.Start, b.Start), cmp.Compare(a.End, b.End), cmp.Compare(a.Name, b.Name))
+		})
+	}
+	return byPath
+}
+
+func RemovableResolutions(c Coverage) []Resolution {
+	byPath := mergedByPath(c.Files)
 	var out []Resolution
 	for _, r := range c.Resolutions {
 		cf, ok := byPath[r.Path]

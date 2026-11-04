@@ -153,25 +153,33 @@ structure Finding where
 def ruleFiles (o : Objective) (changed : List ChangedFile) : List ChangedFile :=
   changed.filter fun f => f.role == .source && inScope o f && (o.levels f.level).isSome
 
+def fuzzFor (suites : List FuzzSuite) (f : ChangedFile) : List Finding :=
+  let here := { path := f.path, level := f.level : Finding }
+  let named := suites.filter fun s => s.sources.contains f.path
+  let cases := named.flatMap (·.cases)
+  if named.isEmpty then [here]
+  else (if cases.isEmpty then [here] else []) ++ (cases.filter (!·)).map fun _ => here
+
 def fuzzFindings (o : Objective) (changed : List ChangedFile) (suites : List FuzzSuite) :
     List Finding :=
-  (ruleFiles o changed).flatMap fun f =>
-    let here := { path := f.path, level := f.level : Finding }
-    match suites.find? (fun s => s.sources.contains f.path) with
-    | none => [here]
-    | some s =>
-      (if s.cases.isEmpty then [here] else []) ++ (s.cases.filter (!·)).map fun _ => here
+  (ruleFiles o changed).flatMap (fuzzFor suites)
 
-def coverFor (files : List CoverFile) (p : String) : Option CoverFile :=
-  (files.filter fun cf => cf.path == p).getLast?
+def recordsFor (files : List CoverFile) (p : String) : List CoverFile :=
+  files.filter fun cf => cf.path == p
+
+def uncoveredIn (recs : List CoverFile) (l : Nat) : Bool :=
+  recs.any (fun cf => cf.hits.lookup l == some 0) &&
+    recs.all fun cf => (cf.hits.lookup l).all (· == 0)
+
+def coverageFor (files : List CoverFile) (f : ChangedFile) : List Finding :=
+  let here := { path := f.path, level := f.level : Finding }
+  let recs := recordsFor files f.path
+  if recs.isEmpty then [here]
+  else (f.lines.filter (uncoveredIn recs)).map fun _ => here
 
 def coverageFindings (o : Objective) (changed : List ChangedFile) (files : List CoverFile) :
     List Finding :=
-  (ruleFiles o changed).flatMap fun f =>
-    let here := { path := f.path, level := f.level : Finding }
-    match coverFor files f.path with
-    | none => [here]
-    | some cf => (f.lines.filter fun l => (cf.hits.lookup l) == some 0).map fun _ => here
+  (ruleFiles o changed).flatMap (coverageFor files)
 
 structure Score where
   detected : Nat
