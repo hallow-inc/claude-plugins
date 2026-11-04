@@ -150,14 +150,16 @@ func (w mutationWorld) waived(p string) bool {
 func (w mutationWorld) levelFails(l Level, skipWaived bool) bool {
 	det, und := 0, 0
 	for _, m := range w.ms {
-		if m.Level != l || (skipWaived && w.waived(m.Path)) {
+		if m.Level != l {
 			continue
 		}
 		switch m.Status {
 		case "Killed", "Timeout":
 			det++
 		case "Survived", "NoCoverage":
-			und++
+			if !skipWaived || !w.waived(m.Path) {
+				und++
+			}
 		}
 	}
 	if det+und == 0 {

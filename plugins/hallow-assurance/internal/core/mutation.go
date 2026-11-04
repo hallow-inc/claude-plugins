@@ -70,6 +70,17 @@ func (s *levelScore) add(c mutantClass, m Mutant) {
 	s.undetected = append(s.undetected, m)
 }
 
+func (s *levelScore) excuse(active []Waiver, m Mutant) bool {
+	i := slices.IndexFunc(active, func(w Waiver) bool { return w.Match(m.Path) })
+	if i < 0 {
+		return false
+	}
+	if !slices.ContainsFunc(s.waivers, func(x Waiver) bool { return compareWaivers(x, active[i]) == 0 }) {
+		s.waivers = append(s.waivers, active[i])
+	}
+	return true
+}
+
 func (s levelScore) fails(threshold float64, hasThreshold bool) bool {
 	valid := s.detected + len(s.undetected)
 	if valid == 0 {
@@ -104,11 +115,7 @@ func (d *decision) mutation(o Objective, ms []Mutant, active []Waiver) {
 			all[m.Level], kept[m.Level] = &levelScore{}, &levelScore{}
 		}
 		all[m.Level].add(c, m)
-		if i := slices.IndexFunc(active, func(w Waiver) bool { return w.Match(m.Path) }); i >= 0 {
-			k := kept[m.Level]
-			if !slices.ContainsFunc(k.waivers, func(x Waiver) bool { return compareWaivers(x, active[i]) == 0 }) {
-				k.waivers = append(k.waivers, active[i])
-			}
+		if c == undetected && kept[m.Level].excuse(active, m) {
 			continue
 		}
 		kept[m.Level].add(c, m)
