@@ -123,8 +123,10 @@ func fuzzWorldGen(t *rapid.T) (Objective, []ChangedFile, FuzzRun, []Waiver) {
 	}
 	run := FuzzRun{Suites: make([]FuzzSuite, rapid.IntRange(0, 3).Draw(t, "nsuites"))}
 	for _, p := range rulePaths {
-		if i := rapid.IntRange(-1, len(run.Suites)-1).Draw(t, "suite of "+p); i >= 0 {
-			run.Suites[i].Sources = append(run.Suites[i].Sources, p)
+		for i := range run.Suites {
+			if rapid.Bool().Draw(t, fmt.Sprintf("suite %d names %s", i, p)) {
+				run.Suites[i].Sources = append(run.Suites[i].Sources, p)
+			}
 		}
 	}
 	for i := range run.Suites {
@@ -147,21 +149,18 @@ func fuzzOracle(o Objective, changed []ChangedFile, run FuzzRun, ws []Waiver) (S
 			continue
 		}
 		var mine []fuzzFailure
-		suite := -1
-		for i, s := range run.Suites {
+		var cases []FuzzCase
+		for _, s := range run.Suites {
 			if slices.Contains(s.Sources, f.Path) {
-				suite = i
-				break
+				cases = append(cases, s.Cases...)
 			}
 		}
-		switch {
-		case suite < 0 || len(run.Suites[suite].Cases) == 0:
+		if len(cases) == 0 {
 			mine = append(mine, fuzzFailure{f.Path, ""})
-		default:
-			for _, c := range run.Suites[suite].Cases {
-				if c.Outcome != "passed" {
-					mine = append(mine, fuzzFailure{f.Path, c.Name})
-				}
+		}
+		for _, c := range cases {
+			if c.Outcome != "passed" {
+				mine = append(mine, fuzzFailure{f.Path, c.Name})
 			}
 		}
 		fails = append(fails, mine...)
@@ -341,7 +340,7 @@ func coverWorldGen(t *rapid.T) coverWorld {
 	w := coverWorld{o: ruleObjective(t, "VER-COVERAGE-RESOLUTION", "")}
 	var names []string
 	for _, p := range rapid.SliceOfNDistinct(rapid.SampledFrom(rulePaths), 1, 3, func(s string) string { return s }).Draw(t, "paths") {
-		cf := CoverFile{Path: p, Lines: map[int]int{}}
+		var funcs []CoverFunc
 		at := rapid.IntRange(1, 6).Draw(t, "first start")
 		for i := range rapid.IntRange(0, 4).Draw(t, "nfuncs") {
 			fn := CoverFunc{Name: fmt.Sprintf("fn%d", i), Start: at}
@@ -349,16 +348,23 @@ func coverWorldGen(t *rapid.T) coverWorld {
 			if rapid.Bool().Draw(t, "has end") {
 				fn.End = at + span - 1
 			}
-			cf.Funcs = append(cf.Funcs, fn)
+			funcs = append(funcs, fn)
 			names = append(names, p+"|"+fn.Name)
 			at += span + rapid.IntRange(0, 3).Draw(t, "gap")
 		}
-		for l := 1; l <= 40; l++ {
-			if h := rapid.IntRange(-1, 1).Draw(t, "hits"); h >= 0 {
-				cf.Lines[l] = h
+		nrec := rapid.SampledFrom([]int{0, 1, 2, 2, 3}).Draw(t, "records")
+		for range nrec {
+			cf := CoverFile{Path: p, Lines: map[int]int{}}
+			for _, fn := range funcs {
+				if rapid.IntRange(0, 2).Draw(t, "record has "+fn.Name) > 0 {
+					cf.Funcs = append(cf.Funcs, fn)
+				}
 			}
-		}
-		if rapid.IntRange(0, 5).Draw(t, "dropped") > 0 {
+			for l := 1; l <= 40; l++ {
+				if h := rapid.IntRange(-1, 1).Draw(t, "hits"); h >= 0 {
+					cf.Lines[l] = h
+				}
+			}
 			w.cov.Files = append(w.cov.Files, cf)
 		}
 		cf2 := ChangedFile{
@@ -424,11 +430,28 @@ func (w coverWorld) lineVerdicts(f ChangedFile, cf CoverFile) (bad []string, use
 	return bad, used
 }
 
-func (w coverWorld) expect() coverExpect {
+func (w coverWorld) merged() map[string]CoverFile {
 	records := map[string]CoverFile{}
 	for _, f := range w.cov.Files {
-		records[f.Path] = f
+		m, ok := records[f.Path]
+		if !ok {
+			m = CoverFile{Path: f.Path, Lines: map[int]int{}}
+		}
+		for _, fn := range f.Funcs {
+			if !slices.Contains(m.Funcs, fn) {
+				m.Funcs = append(m.Funcs, fn)
+			}
+		}
+		for l, h := range f.Lines {
+			m.Lines[l] += h
+		}
+		records[f.Path] = m
 	}
+	return records
+}
+
+func (w coverWorld) expect() coverExpect {
+	records := w.merged()
 	var e coverExpect
 	for _, f := range w.changed {
 		status := w.o.Levels[f.Level]
@@ -458,10 +481,7 @@ func (w coverWorld) expect() coverExpect {
 }
 
 func (w coverWorld) removable() []Resolution {
-	records := map[string]CoverFile{}
-	for _, f := range w.cov.Files {
-		records[f.Path] = f
-	}
+	records := w.merged()
 	var out []Resolution
 	for _, r := range w.cov.Resolutions {
 		if cf, ok := records[r.Path]; ok && !slices.ContainsFunc(cf.Funcs, func(fn CoverFunc) bool { return fn.Name == r.Function }) {

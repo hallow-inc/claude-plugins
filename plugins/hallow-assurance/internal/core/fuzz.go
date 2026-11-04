@@ -34,16 +34,15 @@ func fuzzFindings(o Objective, changed []ChangedFile, run FuzzRun) []Finding {
 		at := func(text string) {
 			out = append(out, Finding{Path: f.Path, Level: f.Level, Located: true, Text: text})
 		}
-		i := slices.IndexFunc(run.Suites, func(s FuzzSuite) bool { return slices.Contains(s.Sources, f.Path) })
-		if i < 0 {
+		cases, named := fileCases(run, f.Path)
+		if !named {
 			at(fmt.Sprintf("%s: no fuzz evidence names this file", f.Path))
 			continue
 		}
-		s := run.Suites[i]
-		if len(s.Cases) == 0 {
+		if len(cases) == 0 {
 			at(fmt.Sprintf("%s: no fuzz target covers this file", f.Path))
 		}
-		for _, c := range s.Cases {
+		for _, c := range cases {
 			if c.Outcome != fuzzPassed {
 				at(fmt.Sprintf("%s: fuzz target %s %s on its seed corpus", f.Path, c.Name, c.Outcome))
 			}
@@ -51,4 +50,14 @@ func fuzzFindings(o Objective, changed []ChangedFile, run FuzzRun) []Finding {
 	}
 	slices.SortFunc(out, compareFindings)
 	return out
+}
+
+func fileCases(run FuzzRun, path string) (cases []FuzzCase, named bool) {
+	for _, s := range run.Suites {
+		if slices.Contains(s.Sources, path) {
+			named = true
+			cases = append(cases, s.Cases...)
+		}
+	}
+	return cases, named
 }
