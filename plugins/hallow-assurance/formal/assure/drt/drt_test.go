@@ -28,10 +28,10 @@ func requireModel(t *testing.T) string {
 	}
 	_, err = os.Stat(bin)
 	switch {
-	case errors.Is(err, fs.ErrNotExist) && os.Getenv("CI") != "":
-		t.Fatalf("decide-model is not built at %s and CI is set; build it with: %s", bin, buildCommand)
+	case errors.Is(err, fs.ErrNotExist) && os.Getenv("ASSURE_DRT") != "":
+		t.Fatalf("decide-model is not built at %s and ASSURE_DRT is set; build it with: %s", bin, buildCommand)
 	case errors.Is(err, fs.ErrNotExist):
-		t.Skipf("decide-model is not built at %s; build it with: %s", bin, buildCommand)
+		t.Skipf("decide-model is not built at %s; build it with: %s, and set ASSURE_DRT=1 to require it", bin, buildCommand)
 	case err != nil:
 		t.Fatalf("decide-model at %s: %v", bin, err)
 	}

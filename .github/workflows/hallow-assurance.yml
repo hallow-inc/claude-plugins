@@ -154,14 +154,8 @@ jobs:
 
       - name: Test
         env:
-          LEAN: ${{ needs.changes.outputs.lean }}
-        run: |
-          set -euo pipefail
-          if [ "$LEAN" = true ]; then
-            go test -race -shuffle=on ./...
-          else
-            go test -race -shuffle=on $(go list ./... | grep -v '/formal/assure/drt$')
-          fi
+          ASSURE_DRT: ${{ needs.changes.outputs.lean == 'true' && '1' || '' }}
+        run: go test -race -shuffle=on ./...
 
   evaluate:
     needs: changes
