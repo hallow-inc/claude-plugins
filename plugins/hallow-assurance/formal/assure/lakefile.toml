@@ -1,0 +1,14 @@
+name = "assure"
+version = "0.1.0"
+defaultTargets = ["Assure"]
+
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "Assure"
+
+[[require]]
+name = "axiomAudit"
+git = "https://github.com/leanprover-community/axiom-audit"
+rev = "v0.1.2"
