@@ -32,6 +32,7 @@ jobs:
     outputs:
       run: ${{ steps.diff.outputs.run }}
       qualify: ${{ steps.diff.outputs.qualify }}
+      lean: ${{ steps.diff.outputs.lean }}
 
     steps:
       - name: Checkout
@@ -51,6 +52,7 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             case "$REF" in refs/tags/*) qualify=true ;; *) qualify=false ;; esac
             echo "qualify=$qualify" >> "$GITHUB_OUTPUT"
+            echo "lean=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           base=$(git merge-base HEAD "origin/$BASE_REF")
@@ -61,6 +63,9 @@ jobs:
             ':(exclude)plugins/hallow-assurance/plugin/**' ':(exclude,glob)**/*.md')
           if [ -n "$qualifying" ]; then qualify=true; else qualify=false; fi
           echo "qualify=$qualify" >> "$GITHUB_OUTPUT"
+          lean_paths=$(git diff --name-only "$base" HEAD -- plugins/hallow-assurance/formal plugins/hallow-assurance/internal/core)
+          if [ -n "$lean_paths" ]; then lean=true; else lean=false; fi
+          echo "lean=$lean" >> "$GITHUB_OUTPUT"
 
   go:
     needs: changes
@@ -111,7 +116,45 @@ jobs:
           version: 0.12.17
           enable-cache: false
 
+      - name: Locate Lean install
+        if: needs.changes.outputs.lean == 'true'
+        id: lean-dir
+        run: echo "dir=${MISE_DATA_DIR:-$HOME/.local/share/mise}/installs/github-leanprover-lean4" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Lean toolchain
+        if: needs.changes.outputs.lean == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ steps.lean-dir.outputs.dir }}
+          key: lean-${{ runner.os }}-${{ hashFiles('plugins/hallow-assurance/formal/assure/mise.toml') }}
+
+      - name: Cache lake build
+        if: needs.changes.outputs.lean == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: plugins/hallow-assurance/formal/assure/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('plugins/hallow-assurance/formal/assure/lean-toolchain', 'plugins/hallow-assurance/formal/assure/lake-manifest.json') }}
+
+      - name: Install Lean
+        if: needs.changes.outputs.lean == 'true'
+        working-directory: plugins/hallow-assurance/formal/assure
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: mise install github:leanprover/lean4
+
+      - name: Build Lean model
+        if: needs.changes.outputs.lean == 'true'
+        working-directory: plugins/hallow-assurance/formal/assure
+        run: mise exec -- lake build
+
+      - name: Audit Lean axioms
+        if: needs.changes.outputs.lean == 'true'
+        working-directory: plugins/hallow-assurance/formal/assure
+        run: mise exec -- lake exe axiom-audit --json
+
       - name: Test
+        env:
+          ASSURE_DRT: ${{ needs.changes.outputs.lean == 'true' && '1' || '' }}
         run: go test -race -shuffle=on ./...
 
   evaluate:
