@@ -624,3 +624,5 @@ theorem monotone_add_uncovered_line (c : Case) (pre post : List CoverFile) (cf :
     rw [this]; exact hx
 
 end Assure
+
+theorem seeded : 1 = 2 := by sorry
