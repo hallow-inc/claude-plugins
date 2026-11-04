@@ -1,6 +1,6 @@
 name = "assure"
 version = "0.1.0"
-defaultTargets = ["Assure"]
+defaultTargets = ["Assure", "decide-model"]
 
 [leanOptions]
 warningAsError = true
@@ -12,3 +12,7 @@ name = "Assure"
 name = "axiomAudit"
 git = "https://github.com/leanprover-community/axiom-audit"
 rev = "v0.1.2"
+
+[[lean_exe]]
+name = "decide-model"
+root = "DecideModel"
