@@ -32,24 +32,27 @@ func extractTree(top, ref, rel, dst string) error {
 	return adapterkit.ExtractTar(data, dst)
 }
 
-func ancestorFiles(top, ref, rel, dst string) error {
+func ancestorFiles(top, ref, rel, dst string) (subdirs []string, err error) {
 	listing, err := adapterkit.GitBytes(top, "ls-tree", "-z", treeSpec(ref, rel))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for entry := range strings.SplitSeq(string(listing), "\x00") {
 		meta, name, ok := strings.Cut(entry, "\t")
 		fields := strings.Fields(meta)
+		if ok && len(fields) == 3 && fields[1] == "tree" {
+			subdirs = append(subdirs, name)
+		}
 		if !ok || len(fields) != 3 || fields[1] != "blob" {
 			continue
 		}
 		data, err := adapterkit.GitBytes(top, "cat-file", "blob", fields[2])
 		if err != nil {
-			return err
+			return nil, err
 		}
 		target := filepath.Join(dst, filepath.FromSlash(rel), name)
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
+			return nil, err
 		}
 		switch fields[0] {
 		case "120000":
@@ -60,10 +63,10 @@ func ancestorFiles(top, ref, rel, dst string) error {
 			err = os.WriteFile(target, data, 0o644)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return subdirs, nil
 }
 
 func ancestors(top, unit string) []string {
@@ -78,15 +81,28 @@ func ancestors(top, unit string) []string {
 // baseTree mirrors the git top-level under dst at ref: the unit's tree and each ancestor
 // directory's own files (a unit's tests may rely on a parent conftest.py or pyproject.toml).
 func baseTree(top, ref, unit, dst string) error {
-	if err := extractTree(top, ref, adapterkit.RelSlash(top, unit), filepath.Join(dst, adapterkit.RelSlash(top, unit))); err != nil {
+	id, err := adapterkit.GitBytes(top, "rev-parse", "--verify", ref+"^{commit}")
+	if err != nil {
 		return err
 	}
-	for _, dir := range ancestors(top, unit) {
-		if err := ancestorFiles(top, ref, adapterkit.RelSlash(top, dir), dst); err != nil {
+	commit := strings.TrimSpace(string(id))
+	dirs := ancestors(top, unit)
+	slices.Reverse(dirs)
+	for i, dir := range dirs {
+		subdirs, err := ancestorFiles(top, commit, adapterkit.RelSlash(top, dir), dst)
+		if err != nil {
 			return err
 		}
+		child := unit
+		if i+1 < len(dirs) {
+			child = dirs[i+1]
+		}
+		if !slices.Contains(subdirs, filepath.Base(child)) {
+			return nil
+		}
 	}
-	return nil
+	rel := adapterkit.RelSlash(top, unit)
+	return extractTree(top, commit, rel, filepath.Join(dst, rel))
 }
 
 func copyEntry(src, dst string) error {

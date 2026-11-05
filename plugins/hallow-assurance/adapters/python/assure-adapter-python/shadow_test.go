@@ -317,6 +317,45 @@ func TestBaseTreeUnknownRefFails(t *testing.T) {
 	}
 }
 
+func newUnitRepo(t *testing.T, baseFiles, headFiles map[string]string) (top, base string) {
+	isolateGit(t)
+	top = realTempDir(t)
+	writeTree(t, top, baseFiles)
+	git(t, top, "init", "-q")
+	git(t, top, "add", "-A")
+	git(t, top, "commit", "-q", "-m", "base")
+	base = strings.TrimSpace(gitQuiet(t, top, "rev-parse", "HEAD"))
+	writeTree(t, top, headFiles)
+	git(t, top, "add", "-A")
+	git(t, top, "commit", "-q", "-m", "add unit")
+	return top, base
+}
+
+func checkNewUnitBaseTree(t *testing.T, top, base, unitRel string, want map[string]string) {
+	t.Helper()
+	dst := filepath.Join(t.TempDir(), "b")
+	if err := baseTree(top, base, filepath.Join(top, filepath.FromSlash(unitRel)), dst); err != nil {
+		t.Fatalf("baseTree for unit %s absent at base: %v\na PR that adds a Python unit must still get a base tree, so fail-on-base can run the new tests against base and see them fail because the code they import did not exist there", unitRel, err)
+	}
+	if d := diffTrees(treeFiles(t, dst), want); d != "" {
+		t.Fatalf("base tree for unit %s absent at base differs:\n%s\nit holds only what existed at --changed-from: the ancestor directories' own files as committed there, nothing under the new unit and nothing from HEAD", unitRel, d)
+	}
+}
+
+func TestBaseTreeNewUnitUnderExistingParent(t *testing.T) {
+	top, base := newUnitRepo(t,
+		map[string]string{"conftest.py": "base = 1\n", "pkg/helper.py": "h = 1\n", "pkg/old/mod.py": "o = 1\n"},
+		map[string]string{"conftest.py": "head = 1\n", "pkg/helper.py": "h = 2\n", "pkg/new/pyproject.toml": "", "pkg/new/mod.py": "x = 1\n", "pkg/new/tests/test_mod.py": "from mod import x\n"})
+	checkNewUnitBaseTree(t, top, base, "pkg/new", map[string]string{"conftest.py": "base = 1\n", "pkg/helper.py": "h = 1\n"})
+}
+
+func TestBaseTreeNewUnitUnderNewParent(t *testing.T) {
+	top, base := newUnitRepo(t,
+		map[string]string{"conftest.py": "base = 1\n", "other/mod.py": "o = 1\n"},
+		map[string]string{"conftest.py": "head = 1\n", "a/conftest.py": "", "a/b/pyproject.toml": "", "a/b/mod.py": "x = 1\n", "a/b/tests/test_mod.py": "from mod import x\n"})
+	checkNewUnitBaseTree(t, top, base, "a/b", map[string]string{"conftest.py": "base = 1\n"})
+}
+
 // TestOverlayTestsMatchesModel: fail-on-base runs the changed test files'
 // current content against base code, so every changed test file must be the
 // current bytes, a deleted one gone, and everything else base.
