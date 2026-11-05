@@ -25,12 +25,18 @@ install: ## Install assure and adapters to $HOME/go/bin and mise's GOBIN, then v
 	@$(MAKE) --no-print-directory verify
 	@echo "✓ Installed $(BINS)"
 
+# A mise shim is a symlink to the mise executable, so hashing it never matches;
+# verify hashes the binary the shim dispatches to (`mise which`) instead.
 verify: ## Check every assure binary on PATH matches $HOME/go/bin
 	@status=0; \
 	for b in $(BINS); do \
 		want=$$(shasum -a 256 $(HOME)/go/bin/$$b | cut -d' ' -f1); \
 		found=$$(which -a $$b) || { echo "$$b: not on PATH"; status=1; continue; }; \
 		for got in $$found; do \
+			case "$$got" in */mise/shims/*) \
+				shim=$$got; \
+				got=$$(mise which $$b 2>/dev/null) || { echo "$$b: mise shim $$shim resolves to no binary"; status=1; continue; }; \
+			esac; \
 			if [ "$$(shasum -a 256 $$got | cut -d' ' -f1)" = "$$want" ]; then \
 				echo "$$b: $$got"; \
 			else \
