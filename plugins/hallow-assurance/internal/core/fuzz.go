@@ -1,5 +1,7 @@
 package core
 
+// lean-ci-gate-check: throwaway core-only change
+
 import (
 	"fmt"
 	"slices"
