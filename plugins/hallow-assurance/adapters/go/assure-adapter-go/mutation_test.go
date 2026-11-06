@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -476,5 +477,99 @@ func TestMutationTestsEveryChangeInOneDiffHunk(t *testing.T) {
 	}
 	if !testedOn8 {
 		t.Fatalf("no mutant on changed line 8: %+v", ms)
+	}
+}
+
+const nonViableWhy = "Gremlins v0.6.0 maps `go test` exit 1 to KILLED and exit 2 to NOT VIABLE, and `go test` exits 1 when the mutant does not compile; a non-compiling mutant counted as KILLED inflates the mutation score and can lift VER-MUTATION-CHANGED over its threshold (go-gremlins/gremlins#321)"
+
+func wrappedGo(t *testing.T, dir string, args ...string) (int, string) {
+	t.Helper()
+	env, cleanup, err := goWrapperEnv(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	if env == nil {
+		t.Fatal("goWrapperEnv installed no wrapper with go on PATH")
+	}
+	cmd := exec.CommandContext(t.Context(), "sh", append([]string{"-c", `exec go "$@"`, "sh"}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return 0, string(out)
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		t.Fatalf("go %v: %v\n%s", args, err, out)
+	}
+	return exit.ExitCode(), string(out)
+}
+
+func TestGoWrapperReportsUnbuildableTestAsNotViable(t *testing.T) {
+	const passTest = "package a\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) { _ = F() }\n"
+	for _, c := range []struct {
+		name  string
+		files map[string]string
+		want  int
+		why   string
+	}{
+		{"mutated source fails to type-check",
+			map[string]string{"a/a.go": "package a\n\nfunc F() [2]int { return [1 - 1]int{} }\n", "a/a_test.go": passTest},
+			2, "`FAIL <pkg> [build failed]`: " + nonViableWhy},
+		{"test file references a symbol the mutant broke",
+			map[string]string{"a/a.go": "package a\n\nfunc F() int { return 1 }\n", "a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) { _ = Undefined() }\n"},
+			2, "`FAIL <pkg> [build failed]` from the test file: " + nonViableWhy},
+		{"package fails to load",
+			map[string]string{"a/a.go": "package a\n\nimport _ \"example.com/m/nosuch\"\n\nfunc F() int { return 1 }\n", "a/a_test.go": passTest},
+			2, "`FAIL <pkg> [setup failed]`: " + nonViableWhy},
+		{"test genuinely fails",
+			map[string]string{"a/a.go": "package a\n\nfunc F() int { return 1 }\n", "a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) {\n\tif F() != 2 {\n\t\tt.Fatal(\"F\")\n\t}\n}\n"},
+			1, "a compiled mutant that a test catches is KILLED; mapping every failure to 2 would turn all kills into NOT VIABLE and drop them from the score"},
+		{"failing test logs a build-failed line",
+			map[string]string{"a/a.go": "package a\n\nfunc F() int { return 1 }\n", "a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) {\n\tt.Log(\"FAIL\\texample.com/m/a [build failed]\")\n\tt.Fatal(\"F\")\n}\n"},
+			1, "the package built and a test failed, so the mutant is KILLED; only go's own per-package FAIL line marks a build failure, not text a test prints"},
+		{"tests pass",
+			map[string]string{"a/a.go": "package a\n\nfunc F() int { return 1 }\n", "a/a_test.go": passTest},
+			0, "a mutant no test catches LIVES"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFiles(t, dir, map[string]string{"go.mod": "module example.com/m\n\ngo 1.26\n"})
+			writeFiles(t, dir, c.files)
+			code, out := wrappedGo(t, dir, "test", "-timeout", "60s", "-failfast", "example.com/m/a")
+			if code != c.want {
+				t.Fatalf("wrapped `go test -failfast example.com/m/a` exited %d, want %d; %s\n%s", code, c.want, c.why, out)
+			}
+		})
+	}
+	t.Run("go build of a package that fails to compile", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFiles(t, dir, map[string]string{"go.mod": "module example.com/m\n\ngo 1.26\n", "a/a.go": "package a\n\nfunc F() [2]int { return [1 - 1]int{} }\n"})
+		if code, out := wrappedGo(t, dir, "build", "./a"); code != 1 {
+			t.Fatalf("wrapped `go build` on a package that does not compile exited %d, want 1 as the real go does; only `go test` exit codes feed Gremlins' KILLED/NOT VIABLE mapping, and the wrapper is on PATH for everything Gremlins runs\n%s", code, out)
+		}
+	})
+}
+
+const arraySrc = "package a\n\nfunc F() [2]int {\n\treturn [2]int{}\n}\n"
+const arrayTest = "package a\n\nimport \"testing\"\n\nfunc TestF(t *testing.T) {\n\t_ = F()\n}\n"
+
+func TestMutationNonCompilingMutantIsNotKilled(t *testing.T) {
+	needGremlins(t)
+	dir := committedModule(t, map[string]string{"a/a.go": arraySrc, "a/a_test.go": arrayTest})
+	writeFiles(t, dir, map[string]string{"a/a.go": strings.Replace(arraySrc, "[2]int{}", "[1 + 1]int{}", 1)})
+	ms := mutationReport(t, dir)
+	notViable := 0
+	for _, m := range ms {
+		if m.Status == "Killed" {
+			t.Fatalf("mutant %+v reported Killed (all mutants: %+v); TestF asserts nothing, so the only way a mutant of `[1 + 1]int{}` fails is by not compiling ([0]int is not [2]int). %s", m, ms, nonViableWhy)
+		}
+		if m.Line == 4 && m.Status == "CompileError" {
+			notViable++
+		}
+	}
+	if notViable == 0 {
+		t.Fatalf("no CompileError mutant on changed line 4: %+v; the `+` to `-` mutant of `[1 + 1]int{}` cannot compile and must be reported NOT VIABLE so the evaluator excludes it from the score", ms)
 	}
 }
