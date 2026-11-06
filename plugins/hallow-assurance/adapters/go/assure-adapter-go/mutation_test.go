@@ -453,3 +453,28 @@ func TestScopedNestedPackageMainJudgedByItsOwnTests(t *testing.T) {
 	}
 	checkMainMutants(t, ms, "a/cmd/tool/main.go", "a's tests pass and never call a/cmd/tool, so a main-package mutant judged by them LIVES whatever its own tests do; a scoped package nested under another scoped package must get its own run", "--scope", posLine, addLine)
 }
+
+const twoChangeSrc = "package a\n\nfunc Pos(n int) bool {\n\treturn n > 0\n}\n\nfunc Neg(n int) bool {\n\treturn n < 0\n}\n"
+const twoChangeTest = "package a\n\nimport \"testing\"\n\nfunc TestSign(t *testing.T) {\n\tif !Pos(5) || Pos(-5) || !Neg(-5) || Neg(5) {\n\t\tt.Fatal(\"sign\")\n\t}\n}\n"
+
+func TestMutationTestsEveryChangeInOneDiffHunk(t *testing.T) {
+	needGremlins(t)
+	dir := committedModule(t, map[string]string{"a/a.go": twoChangeSrc, "a/a_test.go": twoChangeTest})
+	head := strings.Replace(twoChangeSrc, "return n > 0", "return n > 0 && n < 1000", 1)
+	head = strings.Replace(head, "return n < 0", "return n < 0 && n > -1000", 1)
+	writeFiles(t, dir, map[string]string{"a/a.go": head})
+	ms := mutationReport(t, dir)
+	testedOn8 := false
+	for _, m := range ms {
+		if m.Line != 8 {
+			continue
+		}
+		if m.Status == "Ignored" {
+			t.Fatalf("mutant on changed line 8 reported Ignored: %+v; lines 4 and 8 share one 3-line-context diff hunk, and a change the mutation run skips hides its survivors, so VER-MUTATION-CHANGED passes on untested code", m)
+		}
+		testedOn8 = true
+	}
+	if !testedOn8 {
+		t.Fatalf("no mutant on changed line 8: %+v", ms)
+	}
+}
