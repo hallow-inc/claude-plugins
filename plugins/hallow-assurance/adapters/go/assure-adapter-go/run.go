@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"go/build"
 	"io"
 	"os"
 	"os/exec"
@@ -144,7 +145,12 @@ func moduleOf(root, dir string) (string, bool) {
 	}
 }
 
-func hasGoFiles(dir string) bool {
+func hasPackage(dir string) bool {
+	if _, err := build.Default.ImportDir(dir, 0); err != nil {
+		if _, ok := errors.AsType[*build.NoGoError](err); ok {
+			return false
+		}
+	}
 	m, _ := filepath.Glob(filepath.Join(dir, "*.go"))
 	return len(m) > 0
 }
@@ -159,7 +165,7 @@ func selectPackages(root string, paths []string) map[string][]string {
 			if mod, ok := moduleOf(root, dir); ok {
 				whole[mod] = true
 			}
-		case strings.HasSuffix(p, ".go") && !ignoredByGo(p) && hasGoFiles(filepath.Join(root, dir)):
+		case strings.HasSuffix(p, ".go") && !ignoredByGo(p) && hasPackage(filepath.Join(root, dir)):
 			if mod, ok := moduleOf(root, dir); ok {
 				if pkgs[mod] == nil {
 					pkgs[mod] = map[string]bool{}

@@ -162,6 +162,25 @@ func TestChangedPackageSelection(t *testing.T) {
 			t.Fatalf("got %v, want nothing", got)
 		}
 	})
+	t.Run("build-ignored generator dir selects nothing", func(t *testing.T) {
+		dir := committedModule(t, map[string]string{"a/a.go": "package a\n", "gen/gen.go": generatorSrc})
+		writeFiles(t, dir, map[string]string{
+			"a/a.go":     "package a\n\nvar X = 1\n",
+			"gen/gen.go": strings.Replace(generatorSrc, "1 + 2", "1 + 3", 1),
+		})
+		want := map[string][]string{".": {"./a"}}
+		if got := selection(t, dir); !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %v, want %v; gen/gen.go is a generator behind `//go:build ignore`, a common layout, so ./gen holds no buildable package; go test fails setup on it (\"build constraints exclude all Go files\"), and a change there must not fail VER-TESTS-PASS", got, want)
+		}
+	})
+	t.Run("test-only dir is still selected", func(t *testing.T) {
+		dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
+		writeFiles(t, dir, map[string]string{"t/x_test.go": "package t\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) {}\n"})
+		want := map[string][]string{".": {"./t"}}
+		if got := selection(t, dir); !reflect.DeepEqual(got, want) {
+			t.Fatalf("got %v, want %v; a directory holding only _test.go files is a test package go test builds and runs, and dropping it with build-ignored directories would silently skip its tests", got, want)
+		}
+	})
 }
 
 func isolateGitConfig(t *testing.T) {
@@ -268,6 +287,34 @@ func TestRunTestsFailingTestStillExitsZero(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(out, "lint.sarif")); err == nil {
 		t.Fatal("VER-TESTS-PASS wrote lint.sarif; no objective reads it any more")
+	}
+}
+
+func TestRunTestsSkipsBuildIgnoredGeneratorDir(t *testing.T) {
+	dir := committedModule(t, map[string]string{"a/a.go": "package a\n", "gen/gen.go": generatorSrc})
+	writeFiles(t, dir, map[string]string{
+		"a/a.go":      "package a\n\nvar X = 1\n",
+		"a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) {}\n",
+		"gen/gen.go":  strings.Replace(generatorSrc, "1 + 2", "1 + 3", 1),
+	})
+	out := filepath.Join(t.TempDir(), "ev")
+	resp, stderr, code := runIn(t, dir, "run", "VER-TESTS-PASS", "--changed-from", "HEAD", "--out", out)
+	if code != 0 || len(resp.Evidence) != 1 {
+		t.Fatalf("exit %d %s, response %+v", code, stderr, resp)
+	}
+	data, err := os.ReadFile(filepath.Join(out, resp.Evidence[0].Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := ev.ParseJUnit(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Failures+j.Errors != 0 {
+		t.Fatalf("junit reports failures %+v; gen/gen.go is a generator behind `//go:build ignore`, a common layout, and go test fails setup on its directory (\"build constraints exclude all Go files\"); a change there must not fail VER-TESTS-PASS\n%s", j.Failing, data)
+	}
+	if j.Cases == 0 {
+		t.Fatalf("junit has no test cases\n%s\nskipping the build-ignored generator directory must not also skip the tests of the real package beside it", data)
 	}
 }
 
