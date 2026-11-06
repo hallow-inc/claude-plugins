@@ -409,7 +409,8 @@ func unleash(dir, ref, target, out, seed string) ([]byte, error) {
 	cmd := exec.CommandContext(context.Background(), "gremlins", append(gargs, target)...)
 	cmd.Dir = dir
 	cmd.Env = append(append(os.Environ(), "RAPID_SEED="+seed,
-		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=diff.relative", "GIT_CONFIG_VALUE_0=true"), wrapEnv...)
+		"GIT_CONFIG_COUNT=2", "GIT_CONFIG_KEY_0=diff.relative", "GIT_CONFIG_VALUE_0=true",
+		"GIT_CONFIG_KEY_1=diff.context", "GIT_CONFIG_VALUE_1=0"), wrapEnv...)
 	log, err := cmd.CombinedOutput()
 	var exit *exec.ExitError
 	if errors.As(err, &exit) && (exit.ExitCode() == 10 || exit.ExitCode() == 11) {
