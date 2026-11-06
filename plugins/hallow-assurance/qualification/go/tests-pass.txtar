@@ -1,4 +1,5 @@
-VER-TESTS-PASS: TestDoubleWrong expects Double(2) to be 5.
+VER-TESTS-PASS: TestDoubleWrong expects Double(2) to be 5. Only a test changed, so there is no
+changed source to mutate and VER-MUTATION-CHANGED passes.
 
 -- base/assurance.yaml --
 version: 0
@@ -32,7 +33,7 @@ test(p): cover Double
 {
   "objectives": [
     {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
-    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["assure-adapter-go run: exit status 1; stderr: assure-adapter-go: run VER-MUTATION-CHANGED: gremlins unleash in "]},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
     {"objective": "VER-TESTS-PASS", "language": "go", "status": "fail", "locations": ["failing test: example.com/q/p.TestDoubleWrong"]}
   ]
 }

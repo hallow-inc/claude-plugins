@@ -315,17 +315,19 @@ func TestScopedMutationKeepsOnlyInRangeSurvivors(t *testing.T) {
 		t.Fatalf("mutants %v, want only a/a.go:50; scope range [40,72] limits mutation evidence, so the survivor on line 10 is outside the audit, and the package-relative name a.go must land at its repo path", lines)
 	}
 	calls := readGremlinsCalls(t, log)
-	if len(calls) != 1 || calls[0].dir != dir || calls[0].args[len(calls[0].args)-1] != "./a" {
-		t.Fatalf("gremlins calls %+v, want one call on ./a in %s; mutating the whole module for a one-file scope took over 30 minutes on this repository, against 66 s for the scoped package", calls, dir)
+	if dirs := callDirs(t, dir, calls, ""); !slices.Equal(dirs, []string{"a"}) {
+		t.Fatalf("gremlins calls %+v walked %v, want one call on package a; mutating the whole module for a one-file scope took over 30 minutes on this repository, against 66 s for the scoped package", calls, dirs)
 	}
-	if slices.Contains(calls[0].args, "--diff") {
-		t.Fatalf("gremlins argv %q for a scoped run on an unmodified file; with --diff, Gremlins skips every unchanged line, so the scoped range is never mutated", calls[0].args)
+	if want := filepath.Join(dir, "a"); calls[0].dir != want {
+		t.Fatalf("gremlins ran in %s, want %s; run from the module root, Gremlins tests a package main mutant with the root package's tests", calls[0].dir, want)
 	}
 }
 
 // twoModuleRepo is a git repository with sibling modules m1 and m2 and no module at its root.
 // m1/root.go is a package at its module root; m1/a/sub nests under m1/a; m1/ab shares m1/a's
-// name as a string prefix without nesting under it.
+// name as a string prefix without nesting under it. m1/testdata and m1/vendor hold .go files the
+// go tool never builds. m1/gen holds only a `//go:build ignore` generator and m1/plan9 only a
+// _plan9.go file: build constraints exclude every .go file in each, so neither is a package.
 func twoModuleRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -337,6 +339,8 @@ func twoModuleRepo(t *testing.T) string {
 		"m1/go.mod": "module example.com/m1\n\ngo 1.26\n", "m1/go.sum": "",
 		"m1/root.go": src("m1"), "m1/a/a.go": src("a"), "m1/a/a2.go": src("a"), "m1/a/a_test.go": src("a"),
 		"m1/a/sub/s.go": src("sub"), "m1/ab/ab.go": src("ab"), "m1/b/b.go": src("b"), "m1/internal/core/core.go": src("core"),
+		"m1/testdata/t.go": src("t"), "m1/vendor/v/v.go": src("v"),
+		"m1/gen/gen.go": "//go:build ignore\n\npackage main\n\nfunc main() {}\n", "m1/plan9/p_plan9.go": src("plan9"),
 		"m2/go.mod": "module example.com/m2\n\ngo 1.26\n", "m2/x.go": src("m2"), "m2/c/c.go": src("c"),
 		"README.md": "x\n",
 	})
@@ -348,7 +352,35 @@ func twoModuleRepo(t *testing.T) string {
 
 var twoModuleScopeCandidates = []string{
 	"m1/go.mod", "m1/go.sum", "m1/root.go", "m1/a/a.go", "m1/a/a2.go", "m1/a/a_test.go", "m1/a/sub/s.go",
-	"m1/ab/ab.go", "m1/b/b.go", "m1/internal/core/core.go", "m2/go.mod", "m2/x.go", "m2/c/c.go", "README.md",
+	"m1/ab/ab.go", "m1/b/b.go", "m1/internal/core/core.go", "m1/testdata/t.go", "m1/vendor/v/v.go",
+	"m1/gen/gen.go", "m1/plan9/p_plan9.go", "m2/go.mod", "m2/x.go", "m2/c/c.go", "README.md",
+}
+
+// twoModuleSources lists twoModuleRepo's non-test .go files that the go tool builds.
+var twoModuleSources = []string{
+	"m1/root.go", "m1/a/a.go", "m1/a/a2.go", "m1/a/sub/s.go", "m1/ab/ab.go", "m1/b/b.go",
+	"m1/internal/core/core.go", "m2/x.go", "m2/c/c.go",
+}
+
+// constraintExcluded lists twoModuleRepo's .go files that build constraints exclude on every
+// GOOS and GOARCH the adapter runs on.
+var constraintExcluded = []string{"m1/gen/gen.go", "m1/plan9/p_plan9.go"}
+
+func builtByGo(p string) bool {
+	return strings.HasSuffix(p, ".go") && !strings.Contains(p, "/testdata/") && !strings.Contains(p, "/vendor/") &&
+		!slices.Contains(constraintExcluded, p)
+}
+
+// sourcesIn returns the twoModuleSources files directly in one of dirs, each with the stub's
+// mutant on line 1.
+func sourcesIn(dirs []string) map[string]bool {
+	got := map[string]bool{}
+	for _, f := range twoModuleSources {
+		if slices.Contains(dirs, path.Dir(f)) {
+			got[f+":1"] = true
+		}
+	}
+	return got
 }
 
 type fataler interface {
@@ -356,26 +388,32 @@ type fataler interface {
 	Fatalf(string, ...any)
 }
 
-func callKeys(t fataler, root string, calls []gremlinsCall, ref string) []string {
-	keys := make([]string, 0, len(calls))
+// callDirs returns, sorted, the repository-relative directory each Gremlins call walked: its
+// last argument, resolved against the call's working directory.
+func callDirs(t fataler, root string, calls []gremlinsCall, ref string) []string {
+	dirs := make([]string, 0, len(calls))
 	for _, c := range calls {
-		mod, err := filepath.Rel(root, c.dir)
-		if err != nil || strings.HasPrefix(mod, "..") {
-			t.Fatalf("gremlins ran in %s, outside the repository %s", c.dir, root)
-		}
 		if got := flagValue(c.args, "--diff"); got != ref || (ref == "" && slices.Contains(c.args, "--diff")) {
-			t.Fatalf("gremlins argv %q in %s: --diff %q, want %q; a scoped run must not diff (unchanged scoped lines would be skipped) and a --changed-from run must (or it mutates every line)", c.args, mod, got, ref)
+			t.Fatalf("gremlins argv %q in %s: --diff %q, want %q; a scoped run must not diff (unchanged scoped lines would be skipped) and a --changed-from run must (or it mutates every line)", c.args, c.dir, got, ref)
 		}
-		keys = append(keys, filepath.ToSlash(mod)+" "+path.Clean(c.args[len(c.args)-1]))
+		walked := c.args[len(c.args)-1]
+		if !filepath.IsAbs(walked) {
+			walked = filepath.Join(c.dir, walked)
+		}
+		rel, err := filepath.Rel(root, walked)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+			t.Fatalf("gremlins in %s walked %s, outside the repository %s", c.dir, walked, root)
+		}
+		dirs = append(dirs, filepath.ToSlash(rel))
 	}
-	slices.Sort(keys)
-	return keys
+	slices.Sort(dirs)
+	return dirs
 }
 
 // mutateWith runs runMutation on root as the adapter would for ra, against the stub logging to
-// log, and returns the module-relative targets Gremlins ran on per module, and the mutants
-// reported as "path:line".
-func mutateWith(t fataler, root, log, evRoot string, ra adapterkit.RunArgs) (map[string][]string, map[string]bool) {
+// log, and returns the repository-relative directories Gremlins walked, one entry per call, and
+// the mutants reported as "path:line".
+func mutateWith(t fataler, root, log, evRoot string, ra adapterkit.RunArgs) ([]string, map[string]bool) {
 	if err := os.WriteFile(log, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -390,11 +428,7 @@ func mutateWith(t fataler, root, log, evRoot string, ra adapterkit.RunArgs) (map
 	if _, err := runMutation(root, ra, out, selectPackages(root, paths), nil); err != nil {
 		t.Fatal(err)
 	}
-	targets := map[string][]string{}
-	for _, k := range callKeys(t, root, readGremlinsCalls(t, log), ra.ChangedFrom) {
-		mod, target, _ := strings.Cut(k, " ")
-		targets[mod] = append(targets[mod], target)
-	}
+	dirs := callDirs(t, root, readGremlinsCalls(t, log), ra.ChangedFrom)
 	data, err := os.ReadFile(filepath.Join(out, "mutation.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -407,24 +441,27 @@ func mutateWith(t fataler, root, log, evRoot string, ra adapterkit.RunArgs) (map
 	for _, m := range ms {
 		got[fmt.Sprintf("%s:%d", m.Path, m.Line)] = true
 	}
-	return targets, got
+	return dirs, got
 }
 
-// scopeOracle reads a scope over twoModuleRepo: the scoped packages per module (module-relative,
-// "." for the module root), the modules whose go.mod or go.sum is scoped, and the stub's mutants
-// (lines 1 and 3 of every non-test file) that the scope's ranges contain.
-func scopeOracle(s adapterkit.Scope) (pkgs map[string]map[string]bool, whole, mutants map[string]bool) {
-	pkgs, whole, mutants = map[string]map[string]bool{}, map[string]bool{}, map[string]bool{}
+// scopeOracle reads a scope over twoModuleRepo: the package directories Gremlins must run in
+// (repository-relative, sorted), and the stub's mutants (lines 1 and 3 of every built non-test
+// file) that the scope's ranges contain. A scoped .go file the go tool builds selects its own
+// directory; a scoped go.mod or go.sum selects every package directory of its module. A
+// directory whose .go files build constraints all exclude is no package and is never selected.
+func scopeOracle(s adapterkit.Scope) (runs []string, mutants map[string]bool) {
+	set, mutants := map[string]bool{}, map[string]bool{}
 	for _, p := range s.Paths() {
 		mod, rel, _ := strings.Cut(p, "/")
 		switch {
 		case rel == "go.mod" || rel == "go.sum":
-			whole[mod] = true
-		case strings.HasSuffix(p, ".go"):
-			if pkgs[mod] == nil {
-				pkgs[mod] = map[string]bool{}
+			for _, f := range twoModuleSources {
+				if strings.HasPrefix(f, mod+"/") {
+					set[path.Dir(f)] = true
+				}
 			}
-			pkgs[mod][path.Dir(rel)] = true
+		case builtByGo(p):
+			set[path.Dir(p)] = true
 			if strings.HasSuffix(p, "_test.go") {
 				continue
 			}
@@ -435,51 +472,15 @@ func scopeOracle(s adapterkit.Scope) (pkgs map[string]map[string]bool, whole, mu
 			}
 		}
 	}
-	return pkgs, whole, mutants
+	for d := range set {
+		runs = append(runs, d)
+	}
+	slices.Sort(runs)
+	return runs, mutants
 }
 
-// under reports whether package p lies in the directory Gremlins walks for target tg.
-func under(p, tg string) bool {
-	return tg == "." || tg == p || strings.HasPrefix(p, tg+"/")
-}
-
-func checkScopedTargets(t fataler, s adapterkit.Scope, targets map[string][]string) {
-	pkgs, whole, _ := scopeOracle(s)
-	for mod, ts := range targets {
-		if !whole[mod] && pkgs[mod] == nil {
-			t.Fatalf("scope %v ran gremlins in module %s on %v; nothing in that module is scoped", s.Paths(), mod, ts)
-		}
-	}
-	for mod := range whole {
-		if !slices.Equal(targets[mod], []string{"."}) {
-			t.Fatalf("scope %v with %s's go.mod or go.sum ran gremlins there on %v, want one run on .; a scoped module config can change every package, so the module is mutated once, whole", s.Paths(), mod, targets[mod])
-		}
-	}
-	for mod, set := range pkgs {
-		if whole[mod] {
-			continue
-		}
-		for _, tg := range targets[mod] {
-			if !set[tg] {
-				t.Fatalf("scope %v ran gremlins in %s on %s, which is not a scoped package (scoped: %v); a whole-module run per scope took over 30 minutes on this repository against 66 s for the scoped package", s.Paths(), mod, tg, set)
-			}
-		}
-		for p := range set {
-			n := 0
-			for _, tg := range targets[mod] {
-				if under(p, tg) {
-					n++
-				}
-			}
-			if n != 1 {
-				t.Fatalf("scope %v: scoped package %s/%s lies under %d of the gremlins targets %v, want exactly 1; Gremlins walks its target recursively, so zero leaves the package unmutated and two mutate it twice, duplicating its mutants", s.Paths(), mod, p, n, targets[mod])
-			}
-		}
-	}
-}
-
-func drawScope(t *rapid.T) adapterkit.Scope {
-	picked := rapid.SliceOfNDistinct(rapid.SampledFrom(twoModuleScopeCandidates), 1, len(twoModuleScopeCandidates), rapid.ID[string]).Draw(t, "scoped")
+func drawScope(t *rapid.T, candidates []string) adapterkit.Scope {
+	picked := rapid.SliceOfNDistinct(rapid.SampledFrom(candidates), 1, len(candidates), rapid.ID[string]).Draw(t, "scoped")
 	s := make(adapterkit.Scope, 0, len(picked))
 	for _, p := range picked {
 		e := adapterkit.ScopeEntry{Path: p}
@@ -492,56 +493,50 @@ func drawScope(t *rapid.T) adapterkit.Scope {
 	return s
 }
 
+func checkScopedRuns(t fataler, s adapterkit.Scope, dirs []string, got map[string]bool) {
+	want, mutants := scopeOracle(s)
+	if !slices.Equal(dirs, want) {
+		t.Fatalf("scope %v ran gremlins on %v, want one run on each of %v; each scoped package is mutated by its own run so that its mutants are judged by its own tests (a package main nested under a walked directory is otherwise judged by the outer package's tests), a scoped go.mod or go.sum can change every package of its module, a directory whose every .go file build constraints exclude (m1/gen's `//go:build ignore` generator, m1/plan9's _plan9.go) is no package and Gremlins v0.6.0 exits 1 there (\"no packages to test\"), failing VER-MUTATION-CHANGED for the whole module, and a run anywhere else costs time for evidence the audit did not ask about", s.Paths(), dirs, want)
+	}
+	if !reflect.DeepEqual(got, mutants) {
+		t.Fatalf("scope %+v reported mutants %v, want %v; Gremlins names files relative to the directory it walks, so each name must be rejoined with that directory to its repo path, files below it belong to another package's run, and the result is cut to the scope's ranges", s, got, mutants)
+	}
+}
+
 func TestScopedMutationRunsGremlinsPerScopedPackage(t *testing.T) {
 	root := twoModuleRepo(t)
 	log := filepath.Join(t.TempDir(), "calls")
 	narrowPath(t, []string{"git", "find"}, map[string]string{"gremlins": gremlinsWalkStub(log, 1, 3)})
 	evRoot := t.TempDir()
 	rapid.Check(t, func(rt *rapid.T) {
-		s := drawScope(rt)
-		targets, got := mutateWith(rt, root, log, evRoot, adapterkit.RunArgs{Scope: s})
-		checkScopedTargets(rt, s, targets)
-		if _, _, want := scopeOracle(s); !reflect.DeepEqual(got, want) {
-			rt.Fatalf("scope %+v reported mutants %v, want %v; Gremlins names files relative to the package it was given, so each name must be rejoined with module and package to its repo path, then cut to the scope's ranges", s, got, want)
-		}
+		s := drawScope(rt, twoModuleScopeCandidates)
+		dirs, got := mutateWith(rt, root, log, evRoot, adapterkit.RunArgs{Scope: s})
+		checkScopedRuns(rt, s, dirs, got)
 	})
 }
 
-func TestScopedMutationTargetsOutermostPackages(t *testing.T) {
+func TestScopedNestedPackagesEachGetTheirOwnRun(t *testing.T) {
 	root := twoModuleRepo(t)
 	log := filepath.Join(t.TempDir(), "calls")
 	narrowPath(t, []string{"git", "find"}, map[string]string{"gremlins": gremlinsWalkStub(log, 1, 3)})
 	evRoot := t.TempDir()
-	for _, c := range []struct {
-		scoped []string
-		want   []string
-		why    string
-	}{
-		{[]string{"m1/a/a.go", "m1/a/sub/s.go"}, []string{"a"}, "Gremlins on ./a already walks a/sub"},
-		{[]string{"m1/root.go", "m1/a/a.go"}, []string{"."}, "the module-root package's run walks every package in the module"},
-		{[]string{"m1/root.go", "m1/a/a.go", "m1/a/sub/s.go", "m1/internal/core/core.go"}, []string{"."}, "the module-root package's run walks every package in the module"},
-		{[]string{"m1/a/a.go", "m1/ab/ab.go"}, []string{"a", "ab"}, "ab is a sibling of a, not nested under it, so ./a does not walk it"},
-	} {
-		var s adapterkit.Scope
-		for _, p := range c.scoped {
-			s = append(s, adapterkit.ScopeEntry{Path: p})
-		}
-		targets, _ := mutateWith(t, root, log, evRoot, adapterkit.RunArgs{Scope: s})
-		if len(targets) != 1 || !slices.Equal(targets["m1"], c.want) {
-			t.Fatalf("scope %v ran gremlins on %v, want m1 targets %v; %s", c.scoped, targets, c.want, c.why)
-		}
-	}
+	rapid.Check(t, func(rt *rapid.T) {
+		s := drawScope(rt, []string{"m1/root.go", "m1/a/a.go", "m1/a/sub/s.go", "m1/ab/ab.go"})
+		dirs, got := mutateWith(rt, root, log, evRoot, adapterkit.RunArgs{Scope: s})
+		checkScopedRuns(rt, s, dirs, got)
+	})
 }
 
-// editFiles appends a declaration to each path under root and returns a function restoring them.
-func editFiles(t fataler, root string, paths []string) func() {
+// changeFiles appends a declaration to each path in edited and deletes each path in deleted,
+// under root, and returns a function restoring them.
+func changeFiles(t fataler, root string, edited, deleted []string) func() {
 	orig := map[string][]byte{}
 	restore := func() {
 		for full, b := range orig {
 			_ = os.WriteFile(full, b, 0o644)
 		}
 	}
-	for _, p := range paths {
+	for _, p := range append(slices.Clone(edited), deleted...) {
 		full := filepath.Join(root, p)
 		b, err := os.ReadFile(full)
 		if err != nil {
@@ -549,7 +544,12 @@ func editFiles(t fataler, root string, paths []string) func() {
 			t.Fatal(err)
 		}
 		orig[full] = b
-		if err := os.WriteFile(full, append(slices.Clone(b), "\nvar _ = 1\n"...), 0o644); err != nil {
+		if slices.Contains(deleted, p) {
+			err = os.Remove(full)
+		} else {
+			err = os.WriteFile(full, append(slices.Clone(b), "\nvar _ = 1\n"...), 0o644)
+		}
+		if err != nil {
 			restore()
 			t.Fatal(err)
 		}
@@ -557,7 +557,7 @@ func editFiles(t fataler, root string, paths []string) func() {
 	return restore
 }
 
-func TestRefMutationRunsGremlinsOncePerModuleWithDiff(t *testing.T) {
+func TestRefMutationRunsGremlinsOncePerChangedPackageWithDiff(t *testing.T) {
 	root := twoModuleRepo(t)
 	log := filepath.Join(t.TempDir(), "calls")
 	narrowPath(t, []string{"git", "find"}, map[string]string{"gremlins": gremlinsWalkStub(log, 1)})
@@ -569,21 +569,35 @@ func TestRefMutationRunsGremlinsOncePerModuleWithDiff(t *testing.T) {
 	}
 	evRoot := t.TempDir()
 	rapid.Check(t, func(rt *rapid.T) {
-		edited := rapid.SliceOfNDistinct(rapid.SampledFrom(goFiles), 1, len(goFiles), rapid.ID[string]).Draw(rt, "edited")
-		defer editFiles(rt, root, edited)()
-		want := map[string][]string{}
-		for _, p := range edited {
-			mod, _, _ := strings.Cut(p, "/")
-			want[mod] = []string{"."}
-		}
-		targets, got := mutateWith(rt, root, log, evRoot, adapterkit.RunArgs{ChangedFrom: "HEAD"})
-		if !reflect.DeepEqual(targets, want) {
-			rt.Fatalf("edits to %v ran gremlins on %v, want %v; a --changed-from run lets Gremlins' --diff pick the changed lines, so it runs once per touched module on the whole module", edited, targets, want)
-		}
-		for _, p := range edited {
-			if !strings.HasSuffix(p, "_test.go") && !got[p+":1"] {
-				rt.Fatalf("edited %s has no mutant in %v; Gremlins names files relative to the module in a whole-module run, so they must be rejoined with the module directory alone", p, got)
+		changed := rapid.SliceOfNDistinct(rapid.SampledFrom(twoModuleScopeCandidates), 1, len(twoModuleScopeCandidates), rapid.ID[string]).Draw(rt, "changed")
+		var edited, deleted []string
+		for _, p := range changed {
+			if slices.Contains(goFiles, p) && rapid.Bool().Draw(rt, "delete "+p) {
+				deleted = append(deleted, p)
+			} else {
+				edited = append(edited, p)
 			}
+		}
+		defer changeFiles(rt, root, edited, deleted)()
+		var want []string
+		for _, p := range edited {
+			if builtByGo(p) && !strings.HasSuffix(p, "_test.go") && !slices.Contains(want, path.Dir(p)) {
+				want = append(want, path.Dir(p))
+			}
+		}
+		slices.Sort(want)
+		dirs, got := mutateWith(rt, root, log, evRoot, adapterkit.RunArgs{ChangedFrom: "HEAD"})
+		if !slices.Equal(dirs, want) {
+			rt.Fatalf("edits to %v and deletion of %v ran gremlins on %v, want one run on each of %v; a --changed-from run mutates each package directory holding a changed, existing, non-test .go file the go tool builds, alone, so a package main is judged by its own tests, and a change to tests, go.mod, go.sum, testdata, vendor, or a deleted file leaves no line for --diff to mutate, and a directory whose every .go file build constraints exclude (m1/gen's `//go:build ignore` generator, m1/plan9's _plan9.go) is no package: Gremlins v0.6.0 exits 1 there (\"no packages to test\"), failing VER-MUTATION-CHANGED for the whole module", edited, deleted, dirs, want)
+		}
+		live := map[string]bool{}
+		for f := range sourcesIn(want) {
+			if !slices.Contains(deleted, strings.TrimSuffix(f, ":1")) {
+				live[f] = true
+			}
+		}
+		if !reflect.DeepEqual(got, live) {
+			rt.Fatalf("edits to %v and deletion of %v reported mutants %v, want %v; Gremlins names files relative to the package directory it walks, so each name must be rejoined with that directory, and files in nested directories belong to their own package's run or none", edited, deleted, got, live)
 		}
 	})
 }

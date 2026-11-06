@@ -12,6 +12,7 @@ import (
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
@@ -291,4 +292,164 @@ func TestMutationModuleBelowGitRoot(t *testing.T) {
 	if tested == 0 {
 		t.Fatal("every mutant Ignored; Gremlins matched git-root diff paths against module-relative names, so nothing was tested")
 	}
+}
+
+const toolBase = "package main\n\nfunc main() {}\n\nfunc Pos(n int) bool { return false }\nfunc Add(a, b int) int { return 0 }\n"
+const toolTest = "package main\n\nimport \"testing\"\n\nfunc TestPos(t *testing.T) {\n\tif Pos(0) || !Pos(1) {\n\t\tt.Fatal(\"pos\")\n\t}\n}\n\nfunc TestAddRuns(t *testing.T) {\n\t_ = Add(1, 2)\n}\n"
+
+func TestMutationPackageMainJudgedByItsOwnTests(t *testing.T) {
+	needGremlins(t)
+	const posLine, addLine = 5, 6
+	for _, root := range []struct{ name, test, bug string }{
+		{"root test fails in gremlins copy", "package m\n\nimport (\n\t\"os\"\n\t\"testing\"\n)\n\nfunc TestRootReadsOutsideModule(t *testing.T) {\n\tif _, err := os.Stat(\"../outside\"); err != nil {\n\t\tt.Fatal(err)\n\t}\n}\n",
+			"the root package's test reads a file outside the module, so it passes in the real tree and fails in Gremlins' copy of the module; a main-package mutant judged by it is KILLED whatever its own tests do"},
+		{"root test always passes", "package m\n\nimport \"testing\"\n\nfunc TestRoot(t *testing.T) {}\n",
+			"the root package's test passes and never calls cmd/tool, so a main-package mutant judged by it LIVES whatever its own tests do"},
+	} {
+		for _, selector := range []string{"--changed-from", "--scope"} {
+			t.Run(root.name+" "+selector, func(t *testing.T) {
+				top := t.TempDir()
+				if real, err := filepath.EvalSymlinks(top); err == nil {
+					top = real
+				}
+				writeFiles(t, top, map[string]string{"outside": "x\n", "mod/go.mod": "module example.com/m\n\ngo 1.26\n",
+					"mod/root.go": "package m\n", "mod/root_test.go": root.test,
+					"mod/cmd/tool/main.go": toolBase, "mod/cmd/tool/main_test.go": toolTest})
+				git(t, top, "init", "-q")
+				git(t, top, "add", "-A")
+				git(t, top, "commit", "-qm", "init")
+				dir := filepath.Join(top, "mod")
+				writeFiles(t, dir, map[string]string{"cmd/tool/main.go": strings.NewReplacer("return false", "return n > 0", "return 0", "return a + b").Replace(toolBase)})
+				checkMainMutants(t, mainMutationReport(t, dir, selector, posLine, addLine), "cmd/tool/main.go", root.bug, selector, posLine, addLine)
+			})
+		}
+	}
+}
+
+func mainMutationReport(t *testing.T, dir, selector string, posLine, addLine int) []ev.Mutant {
+	t.Helper()
+	if selector == "--changed-from" {
+		return mutationReport(t, dir)
+	}
+	scope := writeScope(t, adapterkit.Scope{{Path: "cmd/tool/main.go", Ranges: [][2]int{{posLine, addLine}}}})
+	out := t.TempDir()
+	resp, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--scope", scope, "--out", out)
+	if code != 0 || len(resp.Evidence) != 1 {
+		t.Fatalf("exit %d %s, response %+v", code, stderr, resp)
+	}
+	data, err := os.ReadFile(filepath.Join(out, resp.Evidence[0].Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms, err := ev.ParseMutationReport(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ms
+}
+
+func checkMainMutants(t *testing.T, ms []ev.Mutant, file, bug, selector string, posLine, addLine int) {
+	t.Helper()
+	want := map[int]string{posLine: "Killed", addLine: "Survived"}
+	seen := map[int]int{}
+	for _, m := range ms {
+		if m.Status == "Ignored" {
+			continue
+		}
+		if m.Path != file || want[m.Line] == "" {
+			t.Fatalf("%s run: mutant %+v outside lines %d and %d of %s", selector, m, posLine, addLine, file)
+		}
+		seen[m.Line]++
+		if m.Status != want[m.Line] {
+			t.Fatalf("%s run: mutant %+v is %s, want %s (all mutants: %+v); %s. A package main file's mutation score must reflect its own tests (TestPos catches every mutant on line %d, nothing asserts Add on line %d), otherwise VER-MUTATION-CHANGED passes or fails for reasons unrelated to the change",
+				selector, m, m.Status, want[m.Line], ms, bug, posLine, addLine)
+		}
+	}
+	if seen[posLine] == 0 || seen[addLine] == 0 {
+		t.Fatalf("%s run: tested mutants per line %v, want at least one on lines %d and %d: %+v", selector, seen, posLine, addLine, ms)
+	}
+}
+
+const generatorSrc = "//go:build ignore\n\npackage main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(1 + 2)\n}\n"
+
+func TestMutationSkipsBuildIgnoredGeneratorDir(t *testing.T) {
+	needGremlins(t)
+	for _, selector := range []string{"--changed-from", "--scope"} {
+		t.Run(selector, func(t *testing.T) {
+			dir := committedModule(t, map[string]string{"a/a.go": boundarySrc, "a/a_test.go": boundaryTest, "gen/gen.go": generatorSrc})
+			writeFiles(t, dir, map[string]string{
+				"a/a.go":     strings.Replace(boundarySrc, "return n > 0", "return n > 0 && n < 1000", 1),
+				"gen/gen.go": strings.Replace(generatorSrc, "1 + 2", "1 + 3", 1),
+			})
+			out := t.TempDir()
+			args := []string{"run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", out}
+			if selector == "--scope" {
+				args = []string{"run", "VER-MUTATION-CHANGED", "--scope", writeScope(t, adapterkit.Scope{{Path: "go.mod"}, {Path: "a/a.go"}}), "--out", out}
+			}
+			resp, stderr, code := runIn(t, dir, args...)
+			if code != 0 || len(resp.Evidence) != 1 {
+				t.Fatalf("%s run exited %d, response %+v:\n%s\ngen/gen.go is a generator behind `//go:build ignore`, a common layout; its directory holds no buildable package, Gremlins v0.6.0 exits 1 there (\"no packages to test\"), and a run on it must not fail VER-MUTATION-CHANGED for the whole module", selector, code, resp, stderr)
+			}
+			data, err := os.ReadFile(filepath.Join(out, resp.Evidence[0].Path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			ms, err := ev.ParseMutationReport(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tested := 0
+			for _, m := range ms {
+				if m.Path != "a/a.go" {
+					t.Fatalf("%s run reported mutant %+v; gen/gen.go is excluded by `//go:build ignore` from every build, so no test can kill its mutants and none may count against the score", selector, m)
+				}
+				if m.Status != "Ignored" {
+					tested++
+				}
+			}
+			if tested == 0 {
+				t.Fatalf("%s run tested no mutant of a/a.go: %+v; skipping the build-ignored generator directory must not also skip the real package beside it", selector, ms)
+			}
+		})
+	}
+}
+
+func TestScopedNestedPackageMainJudgedByItsOwnTests(t *testing.T) {
+	needGremlins(t)
+	const posLine, addLine = 5, 6
+	tool := strings.NewReplacer("return false", "return n > 0", "return 0", "return a + b").Replace(toolBase)
+	dir := committedModule(t, map[string]string{
+		"a/a.go": "package a\n", "a/a_test.go": "package a\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) {}\n",
+		"a/cmd/tool/main.go": tool, "a/cmd/tool/main_test.go": toolTest,
+	})
+	scope := writeScope(t, adapterkit.Scope{{Path: "a/a.go"}, {Path: "a/cmd/tool/main.go"}})
+	out := t.TempDir()
+	resp, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--scope", scope, "--out", out)
+	if code != 0 || len(resp.Evidence) != 1 {
+		t.Fatalf("exit %d %s, response %+v", code, stderr, resp)
+	}
+	data, err := os.ReadFile(filepath.Join(out, resp.Evidence[0].Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rep strykerReport
+	if err := json.Unmarshal(data, &rep); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, f := range rep.Files {
+		for _, m := range f.Mutants {
+			seen[m.ID]++
+		}
+	}
+	for id, n := range seen {
+		if n != 1 {
+			t.Fatalf("mutant %s reported %d times in %v; a run on a must not also report a/cmd/tool's mutants when a/cmd/tool has its own run, or a duplicated survivor counts twice against the mutation score", id, n, seen)
+		}
+	}
+	ms, err := ev.ParseMutationReport(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkMainMutants(t, ms, "a/cmd/tool/main.go", "a's tests pass and never call a/cmd/tool, so a main-package mutant judged by them LIVES whatever its own tests do; a scoped package nested under another scoped package must get its own run", "--scope", posLine, addLine)
 }
