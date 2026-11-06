@@ -335,12 +335,26 @@ func changedPackages(root string, paths []string) map[string][]string {
 // target directory, judging it by the root package's tests. The wrapper rewrites that argument
 // to "." so the mutated package's own tests run. Delete it once a Gremlins release contains
 // go-gremlins/gremlins#306.
+//
+// Gremlins also maps `go test` exit 1 to KILLED and exit 2 to NOT VIABLE, but a mutant that does
+// not compile exits 1, so it counted as a kill and inflated the score (go-gremlins/gremlins#321).
+// The wrapper turns exit 1 into 2 when go's own per-package line reports a build or setup
+// failure; the match is anchored because a test may print that text while failing for real.
 const goWrapper = `#!/bin/sh
 if [ "$1" = test ]; then
 	for a in "$@"; do
 		shift
 		if [ "$a" = "$ASSURE_GO_MODULE" ]; then set -- "$@" .; else set -- "$@" "$a"; fi
 	done
+	out=$(mktemp) || exit 1
+	"$ASSURE_REAL_GO" "$@" >"$out" 2>&1
+	code=$?
+	cat "$out"
+	if [ "$code" = 1 ] && grep -Eq "^FAIL$(printf '\t')[^ ]+ \[(build|setup) failed\]\$" "$out"; then
+		code=2
+	fi
+	rm -f "$out"
+	exit "$code"
 fi
 exec "$ASSURE_REAL_GO" "$@"
 `
