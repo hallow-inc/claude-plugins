@@ -55,7 +55,7 @@ func npmCI() (string, error) {
 	sum := sha256.Sum256(append(pkg, lock...))
 	dir := filepath.Join(os.TempDir(), fmt.Sprintf("assure-ts-integration-%x", sum[:6]))
 	modules := filepath.Join(dir, "node_modules")
-	if adapterkit.Exists(filepath.Join(modules, ".package-lock.json")) {
+	if completeModules(modules) {
 		return modules, nil
 	}
 	tmp, err := os.MkdirTemp(os.TempDir(), "assure-ts-npm-*")
@@ -72,13 +72,49 @@ func npmCI() (string, error) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("%w\n%s", err, out)
 	}
-	if err := os.Rename(tmp, dir); err != nil {
-		if !errors.Is(err, fs.ErrExist) && !adapterkit.Exists(modules) {
-			return "", err
-		}
-		_ = os.RemoveAll(tmp)
+	if err := settleCache(tmp, dir, modules); err != nil {
+		return "", err
 	}
 	return modules, nil
+}
+
+func settleCache(tmp, dir, modules string) error {
+	err := os.Rename(tmp, dir)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	if !completeModules(modules) {
+		// macOS temp cleanup prunes files inside an old cache, leaving a non-empty dir the
+		// rename cannot replace; keeping it would fail every integration run until it is deleted.
+		stale := dir + ".stale-" + filepath.Base(tmp)
+		if err := os.Rename(dir, stale); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		_ = os.RemoveAll(stale)
+		err = os.Rename(tmp, dir)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, fs.ErrExist) || !completeModules(modules) {
+			return err
+		}
+	}
+	return os.RemoveAll(tmp)
+}
+
+func completeModules(modules string) bool {
+	if !adapterkit.Exists(filepath.Join(modules, ".package-lock.json")) {
+		return false
+	}
+	for _, tool := range tsTools {
+		if tool.bin != "" && !adapterkit.Exists(filepath.Join(modules, ".bin", tool.bin)) {
+			return false
+		}
+	}
+	return true
 }
 
 var realUnitFiles = map[string]string{
@@ -161,5 +197,49 @@ func TestIntegrationImportErrorIsTestError(t *testing.T) {
 	}
 	if len(errored) != 1 || !strings.Contains(errored[0].Text, "./nope") {
 		t.Fatalf("erroring cases for src/broken.test.ts: %+v (all failing: %+v); a test file that cannot load must be one erroring case carrying vitest's message, or VER-TESTS-PASS passes a file that never ran", errored, j.Failing)
+	}
+}
+
+func fakeNpmCIOnPath(t *testing.T) {
+	script := "#!/bin/sh\n[ \"$1\" = ci ] || exit 1\nmkdir -p node_modules/.bin && : > node_modules/.package-lock.json\n"
+	for _, tool := range tsTools {
+		if tool.bin != "" {
+			script += "printf '#!/bin/sh\\n' > node_modules/.bin/" + tool.bin + " && chmod +x node_modules/.bin/" + tool.bin + "\n"
+		}
+	}
+	bin := t.TempDir()
+	exe(t, filepath.Join(bin, "npm"), script)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestNpmCIHealsPrunedCache(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	fakeNpmCIOnPath(t)
+	pkg, err := os.ReadFile(filepath.Join(nodeFixtureDir, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := os.ReadFile(filepath.Join(nodeFixtureDir, "package-lock.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(append(pkg, lock...))
+	cache := filepath.Join(os.TempDir(), fmt.Sprintf("assure-ts-integration-%x", sum[:6]))
+	writeTree(t, cache, map[string]string{"node_modules/vitest/package.json": "{}"})
+
+	modules, err := npmCI()
+	if err != nil {
+		t.Fatalf("npmCI over a pruned cache: %v", err)
+	}
+	want := []string{".package-lock.json"}
+	for _, tool := range tsTools {
+		if tool.bin != "" {
+			want = append(want, filepath.Join(".bin", tool.bin))
+		}
+	}
+	for _, rel := range want {
+		if !adapterkit.Exists(filepath.Join(modules, rel)) {
+			t.Errorf("%s missing from returned node_modules %s; temp cleanup pruned the cached install, and if npmCI keeps returning it instead of the fresh one, the cache never heals and every integration test fails until someone deletes it by hand", rel, modules)
+		}
 	}
 }
