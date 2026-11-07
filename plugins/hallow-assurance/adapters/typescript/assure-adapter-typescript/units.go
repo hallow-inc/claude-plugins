@@ -84,6 +84,10 @@ func unitFiles(root, top, unit string) ([]string, error) {
 	return out, nil
 }
 
+func selectsWholeUnit(role, abs string) bool {
+	return role == "config" || (role == "source" && !adapterkit.Exists(abs))
+}
+
 func selectUnits(root, top string, paths []string) (map[string][]string, string, error) {
 	sel := map[string][]string{}
 	whole := map[string]bool{}
@@ -103,7 +107,7 @@ func selectUnits(root, top string, paths []string) (map[string][]string, string,
 		if _, seen := sel[unit]; !seen {
 			sel[unit] = []string{}
 		}
-		if role == "config" {
+		if selectsWholeUnit(role, abs) {
 			whole[unit] = true
 		} else if (role == "source" || role == "test") && adapterkit.Exists(abs) {
 			sel[unit] = append(sel[unit], p)
