@@ -241,8 +241,8 @@ func TestUnsupportedLayoutRefused(t *testing.T) {
 		}
 		chain := rapid.SliceOfN(dirSegGen, 0, 3).Draw(t, "chain")
 		unitRel := strings.Join(chain, "/")
-		writeTree(t, top, map[string]string{strings.TrimPrefix(unitRel+"/package.json", "/"): "{}"})
 		changed := strings.TrimPrefix(unitRel+"/src/a.ts", "/")
+		writeTree(t, top, map[string]string{strings.TrimPrefix(unitRel+"/package.json", "/"): "{}", changed: ""})
 
 		marker := ""
 		refused := false
