@@ -117,8 +117,11 @@ func nearestPackageDir(pkgDirs map[string]bool, p string) (string, bool) {
 	}
 }
 
+func runnableRole(role string) bool { return role == "source" || role == "test" }
+
 func expectedSelection(top string, pkgDirs, present map[string]bool, changed []string) (map[string][]string, []string) {
 	want := map[string][]string{}
+	whole := map[string]bool{}
 	var orphans []string
 	for _, p := range changed {
 		role, ok := specRole(p)
@@ -134,7 +137,17 @@ func expectedSelection(top string, pkgDirs, present map[string]bool, changed []s
 		if want[unit] == nil {
 			want[unit] = []string{}
 		}
-		if (role == "source" || role == "test") && present[p] {
+		if role == "source" && !present[p] {
+			whole[unit] = true
+		}
+		if runnableRole(role) && present[p] {
+			want[unit] = append(want[unit], p)
+		}
+	}
+	for p := range present {
+		role, _ := specRole(p)
+		dir, ok := nearestPackageDir(pkgDirs, p)
+		if unit := filepath.Join(top, dir); ok && whole[unit] && runnableRole(role) {
 			want[unit] = append(want[unit], p)
 		}
 	}
@@ -146,6 +159,7 @@ func expectedSelection(top string, pkgDirs, present map[string]bool, changed []s
 }
 
 func TestChangedFilesSelectByUnit(t *testing.T) {
+	isolateGit(t)
 	base := realTempDir(t)
 	rapid.Check(t, func(t *rapid.T) {
 		top, err := os.MkdirTemp(base, "top")
@@ -154,6 +168,11 @@ func TestChangedFilesSelectByUnit(t *testing.T) {
 		}
 		pkgDirs := drawPackageDirs(t, top)
 		changed, present := drawChanged(t, top)
+		for _, p := range rapid.SliceOfN(nonConfigPathGen, 0, 3).Draw(t, "unchanged") {
+			writeTree(t, top, map[string]string{p: "export {};\n"})
+			present[p] = true
+		}
+		git(t, top, "init", "-q")
 		want, orphans := expectedSelection(top, pkgDirs, present, changed)
 
 		sel, msg, err := selectUnits(top, top, changed)
@@ -167,7 +186,7 @@ func TestChangedFilesSelectByUnit(t *testing.T) {
 			return
 		}
 		if msg != "" || !maps.EqualFunc(sel, want, slices.Equal) {
-			t.Fatalf("changed %q, package.json in %v:\n got %v %q\nwant %v\nevery unit with a changed claimed file must be run, and only changed source and test files that still exist are selected", changed, slices.Sorted(maps.Keys(pkgDirs)), sel, msg, want)
+			t.Fatalf("changed %q, package.json in %v:\n got %v %q\nwant %v\nevery unit with a changed claimed file must be run, and only changed source and test files that still exist are selected, except that a deleted source file selects every source and test file of its unit: its importers' tests break, and without them VER-TESTS-PASS passes with zero tests (owner decision, DATA-29)", changed, slices.Sorted(maps.Keys(pkgDirs)), sel, msg, want)
 		}
 	})
 }
@@ -227,6 +246,53 @@ func TestConfigChangeSelectsWholeUnit(t *testing.T) {
 	if want := map[string][]string{top: {"src/root.ts"}}; !maps.EqualFunc(sel, want, slices.Equal) {
 		t.Fatalf("root package.json change: got %v want %v; the root unit must not absorb the nested packages", sel, want)
 	}
+}
+
+func TestDeletedSourceSelectsWholeUnit(t *testing.T) {
+	isolateGit(t)
+	top := realTempDir(t)
+	writeTree(t, top, map[string]string{
+		"packages/api/package.json":     "{}",
+		"packages/api/src/a.ts":         "",
+		"packages/api/src/a.test.ts":    "",
+		"packages/api/src/b.ts":         "",
+		"packages/api/src/parse.ts":     "",
+		"packages/api/src/gone.test.ts": "",
+		"packages/web/package.json":     "{}",
+		"packages/web/w.ts":             "",
+		"packages/web/w.test.ts":        "",
+	})
+	git(t, top, "init", "-q")
+	git(t, top, "add", ".")
+	git(t, top, "commit", "-q", "-m", "base")
+	for _, gone := range []string{"packages/api/src/parse.ts", "packages/api/src/gone.test.ts"} {
+		if err := os.Remove(filepath.Join(top, gone)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(top)
+	api := filepath.Join(top, "packages/api")
+
+	t.Run("deleted source", func(t *testing.T) {
+		sel, msg, err := selectUnits(top, top, []string{"packages/api/src/parse.ts"})
+		if err != nil || msg != "" {
+			t.Fatalf("selectUnits: %v %q", err, msg)
+		}
+		want := map[string][]string{api: {"packages/api/src/a.test.ts", "packages/api/src/a.ts", "packages/api/src/b.ts"}}
+		if !maps.EqualFunc(sel, want, slices.Equal) {
+			t.Fatalf("deleting packages/api/src/parse.ts: got %v\nwant %v\ndeleting a source file must run every source and test file of its unit and no other unit; its importers' tests break, and selecting nothing lets VER-TESTS-PASS pass with zero tests (owner decision, DATA-29)", sel, want)
+		}
+	})
+
+	t.Run("deleted test", func(t *testing.T) {
+		sel, msg, err := selectUnits(top, top, []string{"packages/api/src/gone.test.ts"})
+		if err != nil || msg != "" {
+			t.Fatalf("selectUnits: %v %q", err, msg)
+		}
+		if want := map[string][]string{api: {}}; !maps.EqualFunc(sel, want, slices.Equal) {
+			t.Fatalf("deleting packages/api/src/gone.test.ts: got %v want %v; a deleted test file has no importers, so it must not widen the run to the whole unit (owner decision, DATA-29)", sel, want)
+		}
+	})
 }
 
 var layoutGen = rapid.SampledFrom([]string{".pnp.cjs", "deno.json", "deno.jsonc"})
