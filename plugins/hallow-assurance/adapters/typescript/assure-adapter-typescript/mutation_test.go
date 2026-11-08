@@ -177,7 +177,7 @@ func TestStrykerReportIDsDependOnlyOnMutant(t *testing.T) {
 			if _, ok := a[m.key]; !ok {
 				t.Fatalf("merged report has mutants %v, lacking %+v; every unit's mutants appear once under its repo-relative path", slices.Collect(maps.Keys(a)), m.key)
 			}
-			wantRead = append(wantRead, fmt.Sprintf("%s:%d %s %s", m.key.file, m.key.sl, m.key.mutator, m.status))
+			wantRead = append(wantRead, fmt.Sprintf("%s:%d %s %s", m.key.file, m.key.sl, m.key.mutator, scoredStatus(m.status)))
 		}
 		if len(a) != len(all) {
 			t.Fatalf("merged report has %d mutants, want %d", len(a), len(all))
@@ -189,7 +189,41 @@ func TestStrykerReportIDsDependOnlyOnMutant(t *testing.T) {
 		}
 		slices.Sort(wantRead)
 		if got := assureReads(t, merged); !slices.Equal(got, wantRead) {
-			t.Fatalf("assure reads %q, want %q; status and position must survive the merge unchanged", got, wantRead)
+			t.Fatalf("assure reads %q, want %q; position must survive the merge unchanged, and so must status, except that Ignored is scored as Survived", got, wantRead)
+		}
+	})
+}
+
+func scoredStatus(stryker string) string {
+	if stryker == "Ignored" {
+		return "Survived"
+	}
+	return stryker
+}
+
+func TestStrykerIgnoredMutantIsScoredAsSurvived(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		ms := drawMutants(t, "src/x.ts", "x")
+		ms = append(ms, drawMutants(t, "src/y.ts", "y")...)
+		ms = append(ms, genMutant{key: mutantKey{"src/z.ts", 1, 1, 1, 2, "BlockStatement", "{}"}, id: "0", status: "Ignored"})
+		ms = rapid.Permutation(ms).Draw(t, "order")
+		r := newStrykerReport()
+		if err := r.addStryker(strykerJSON(t, ms, func(f string) string { return f }), identity); err != nil {
+			t.Fatalf("addStryker: %v", err)
+		}
+		var want []string
+		for _, m := range ms {
+			want = append(want, fmt.Sprintf("%s:%d %s %s", m.key.file, m.key.sl, m.key.mutator, scoredStatus(m.status)))
+		}
+		slices.Sort(want)
+		got := assureReads(t, r)
+		for _, g := range got {
+			if strings.HasSuffix(g, " Ignored") {
+				t.Fatalf("assure reads %q, including Ignored mutant %q; a // Stryker disable comment must not remove a mutant from the VER-MUTATION-CHANGED score, because an equivalent mutant is excused only by a diff-visible entry in .assure/waivers.yaml", got, g)
+			}
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("assure reads %q, want %q; a mutant Stryker reports Ignored is scored as Survived so a disable comment cannot hide it, and every other settled status passes through unchanged", got, want)
 		}
 	})
 }

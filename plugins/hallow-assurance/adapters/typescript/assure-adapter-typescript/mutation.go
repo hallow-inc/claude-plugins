@@ -136,6 +136,11 @@ func (r strykerReport) addStryker(data []byte, rel func(string) (string, error))
 			if m.Status == "Pending" {
 				return fmt.Errorf("stryker report: mutant %s is Pending; Stryker did not finish it", m.ID)
 			}
+			// The adapter's config sets no excludedMutations, ignorers or ignoreStatic, so Ignored means a
+			// source `// Stryker disable` comment; scoring it keeps waivers the only diff-visible excuse.
+			if m.Status == "Ignored" {
+				m.Status = "Survived"
+			}
 			if ids[m.ID] {
 				return fmt.Errorf("stryker report: two mutants have id %s", m.ID)
 			}

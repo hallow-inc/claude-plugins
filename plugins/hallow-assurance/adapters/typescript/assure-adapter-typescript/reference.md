@@ -92,7 +92,11 @@ test("decode never throws on arbitrary text", () => {
 
 Stryker, with the vitest runner, mutates only the lines changed since `--changed-from` in tracked
 source files. The score is `(Killed + Timeout) / (Killed + Timeout + Survived + NoCoverage)`, against
-the level's threshold; `CompileError`, `RuntimeError`, and `Ignored` mutants do not count.
+the level's threshold; `CompileError` and `RuntimeError` mutants do not count.
+
+A `// Stryker disable` comment does not remove a mutant from the score: the adapter reports the
+mutant Stryker marks `Ignored` as `Survived`. To accept an equivalent mutant, add a waiver to
+`.assure/waivers.yaml`.
 
 `git add` a new file to have it mutated locally; untracked files are skipped.
 
