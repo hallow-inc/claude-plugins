@@ -275,7 +275,7 @@ func planEvaluate(m *core.Manifest, changed []string, fix bool, rep *EvalReport)
 			if !core.Applicable(o, files[lang]) {
 				continue
 			}
-			jobs = append(jobs, job{lang: lang, obj: o, files: files[lang], out: filepath.Join(outRoot, lang, id)})
+			jobs = append(jobs, job{lang: lang, obj: o, files: files[lang], out: filepath.Join(outRoot, lang, id), floor: floorDetail(lang, o, descs[lang].Objectives[id])})
 		}
 	}
 	for _, o := range m.Catalog.Objectives {

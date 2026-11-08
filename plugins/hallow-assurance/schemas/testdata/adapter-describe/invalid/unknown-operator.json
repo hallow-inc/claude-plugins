@@ -1,0 +1,1 @@
+{"protocol":2,"languages":["go"],"claims":["**/*.go"],"patterns":{},"objectives":{"VER-MUTATION-CHANGED":{"tool":"gremlins","operators":["AOR","and-or"]}}}

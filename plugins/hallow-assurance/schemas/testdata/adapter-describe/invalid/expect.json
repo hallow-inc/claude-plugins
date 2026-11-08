@@ -4,5 +4,6 @@
   "missing-claims.json": [{"location": "", "keyword": "required"}],
   "empty-claims.json": [{"location": "/claims", "keyword": "minItems"}],
   "non-boolean-fast.json": [{"location": "/objectives/VER-TESTS-PASS/fast", "keyword": "type"}],
-  "uppercase-reference.json": [{"location": "/reference", "keyword": "pattern"}]
+  "uppercase-reference.json": [{"location": "/reference", "keyword": "pattern"}],
+  "unknown-operator.json": [{"location": "/objectives/VER-MUTATION-CHANGED/operators/1", "keyword": "enum"}]
 }

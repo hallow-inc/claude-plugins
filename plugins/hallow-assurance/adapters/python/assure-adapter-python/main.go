@@ -42,7 +42,7 @@ var description = describe{
 	},
 	Objectives: map[string]any{
 		"VER-TESTS-PASS":          map[string]any{"tool": "pytest, pytest-randomly", "fast": true},
-		"VER-MUTATION-CHANGED":    map[string]any{"tool": "cosmic-ray (pytest runner)"},
+		"VER-MUTATION-CHANGED":    map[string]any{"tool": "cosmic-ray (pytest runner)", "operators": []string{"AOR", "ROR", "LCR"}},
 		"VER-FAIL-ON-BASE":        map[string]any{"tool": "pytest"},
 		"VER-ROBUST-FUZZ":         map[string]any{"tool": "pytest, hypothesis"},
 		"VER-COVERAGE-RESOLUTION": map[string]any{"tool": "pytest, coverage"},

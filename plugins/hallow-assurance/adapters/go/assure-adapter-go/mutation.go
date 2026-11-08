@@ -416,7 +416,7 @@ func unleash(dir, ref, target, out, seed string) ([]byte, error) {
 	}
 	_ = cfg.Close()
 	defer func() { _ = os.Remove(cfg.Name()) }()
-	gargs := []string{"unleash", "--config", cfg.Name(), "--output", name,
+	gargs := []string{"unleash", "--config", cfg.Name(), "--output", name, "--invert-logical",
 		"--timeout-coefficient", strconv.Itoa(timeoutCoefficient), "--workers", strconv.Itoa(workers)}
 	if ref != "" {
 		gargs = append(gargs, "--diff", ref)

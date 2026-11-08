@@ -1,0 +1,42 @@
+VER-MUTATION-CHANGED: conj in src/qual/conj.py is tested only where both inputs are equal, so no
+test tells `a and b` from `a or b`. Only a logical connector (LCR) mutant survives on that line;
+with cosmic-ray's ReplaceAndWithOr operator excluded, the case fails.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+-- base/src/qual/__init__.py --
+-- base/src/qual/double.py --
+def double(x):
+    return 2 * x
+-- head/src/qual/conj.py --
+def conj(a, b):
+    return a and b
+-- head/tests/test_conj.py --
+from qual.conj import conj
+
+
+def test_conj_on_equal_inputs():
+    assert conj(True, True) is True
+    assert conj(False, False) is False
+-- head.msg --
+feat(src): add conj
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "fail", "locations": ["level B: 0 of 1 mutants detected", "src/qual/conj.py:2 ReplaceAndWithOr Survived"]},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "pass"}
+  ]
+}

@@ -57,6 +57,9 @@
       "type": "number",
       "minimum": 0,
       "maximum": 100
+    },
+    "mutationOperator": {
+      "enum": ["AOR", "ROR", "LCR", "ABS", "UOI"]
     }
   }
 }

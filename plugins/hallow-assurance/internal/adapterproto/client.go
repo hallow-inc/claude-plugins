@@ -31,6 +31,8 @@ const (
 type Objective struct {
 	Tool string `json:"tool"`
 	Fast bool   `json:"fast"`
+
+	Operators []string `json:"operators,omitempty"`
 }
 
 type Describe struct {

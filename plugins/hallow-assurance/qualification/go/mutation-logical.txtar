@@ -1,0 +1,47 @@
+VER-MUTATION-CHANGED: And in p/and.go is tested only where both inputs are equal, so no test
+tells `a && b` from `a || b`. Only a logical connector (LCR) mutant survives on that line; with
+Gremlins' invert-logical mutator off, the line has no mutant and the case fails.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/and.go --
+package p
+
+func And(a, b bool) bool { return a && b }
+-- head/p/and_test.go --
+package p
+
+import "testing"
+
+func TestAndOnEqualInputs(t *testing.T) {
+	if !And(true, true) {
+		t.Fatal("And(true, true) = false")
+	}
+	if And(false, false) {
+		t.Fatal("And(false, false) = true")
+	}
+}
+-- head.msg --
+feat(p): add And
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["level B: 0 of 1 mutants detected", "p/and.go:3 INVERT_LOGICAL Survived"]},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}
