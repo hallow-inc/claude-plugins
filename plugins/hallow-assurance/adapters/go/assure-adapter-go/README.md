@@ -40,6 +40,11 @@ even for a one-line range.
 `RAPID_SEED` is set from the `HEAD` commit, so rerunning on one commit generates the same property
 inputs.
 
+Gremlins runs with `--config` naming an empty file and with every `GREMLINS_` variable removed, so a
+`.gremlins.yaml` (in the module, `$HOME`, `$XDG_CONFIG_HOME` or `/etc`) or a `GREMLINS_` variable has no
+effect. With Gremlins v0.6.0, a `GREMLINS_MUTANTS_*_ENABLED` variable turns its mutator off whatever
+its value, and `--config` alone does not stop environment lookups.
+
 ## Fail-on-base
 
 The adapter extracts the module at `--changed-from` with `git archive` into a temporary directory,

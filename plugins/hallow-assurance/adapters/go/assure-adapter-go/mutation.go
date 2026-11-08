@@ -410,7 +410,13 @@ func unleash(dir, ref, target, out, seed string) ([]byte, error) {
 	name := f.Name()
 	_ = f.Close()
 	defer func() { _ = os.Remove(name) }()
-	gargs := []string{"unleash", "--output", name,
+	cfg, err := os.CreateTemp(out, "gremlins-*.yaml")
+	if err != nil {
+		return nil, err
+	}
+	_ = cfg.Close()
+	defer func() { _ = os.Remove(cfg.Name()) }()
+	gargs := []string{"unleash", "--config", cfg.Name(), "--output", name,
 		"--timeout-coefficient", strconv.Itoa(timeoutCoefficient), "--workers", strconv.Itoa(workers)}
 	if ref != "" {
 		gargs = append(gargs, "--diff", ref)
@@ -422,7 +428,8 @@ func unleash(dir, ref, target, out, seed string) ([]byte, error) {
 	defer cleanup()
 	cmd := exec.CommandContext(context.Background(), "gremlins", append(gargs, target)...)
 	cmd.Dir = dir
-	cmd.Env = append(append(os.Environ(), "RAPID_SEED="+seed,
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "GREMLINS_") })
+	cmd.Env = append(append(env, "RAPID_SEED="+seed,
 		"GIT_CONFIG_COUNT=2", "GIT_CONFIG_KEY_0=diff.relative", "GIT_CONFIG_VALUE_0=true",
 		"GIT_CONFIG_KEY_1=diff.context", "GIT_CONFIG_VALUE_1=0"), wrapEnv...)
 	log, err := cmd.CombinedOutput()
