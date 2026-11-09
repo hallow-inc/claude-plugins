@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -440,5 +441,9 @@ func unleash(dir, ref, target, out, seed string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gremlins unleash in %s: %w\n%s", dir, err, adapterkit.CapText(log))
 	}
-	return os.ReadFile(name)
+	data, err := os.ReadFile(name)
+	if err == nil && len(data) == 0 && bytes.Contains(log, []byte("No results to report.")) {
+		return []byte("{}"), nil
+	}
+	return data, err
 }

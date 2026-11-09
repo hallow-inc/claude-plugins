@@ -256,6 +256,47 @@ func TestMutationNoGoChangesGivesEmptyReport(t *testing.T) {
 	}
 }
 
+const declsOnlySrc = "package a\n\ntype Point struct {\n\tX, Y int\n}\n\nconst Origin = \"origin\"\n\nfunc Name() string {\n\treturn Origin\n}\n"
+
+func TestMutationChangedPackageWithNothingToMutateGivesEmptyReport(t *testing.T) {
+	needGremlins(t)
+	dir := committedModule(t, map[string]string{"a/a.go": declsOnlySrc})
+	writeFiles(t, dir, map[string]string{"a/a.go": strings.Replace(declsOnlySrc, "X, Y int", "X, Y, Z int", 1)})
+	if got := selection(t, dir); len(got) == 0 {
+		t.Fatalf("selection %v is empty; the fixture must select the changed package or it does not exercise Gremlins", got)
+	}
+	out := t.TempDir()
+	resp, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", out)
+	if code != 0 {
+		t.Fatalf("run failed %d: %s; a changed package with no mutable operator has zero mutants, which is an empty report for the evaluator to judge, not a tool error that fails the run", code, stderr)
+	}
+	data, err := os.ReadFile(filepath.Join(out, resp.Evidence[0].Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms, err := ev.ParseMutationReport(data)
+	if err != nil {
+		t.Fatalf("mutation report invalid: %v\n%s", err, data)
+	}
+	if len(ms) != 0 {
+		t.Fatalf("got %+v, want no mutants; the changed package has no arithmetic, relational, or logical operator", ms)
+	}
+}
+
+func TestMutationSilentEmptyGremlinsOutputFailsClosed(t *testing.T) {
+	dir := committedModule(t, map[string]string{"a/a.go": declsOnlySrc})
+	writeFiles(t, dir, map[string]string{"a/a.go": strings.Replace(declsOnlySrc, "X, Y int", "X, Y, Z int", 1)})
+	narrowPath(t, []string{"git"}, withStubs(gremlinsStubs(t, "0.6.0"), map[string]string{"gremlins": "echo 'Mutation testing completed.'\nexit 0\n"}))
+	out := filepath.Join(t.TempDir(), "ev")
+	resp, stderr, code := runIn(t, dir, "run", "VER-MUTATION-CHANGED", "--changed-from", "HEAD", "--out", out)
+	if code == 0 {
+		t.Fatalf("run exited 0 with response %+v (stderr %q) after Gremlins exited 0, wrote no --output, and never printed \"No results to report.\"; silent empty output without that marker is missing evidence, and missing evidence must fail closed, not pass as an empty mutation report", resp, stderr)
+	}
+	if !strings.Contains(stderr, "gremlins output") {
+		t.Fatalf("run exited %d with stderr %q; the failure must name the empty Gremlins output, not an unrelated fault in the fixture", code, stderr)
+	}
+}
+
 func TestRapidSeedDependsOnlyOnHead(t *testing.T) {
 	dir := committedModule(t, map[string]string{"a/a.go": "package a\n"})
 	a, err := rapidSeed(dir)
