@@ -74,7 +74,18 @@ var (
 	textGen   = rapid.StringMatching(`[A-Za-z][A-Za-z0-9 ]{0,20}`)
 	levelKeys = []string{"A", "B", "C", "D"}
 	appliesTo = []string{"formal", "inputs", "fix"}
+	operators = []string{"AOR", "ROR", "LCR", "ABS", "UOI"}
+	badOps    = []any{"x", "AOR", []any{"SDL"}, []any{"AOR", "and-or"}, []any{"aor"}, []any{7}, []any{"ROR", "ROR"}}
 )
+
+func operatorList(t *rapid.T, label string, min int) []any {
+	ops := rapid.SliceOfNDistinct(rapid.SampledFrom(operators), min, len(operators), rapid.ID[string]).Draw(t, label)
+	out := make([]any, len(ops))
+	for i, o := range ops {
+		out[i] = o
+	}
+	return out
+}
 
 func levelSubset(t *rapid.T, label string, min int) []string {
 	var out []string
@@ -192,6 +203,10 @@ var catalogGen = rapid.Custom(func(t *rapid.T) sample {
 		if rapid.Bool().Draw(t, "applies") {
 			o["applies_to"] = rapid.SampledFrom(appliesTo).Draw(t, "applies")
 		}
+		r.bad(p, "required_operators", append([]any{[]any{}}, badOps...)...)
+		if rapid.Bool().Draw(t, "hasops") {
+			o["required_operators"] = operatorList(t, "required_operators", 1)
+		}
 		objs = append(objs, o)
 	}
 	return sample{objs, r.cs}
@@ -243,7 +258,12 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 		if rapid.Bool().Draw(t, "hasfast") {
 			entry["fast"] = rapid.Bool().Draw(t, "fast")
 		}
-		objectives[objIDGen.Draw(t, "oid")] = entry
+		if rapid.Bool().Draw(t, "hasops") {
+			entry["operators"] = operatorList(t, "operators", 0)
+		}
+		oid := objIDGen.Draw(t, "oid")
+		objectives[oid] = entry
+		r.bad("/objectives/"+oid, "operators", badOps...)
 	}
 	claims := []any{}
 	for i := range rapid.IntRange(1, 2).Draw(t, "nclaims") {
@@ -265,7 +285,10 @@ var describeGen = rapid.Custom(func(t *rapid.T) sample {
 	r.bad("", "objectives", "x", map[string]any{"ver-x": map[string]any{"tool": "t"}}, map[string]any{"VER-X": "x"},
 		map[string]any{"VER-X": map[string]any{}}, map[string]any{"VER-X": map[string]any{"tool": ""}},
 		map[string]any{"VER-X": map[string]any{"tool": "t", "zz": 1}},
-		map[string]any{"VER-X": map[string]any{"tool": "t", "fast": "yes"}})
+		map[string]any{"VER-X": map[string]any{"tool": "t", "fast": "yes"}},
+		map[string]any{"VER-X": map[string]any{"tool": "t", "operators": "LCR"}},
+		map[string]any{"VER-X": map[string]any{"tool": "t", "operators": []any{"LCR", "LCR"}}},
+		map[string]any{"VER-X": map[string]any{"tool": "t", "operators": []any{"and-or"}}})
 	return sample{doc, r.cs}
 })
 

@@ -135,6 +135,15 @@ type job struct {
 	files []core.ChangedFile
 	out   string
 	scope string
+	floor string
+}
+
+func floorDetail(lang string, o core.Objective, d adapterproto.Objective) string {
+	missing := core.MissingOperators(o.RequiredOperators, d.Operators)
+	if len(missing) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s does not declare mutation operator classes %s, which %s requires; the tool was not run", adapterproto.Executable(lang), strings.Join(missing, ", "), o.ID)
 }
 
 func problem(lang, id string, err error) Result {
@@ -237,13 +246,16 @@ func plan(m *core.Manifest, descs map[string]adapterproto.Describe, changed []st
 				bad = append(bad, problem(lang, id, fmt.Errorf("%s marks %s fast, but catalog %s has no such objective", adapterproto.Executable(lang), id, m.Catalog.Version)))
 				continue
 			}
-			jobs = append(jobs, job{lang: lang, obj: o, files: files[lang], out: filepath.Join(outRoot, lang, id)})
+			jobs = append(jobs, job{lang: lang, obj: o, files: files[lang], out: filepath.Join(outRoot, lang, id), floor: floorDetail(lang, o, descs[lang].Objectives[id])})
 		}
 	}
 	return jobs, bad
 }
 
 func collect(m *core.Manifest, j job, ref string, timeout time.Duration) (core.Evidence, adapterproto.Run) {
+	if j.floor != "" {
+		return core.Evidence{Problems: []string{j.floor}}, adapterproto.Run{}
+	}
 	var run adapterproto.Run
 	var err error
 	if j.scope != "" {

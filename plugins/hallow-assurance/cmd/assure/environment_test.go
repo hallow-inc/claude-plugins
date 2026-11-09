@@ -61,7 +61,7 @@ func mutationResponse(pin string, untracked bool) string {
 func passingXXResponses() map[string]string {
 	junit := `<testsuite name="p" tests="1"><testcase classname="p" name="TestFine"/></testsuite>`
 	return map[string]string{
-		"describe.json":             `{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true},"VER-MUTATION-CHANGED":{"tool":"gremlins","fast":false}}}`,
+		"describe.json":             `{"protocol":2,"languages":["xx"],"claims":["**/*.xx"],"patterns":{"test":["**/*_test.xx"]},"objectives":{"VER-TESTS-PASS":{"tool":"t","fast":true},"VER-MUTATION-CHANGED":{"tool":"gremlins","fast":false,"operators":["AOR","ROR","LCR"]}}}`,
 		"VER-TESTS-PASS.json":       `{"protocol":2,"evidence":[{"type":"test.junit","path":"ev"}],"tool_versions":{"go":"go1.26.7","gotestsum":"1.12.0"},"pinned_by":{"gotestsum":"default"}}`,
 		"VER-TESTS-PASS.ev":         junit,
 		"VER-MUTATION-CHANGED.json": mutationResponse("mise.toml", false),

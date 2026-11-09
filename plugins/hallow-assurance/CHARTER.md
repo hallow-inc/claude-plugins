@@ -205,7 +205,12 @@ latter two match, the stricter of their levels applies. Unmatched paths take `de
     go: gremlins
     typescript: stryker
   alternative_for: VER-STRUCT-MCDC
+  required_operators: [AOR, ROR, LCR]
 ```
+
+Optional `required_operators` names the mutation operator classes (`AOR`, `ROR`, `LCR`, `ABS`,
+`UOI`) every adapter must generate for the objective. An adapter whose `describe` entry does not
+list them all fails the objective without running its tool.
 
 Optional `applies_to: formal` restricts an objective to components that declare a `formal:` block;
 `applies_to: inputs` restricts it to components that declare `inputs: true`;

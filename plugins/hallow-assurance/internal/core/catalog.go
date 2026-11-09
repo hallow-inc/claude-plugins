@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/catalog"
@@ -22,6 +23,8 @@ type Objective struct {
 	Levels    map[Level]string
 	Threshold map[Level]float64
 	AppliesTo string
+
+	RequiredOperators []string
 }
 
 type Catalog struct {
@@ -81,9 +84,23 @@ func parseCatalog(file string, data []byte) (Catalog, error) {
 			}
 		}
 		o.AppliesTo, _ = m["applies_to"].(string)
+		ops, _ := m["required_operators"].([]any)
+		for _, op := range ops {
+			o.RequiredOperators = append(o.RequiredOperators, op.(string))
+		}
 		c.Objectives = append(c.Objectives, o)
 	}
 	return c, p.err(file)
+}
+
+func MissingOperators(required, declared []string) []string {
+	var missing []string
+	for _, r := range required {
+		if !slices.Contains(declared, r) {
+			missing = append(missing, r)
+		}
+	}
+	return missing
 }
 
 func sortedKeys(m map[string]any) []string {

@@ -8,3 +8,4 @@
     go: gremlins
     typescript: stryker
   alternative_for: VER-STRUCT-MCDC
+  required_operators: [AOR, ROR, LCR]

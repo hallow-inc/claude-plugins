@@ -38,7 +38,7 @@ var description = describe{
 	},
 	Objectives: map[string]any{
 		"VER-TESTS-PASS":          map[string]any{"tool": "go test", "fast": true},
-		"VER-MUTATION-CHANGED":    map[string]any{"tool": "gremlins"},
+		"VER-MUTATION-CHANGED":    map[string]any{"tool": "gremlins", "operators": []string{"AOR", "ROR", "LCR"}},
 		"VER-FAIL-ON-BASE":        map[string]any{"tool": "go test on the base commit"},
 		"VER-ROBUST-FUZZ":         map[string]any{"tool": "go test fuzz seed corpus"},
 		"VER-COVERAGE-RESOLUTION": map[string]any{"tool": "go test -cover"},

@@ -14,6 +14,7 @@
     go: gremlins
     python: cosmic-ray
     typescript: stryker
+  required_operators: [AOR, ROR, LCR]
 
 - id: VER-FAIL-ON-BASE
   title: Bug-fix tests fail on the base commit

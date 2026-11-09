@@ -54,7 +54,7 @@ var description = describe{
 	},
 	Objectives: map[string]any{
 		"VER-TESTS-PASS":          map[string]any{"tool": "vitest", "fast": true},
-		"VER-MUTATION-CHANGED":    map[string]any{"tool": "stryker (vitest runner)"},
+		"VER-MUTATION-CHANGED":    map[string]any{"tool": "stryker (vitest runner)", "operators": []string{"AOR", "ROR", "LCR"}},
 		"VER-FAIL-ON-BASE":        map[string]any{"tool": "vitest"},
 		"VER-ROBUST-FUZZ":         map[string]any{"tool": "vitest, fast-check"},
 		"VER-COVERAGE-RESOLUTION": map[string]any{"tool": "vitest, @vitest/coverage-v8"},

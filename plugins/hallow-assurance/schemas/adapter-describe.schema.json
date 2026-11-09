@@ -39,7 +39,12 @@
           "required": ["tool"],
           "properties": {
             "tool": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
-            "fast": { "type": "boolean" }
+            "fast": { "type": "boolean" },
+            "operators": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "common.schema.json#/$defs/mutationOperator" }
+            }
           }
         }
       }
