@@ -154,6 +154,8 @@ plugins/hallow-assurance/
     bin/assure-hook              # shim: no manifest → exit 0; assure missing → exit 2; else exec
     agents/{implementer,verifier,pruner}.md
     skills/{assure-testing,check,bugfix,audit}/SKILL.md   # no commands/: Claude Code lists it as legacy
+  ci/
+    fuzz-nightly.sh              # nightly fuzz loop + crasher issues; needs only go, git, gh, jq
   qualification/
     go/                          # seeded-bug fixture repos + expected results
   testdata/
@@ -254,9 +256,11 @@ the new tests) fails it.
 **Fuzz** — `fuzz.run` evidence is JUnit from running each changed package's fuzz targets over their
 committed seed corpus only, one suite per package, with an `assure.source` property per changed
 source file. Each changed file in an `inputs: true` component fails when no suite names it, its suite
-has no cases, or any case did not pass. Coverage-guided fuzzing runs nightly in its own workflow; a
-crasher fails that workflow and is uploaded as an artifact, and feeds no objective (its result
-depends on wall-clock time).
+has no cases, or any case did not pass. Coverage-guided fuzzing runs nightly in its own workflow,
+from `ci/fuzz-nightly.sh`; a crasher fails that workflow and is uploaded as an artifact. Each target
+that writes a new failing input opens a `fuzz-crasher` issue, or comments on that target's open one,
+holding the input, the command that re-runs it, and the path to commit it under. The nightly result
+feeds no objective (it depends on wall-clock time).
 
 **Coverage resolution** — `coverage.resolution` evidence is LCOV with `FN` records.
 `.assure/coverage-resolutions.yaml` (human-only) holds `{path, function, resolution, rationale,
@@ -452,8 +456,9 @@ never reassigned, and new work takes a letter suffix.
 - `assure reviews`, `human_review`, and `provenance` were removed in #48 (`drop-policing`)
 
 **M4d — Evidence loops**
-- `fuzz-crasher-loop`: a nightly fuzz crasher becomes a committed seed and a
-  `/hallow-assurance:bugfix` PR
+- `fuzz-crasher-loop`: a nightly fuzz crasher opens a `fuzz-crasher` issue holding the input; a
+  human runs `/hallow-assurance:bugfix <issue>`, which commits the input as a seed and produces
+  the fix PR
 - `audit`: advisory hardening of any scope, not only the changed set — `assure audit <scope>` on
   demand for paths, globs, or `path:start-end`, and scheduled `assure audit .` from its own
   reusable `assure-audit.yml`. Reports mutation survivors, coverage gaps, and missing fuzz targets
