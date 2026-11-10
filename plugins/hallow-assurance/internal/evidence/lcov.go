@@ -158,8 +158,6 @@ func FormatLCOV(files []LCOVFile) []byte {
 			} else {
 				fmt.Fprintf(&b, "FN:%d,%s\n", fn.Start, fn.Name)
 			}
-		}
-		for _, fn := range f.Functions {
 			fmt.Fprintf(&b, "FNDA:%d,%s\n", fn.Hits, fn.Name)
 		}
 		lines := make([]int, 0, len(f.Lines))

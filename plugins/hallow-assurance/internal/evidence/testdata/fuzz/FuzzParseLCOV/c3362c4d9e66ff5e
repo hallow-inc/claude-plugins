@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("SF:0\nFN:1,F\nFNDA:1,F\nFN:1,F\nend_of_record")

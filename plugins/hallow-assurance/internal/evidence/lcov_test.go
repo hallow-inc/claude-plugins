@@ -62,6 +62,24 @@ func TestLCOVRoundTripPreservesFilesFunctionsAndHits(t *testing.T) {
 	})
 }
 
+func TestLCOVRoundTripKeepsHitsOfSameNamedFunctions(t *testing.T) {
+	want := []LCOVFile{{
+		Path: "src/shapes.ts",
+		Functions: []LCOVFunction{
+			{Name: "constructor", Start: 3, End: 5, Hits: 7},
+			{Name: "constructor", Start: 12, End: 14, Hits: 0},
+		},
+		Lines: map[int]int{3: 7, 12: 0},
+	}}
+	got, err := ParseLCOV(FormatLCOV(want))
+	if err != nil {
+		t.Fatalf("parse %q: %v", FormatLCOV(want), err)
+	}
+	if len(got) != 1 || !reflect.DeepEqual(got[0].Functions, want[0].Functions) {
+		t.Fatalf("round trip of %q gave %+v, want functions %+v; hits belong to a function, not to a name, and a TS file with two classes has two constructors whose coverage must not merge onto one", FormatLCOV(want), got, want[0].Functions)
+	}
+}
+
 func TestLCOVScenarios(t *testing.T) {
 	t.Run("both FN forms keep an absent end distinct from a present one", func(t *testing.T) {
 		got, err := ParseLCOV([]byte("SF:a.go\nFN:10,Parse\nend_of_record\nSF:b.go\nFN:20,35,Decide\nend_of_record\n"))

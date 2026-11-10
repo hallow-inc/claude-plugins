@@ -134,7 +134,7 @@ func TestRunCoverageWritesLCOVForChangedSources(t *testing.T) {
 		t.Fatalf("tool_versions %v; the coverage run uses vitest and @vitest/coverage-v8", resp.ToolVersions)
 	}
 	got, _ := fileText(t, filepath.Join(out, "coverage.lcov"))
-	want := "SF:src/parse.ts\nFN:1,3,parse\nFN:2,2,(anonymous_1)\nFNDA:1,parse\nFNDA:0,(anonymous_1)\nDA:1,1\nDA:2,1\nend_of_record\n"
+	want := "SF:src/parse.ts\nFN:1,3,parse\nFNDA:1,parse\nFN:2,2,(anonymous_1)\nFNDA:0,(anonymous_1)\nDA:1,1\nDA:2,1\nend_of_record\n"
 	if got != want {
 		t.Fatalf("coverage.lcov\n%s\nwant\n%s\nonly the changed src/parse.ts is recorded, with a repo-relative SF, even though vitest exited 1 and reported another file", got, want)
 	}
