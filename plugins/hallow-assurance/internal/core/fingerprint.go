@@ -24,7 +24,9 @@ func (ev Evidence) Keys() []string {
 		keys = append(keys, "problem")
 	}
 	for _, f := range ev.Failing {
-		keys = append(keys, "test:"+f.Name)
+		if f.Flaky == 0 {
+			keys = append(keys, "test:"+f.Name)
+		}
 	}
 	for _, m := range ev.Mutants {
 		switch classify(m.Status) {

@@ -204,6 +204,18 @@ func (in stopInput) summary() string {
 	return s
 }
 
+const (
+	blockFlakyNote = "\nThe flaky tests failed, then passed when rerun; they are not yours to fix in this change.\n"
+	allowFlakyNote = "\nThe flaky tests still fail the check; a human must fix or quarantine them.\n"
+)
+
+func (in stopInput) flakyNote(note string) string {
+	if !in.rep.Flaky() {
+		return ""
+	}
+	return note
+}
+
 func decideStop(in stopInput, state core.StopState) (core.StopState, response) {
 	next, action := core.NextStop(state, in.active, in.check())
 	switch action {
@@ -211,12 +223,16 @@ func decideStop(in stopInput, state core.StopState) (core.StopState, response) {
 		return next, response{}
 	case core.StopBlock:
 		return next, response{out: &output{Decision: "block", Reason: fmt.Sprintf(
-			"assure fast check failed (attempt %d of %d). Fix these before stopping:\n\n%s", next.Blocks, core.StopCap, in.summary())}, code: 2}
+			"assure fast check failed (attempt %d of %d). Fix these before stopping:\n\n%s", next.Blocks, core.StopCap, in.summary()) + in.flakyNote(blockFlakyNote)}, code: 2}
 	case core.StopOutsideReach:
-		return next, response{out: &output{SystemMessage: "assure: checks cannot run in this session and the agent cannot fix that; the agent was allowed to stop. Review before merging:\n\n" + in.summary()}}
+		why := "checks cannot run in this session and the agent cannot fix that"
+		if len(in.rep.Remedies()) == 0 {
+			why = "the only failures are flaky tests, which the agent cannot fix in this change"
+		}
+		return next, response{out: &output{SystemMessage: "assure: " + why + "; the agent was allowed to stop. Review before merging:\n\n" + in.summary() + in.flakyNote(allowFlakyNote)}}
 	default:
 		return next, response{out: &output{SystemMessage: fmt.Sprintf(
-			"assure: checks still fail after %d attempts; the agent was allowed to stop. Review before merging:\n\n%s", core.StopCap, in.summary())}}
+			"assure: checks still fail after %d attempts; the agent was allowed to stop. Review before merging:\n\n%s", core.StopCap, in.summary()) + in.flakyNote(allowFlakyNote)}}
 	}
 }
 

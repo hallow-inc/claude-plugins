@@ -158,12 +158,22 @@ func TestStopIgnoresExpiredWaiver(t *testing.T) {
 }
 
 func stopInputGen(t *rapid.T) stopInput {
+	return stopInputGenFrom(t, nil)
+}
+
+func stopInputGenFrom(t *rapid.T, flaky []app.Result) stopInput {
 	var in stopInput
 	errs := []error{
 		fmt.Errorf("lookup: %w", core.ErrAdapterUnstartable),
 		fmt.Errorf("adapter exited 1"),
 	}
 	for i := range rapid.IntRange(0, 4).Draw(t, "results") {
+		if len(flaky) > 0 && rapid.Bool().Draw(t, "flaky") {
+			res := rapid.SampledFrom(flaky).Draw(t, "flaky result")
+			res.ID = fmt.Sprintf("OBJ-%d", i)
+			in.rep.Results = append(in.rep.Results, res)
+			continue
+		}
 		res := app.Result{Lang: "l",
 			ID:     fmt.Sprintf("OBJ-%d", i),
 			Status: rapid.SampledFrom([]core.Status{core.Pass, core.Fail, core.AdvisoryFail}).Draw(t, "status")}
@@ -179,12 +189,13 @@ func stopInputGen(t *rapid.T) stopInput {
 }
 
 func TestNoSilentAllowOfAFailingStop(t *testing.T) {
+	flaky := flakyPool(t)
 	rapid.Check(t, func(t *rapid.T) {
 		var state core.StopState
 		for range rapid.IntRange(0, 6).Draw(t, "prior") {
-			state, _ = decideStop(stopInputGen(t), state)
+			state, _ = decideStop(stopInputGenFrom(t, flaky), state)
 		}
-		in := stopInputGen(t)
+		in := stopInputGenFrom(t, flaky)
 		_, resp := decideStop(in, state)
 		if !in.rep.Blocking() {
 			if resp.out != nil {
