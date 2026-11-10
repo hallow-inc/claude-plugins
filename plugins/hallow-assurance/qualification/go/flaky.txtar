@@ -1,0 +1,62 @@
+VER-TESTS-PASS: TestDoubleFlaky fails on its first run and first rerun and passes on its second
+rerun. A flaky test still fails the objective; TestGoReruns reads the adapter evidence to check it
+is marked flaky on rerun 2. The test counts only under -short, because VER-COVERAGE-RESOLUTION runs
+it concurrently without -short.
+
+-- base/.gitignore --
+*.count
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/p_test.go --
+package p
+
+import (
+	"os"
+	"strconv"
+	"testing"
+)
+
+func attempt(t *testing.T) int {
+	t.Helper()
+	data, _ := os.ReadFile(t.Name() + ".count")
+	n, _ := strconv.Atoi(string(data))
+	n++
+	if err := os.WriteFile(t.Name()+".count", []byte(strconv.Itoa(n)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestDoubleFlaky(t *testing.T) {
+	got := Double(2)
+	if !testing.Short() {
+		return
+	}
+	if n := attempt(t); n <= 2 {
+		t.Fatalf("attempt %d: Double(2) = %d", n, got)
+	}
+}
+-- head.msg --
+test(p): cover Double
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "fail", "locations": ["failing test: example.com/q/p.TestDoubleFlaky"]}
+  ]
+}

@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -212,6 +214,39 @@ func runTool(dir, name string, args ...string) (stdout, stderr []byte, code int,
 	return o.Bytes(), e.Bytes(), 0, err
 }
 
+func shuffleSeeds(events []event) map[string]string {
+	seeds := map[string]string{}
+	for _, e := range events {
+		if seed, ok := strings.CutPrefix(e.Output, "-test.shuffle "); ok && e.Test == "" {
+			seeds[e.Package] = strings.TrimSpace(seed)
+		}
+	}
+	return seeds
+}
+
+func rerunPackage(dir, pkg, seed string, failing []adapterkit.XMLCase) ([]adapterkit.XMLCase, error) {
+	if seed == "" {
+		return nil, fmt.Errorf("no shuffle seed for %s", pkg)
+	}
+	var names []string
+	for _, c := range failing {
+		top, _, _ := strings.Cut(c.Name, "/")
+		if q := regexp.QuoteMeta(top); !slices.Contains(names, q) {
+			names = append(names, q)
+		}
+	}
+	stdout, _, _, err := runTool(dir, "go", "test", "-race", "-short", "-json", "-count=1", "-shuffle="+seed, "-run", "^("+strings.Join(names, "|")+")$", pkg)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range toJUnit(parseEvents(stdout)).Suites {
+		if s.Name == pkg {
+			return s.Cases, nil
+		}
+	}
+	return nil, fmt.Errorf("rerun of %s reported no results", pkg)
+}
+
 func runTests(root string, _ adapterkit.RunArgs, out string, sel map[string][]string, _ map[string]string) ([]evidence, error) {
 	suites := adapterkit.XMLSuites{Suites: []adapterkit.XMLSuite{}}
 	for _, mod := range modules(sel) {
@@ -225,7 +260,13 @@ func runTests(root string, _ adapterkit.RunArgs, out string, sel map[string][]st
 			suites.Suites = append(suites.Suites, errorSuite("module "+mod, adapterkit.CapText(stderr)))
 			continue
 		}
-		suites.Suites = append(suites.Suites, toJUnit(events).Suites...)
+		seeds := shuffleSeeds(events)
+		for _, s := range toJUnit(events).Suites {
+			s.Cases = adapterkit.Rerun(s.Cases, func(failing []adapterkit.XMLCase) ([]adapterkit.XMLCase, error) {
+				return rerunPackage(filepath.Join(root, mod), s.Name, seeds[s.Name], failing)
+			})
+			suites.Suites = append(suites.Suites, s)
+		}
 	}
 	data, err := xml.MarshalIndent(suites, "", "  ")
 	if err != nil {
