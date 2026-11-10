@@ -1,0 +1,73 @@
+VER-TESTS-PASS: "double > of 2 (flaky+)" fails on its first run and first rerun and passes on its
+second rerun. A flaky test still fails the objective; TestTypeScriptReruns reads the adapter
+evidence to check it is marked flaky on rerun 2. The parentheses and plus make the rerun's name
+pattern select nothing unless it is escaped. The test counts only outside the coverage run,
+because VER-COVERAGE-RESOLUTION runs it concurrently with `--coverage.*` flags, which
+vitest.config.ts turns into QUAL_COVERAGE.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [typescript]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+node_modules
+*.count
+-- base/tsconfig.json --
+{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "target": "es2022", "noEmit": true, "types": [] }, "include": ["src"] }
+-- base/vitest.config.ts --
+import { defineConfig } from "vitest/config";
+
+const coverage = process.argv.some((a) => a.startsWith("--coverage"));
+
+export default defineConfig({ test: { setupFiles: ["./vitest.setup.ts"], env: { QUAL_COVERAGE: coverage ? "1" : "" } } });
+-- base/vitest.setup.ts --
+import fc from "fast-check";
+
+const seed = Number(process.env.ASSURE_SEED);
+if (Number.isInteger(seed)) {
+  fc.configureGlobal({ ...fc.readConfigureGlobal(), seed });
+}
+-- base/src/double.ts --
+export function double(x: number): number {
+  return 2 * x;
+}
+-- head/src/double.test.ts --
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { describe, test } from "vitest";
+import { double } from "./double";
+
+function attempt(name: string): number {
+  const path = name + ".count";
+  const n = existsSync(path) ? Number(readFileSync(path, "utf8")) + 1 : 1;
+  writeFileSync(path, String(n));
+  return n;
+}
+
+describe("double", () => {
+  test("of 2 (flaky+)", () => {
+    const got = double(2);
+    if (process.env.QUAL_COVERAGE) {
+      return;
+    }
+    const n = attempt("double > of 2 (flaky+)");
+    if (n <= 2) {
+      throw new Error(`attempt ${n}: double(2) = ${got}`);
+    }
+  });
+});
+-- head.msg --
+test(src): cover double
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "typescript", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "typescript", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "typescript", "status": "fail", "locations": ["failing test: src/double.test.ts.double > of 2 (flaky+)"]}
+  ]
+}

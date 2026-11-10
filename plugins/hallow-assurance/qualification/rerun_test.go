@@ -13,22 +13,22 @@ import (
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 )
 
-func goTestsPassCase(t *testing.T, file, test string) (adapterkit.XMLCase, string, []byte) {
+func testsPassCase(t *testing.T, lang, file, test string) (adapterkit.XMLCase, string, []byte) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("go", file))
+	data, err := os.ReadFile(filepath.Join(lang, file))
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := parseCase("go", strings.TrimSuffix(file, ".txtar"), data)
+	c, err := parseCase(lang, strings.TrimSuffix(file, ".txtar"), data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !gated {
 		t.Skip("set ASSURE_QUALIFICATION=1 without -short to run the built adapter")
 	}
-	p := prepareCase(t, c, filepath.Join(binDir, adapterName("go")))
+	p := prepareCase(t, c, filepath.Join(binDir, adapterName(lang)))
 	out := filepath.Join(t.TempDir(), "ev")
-	cmd := exec.CommandContext(t.Context(), p.tools[adapterName("go")], "run", "VER-TESTS-PASS", "--changed-from", p.base, "--out", out)
+	cmd := exec.CommandContext(t.Context(), p.tools[adapterName(lang)], "run", "VER-TESTS-PASS", "--changed-from", p.base, "--out", out)
 	cmd.Dir = p.root
 	cmd.Env = append(os.Environ(), "PATH="+p.path)
 	var stderr bytes.Buffer
@@ -54,18 +54,16 @@ func goTestsPassCase(t *testing.T, file, test string) (adapterkit.XMLCase, strin
 	return found[0], p.root, raw
 }
 
-func TestGoReruns(t *testing.T) {
-	cases := []struct {
-		file, test string
-		flaky      []string
-		ran        string
-	}{
-		{"flaky.txtar", "TestDoubleFlaky", []string{"2"}, "3"},
-		{"fails-every-round.txtar", "TestDoubleAlways", nil, "4"},
-	}
+type rerunCase struct {
+	file, test string
+	flaky      []string
+	ran        string
+}
+
+func checkReruns(t *testing.T, lang, countDir string, cases []rerunCase) {
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
-			c, root, raw := goTestsPassCase(t, tc.file, tc.test)
+			c, root, raw := testsPassCase(t, lang, tc.file, tc.test)
 			var flaky []string
 			for _, pr := range c.Properties {
 				if pr.Name == "assure.flaky" {
@@ -75,7 +73,7 @@ func TestGoReruns(t *testing.T) {
 			if !slices.Equal(flaky, tc.flaky) {
 				t.Fatalf("%s assure.flaky %q, want %q; a test that passes on a rerun is flaky, one that fails every round is a real failure, and the two must not be confused\n%s", tc.test, flaky, tc.flaky, raw)
 			}
-			ran, err := os.ReadFile(filepath.Join(root, "p", tc.test+".count"))
+			ran, err := os.ReadFile(filepath.Join(root, countDir, tc.test+".count"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -84,4 +82,25 @@ func TestGoReruns(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGoReruns(t *testing.T) {
+	checkReruns(t, "go", "p", []rerunCase{
+		{"flaky.txtar", "TestDoubleFlaky", []string{"2"}, "3"},
+		{"fails-every-round.txtar", "TestDoubleAlways", nil, "4"},
+	})
+}
+
+func TestPythonReruns(t *testing.T) {
+	checkReruns(t, "python", ".", []rerunCase{
+		{"flaky.txtar", "test_double_flaky", []string{"2"}, "3"},
+		{"fails-every-round.txtar", "test_double_always", nil, "4"},
+	})
+}
+
+func TestTypeScriptReruns(t *testing.T) {
+	checkReruns(t, "typescript", ".", []rerunCase{
+		{"flaky.txtar", "double > of 2 (flaky+)", []string{"2"}, "3"},
+		{"fails-every-round.txtar", "double > of 2 (always+)", nil, "4"},
+	})
 }

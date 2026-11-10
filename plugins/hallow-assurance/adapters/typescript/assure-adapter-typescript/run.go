@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -204,6 +205,48 @@ func absFiles(root string, files []string) []string {
 	return out
 }
 
+func (c runContext) rerunUnit(unit, seed, report string, suites []adapterkit.XMLSuite) []adapterkit.XMLSuite {
+	if !hasFailure(suites) {
+		return suites
+	}
+	var all []adapterkit.XMLCase
+	var bounds []int
+	for _, s := range suites {
+		all = append(all, s.Cases...)
+		bounds = append(bounds, len(all))
+	}
+	all = adapterkit.Rerun(all, func(failing []adapterkit.XMLCase) ([]adapterkit.XMLCase, error) {
+		var files, names []string
+		for _, f := range failing {
+			files = append(files, filepath.Join(c.root, filepath.FromSlash(f.Classname)))
+			names = append(names, regexp.QuoteMeta(f.Name))
+		}
+		slices.Sort(files)
+		_ = os.Remove(report)
+		args := append([]string{"run", "--sequence.shuffle", "--reporter=json", "--outputFile=" + report, "-t", "^(?:" + strings.Join(names, "|") + ")$"}, slices.Compact(files)...)
+		stdout, stderr, code, err := runToolEnv(unit, []string{"ASSURE_SEED=" + seed}, c.tools[unit]["vitest"].bin, args...)
+		if err != nil {
+			return nil, err
+		}
+		r, err := readVitestReport(report)
+		if err != nil {
+			return nil, fmt.Errorf("vitest rerun in %s exited %d without a readable report (%w): %s", adapterkit.RelSlash(c.top, unit), code, err, adapterkit.CapText(append(stdout, stderr...)))
+		}
+		var cases []adapterkit.XMLCase
+		for _, s := range toJUnit(c.root, r) {
+			cases = append(cases, s.Cases...)
+		}
+		return cases, nil
+	})
+	out := slices.Clone(suites)
+	start := 0
+	for i, end := range bounds {
+		out[i].Cases = all[start:end]
+		start = end
+	}
+	return out
+}
+
 func runTests(c runContext) ([]evidence, string, error) {
 	tmp, err := os.MkdirTemp("", "assure-vitest-*")
 	if err != nil {
@@ -225,7 +268,8 @@ func runTests(c runContext) ([]evidence, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
-		suites.Suites = append(suites.Suites, vitestSuites(c.root, adapterkit.RelSlash(c.top, unit), report, append(stdout, stderr...), code)...)
+		first := vitestSuites(c.root, adapterkit.RelSlash(c.top, unit), report, append(stdout, stderr...), code)
+		suites.Suites = append(suites.Suites, c.rerunUnit(unit, seed, filepath.Join(tmp, fmt.Sprintf("rerun-%d.json", i)), first)...)
 	}
 	data, err := xml.MarshalIndent(suites, "", "  ")
 	if err != nil {

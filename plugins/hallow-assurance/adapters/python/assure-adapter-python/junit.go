@@ -69,6 +69,28 @@ func caseName(c pytestCase) string {
 	return c.Name
 }
 
+type caseKey struct{ classname, name string }
+
+// nodeIDs maps each converted case to the node ids, relative to unit, that select it. A case whose
+// pytest classname does not extend its file's module (a test defined in another file) gets none.
+func nodeIDs(root, top, unit string, r pytestReport) map[caseKey][]string {
+	ids := map[caseKey][]string{}
+	for _, s := range r.Suites {
+		for _, c := range s.Cases {
+			module := strings.ReplaceAll(strings.TrimSuffix(c.File, ".py"), "/", ".")
+			if c.Classname == "" || c.File == "" || (c.Classname != module && !strings.HasPrefix(c.Classname, module+".")) {
+				continue
+			}
+			p := pytestFile(top, unit, c.File)
+			k := caseKey{relTo(root, p), caseName(c)}
+			if id := relTo(unit, p) + "::" + k.name; !slices.Contains(ids[k], id) {
+				ids[k] = append(ids[k], id)
+			}
+		}
+	}
+	return ids
+}
+
 func convertCase(file string, c pytestCase) adapterkit.XMLCase {
 	errs := joinTexts(c.Errors)
 	if c.Classname == "" && errs != nil {

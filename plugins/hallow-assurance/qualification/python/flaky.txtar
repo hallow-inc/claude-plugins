@@ -1,0 +1,57 @@
+VER-TESTS-PASS: test_double_flaky fails on its first run and first rerun and passes on its second
+rerun. A flaky test still fails the objective; TestPythonReruns reads the adapter evidence to check
+it is marked flaky on rerun 2. The test counts only outside coverage.py, because
+VER-COVERAGE-RESOLUTION runs it concurrently under `coverage run`, which sets COVERAGE_RUN.
+
+-- deps --
+full
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [python]
+default_level: B
+components:
+  - path: src/**
+    level: B
+-- base/.gitignore --
+.venv/
+.hypothesis/
+__pycache__/
+*.count
+-- base/src/qual/__init__.py --
+-- base/src/qual/double.py --
+def double(x):
+    return 2 * x
+-- head/tests/test_double.py --
+import os
+
+from qual.double import double
+
+
+def attempt(name):
+    path = name + ".count"
+    n = 1
+    if os.path.exists(path):
+        with open(path) as f:
+            n = int(f.read()) + 1
+    with open(path, "w") as f:
+        f.write(str(n))
+    return n
+
+
+def test_double_flaky():
+    got = double(2)
+    if os.environ.get("COVERAGE_RUN"):
+        return
+    n = attempt("test_double_flaky")
+    assert n > 2, f"attempt {n}: double(2) = {got}"
+-- head.msg --
+test(src): cover double
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "python", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "python", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "python", "status": "fail", "locations": ["failing test: tests/test_double.py.test_double_flaky"]}
+  ]
+}
