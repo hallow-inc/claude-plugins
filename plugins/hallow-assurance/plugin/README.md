@@ -6,7 +6,7 @@ the hooks exit immediately and do nothing.
 | Event | What happens |
 |---|---|
 | SessionStart | Injects the level map and applicable objectives |
-| Stop | Blocks stopping while changed code fails a fast objective. Each distinct set of failures blocks at most 3 times per session; after that the agent may stop, and every later stop with the same failures warns you instead of blocking. Failures the agent cannot fix (an adapter not on `PATH`, tools not installed) warn you on the first stop and never block |
+| Stop | Blocks stopping while changed code fails a fast objective. Each distinct set of failures blocks at most 3 times per session; after that the agent may stop, and every later stop with the same failures warns you instead of blocking. Failures the agent cannot fix (an adapter not on `PATH`, tools not installed, flaky tests that failed and then passed when rerun) warn you on the first stop and never block |
 
 No hook restricts which files the agent edits. The Stop hook is early warning; the verdict is
 `assure evaluate`, run locally or in CI.
