@@ -27,13 +27,22 @@ const (
 type Result struct {
 	Lang string
 	core.Outcome
-	Errs []error
-	Keys []string
+	Errs  []error
+	Keys  []string
+	Flaky []core.TestFailure
+}
+
+func (res Result) onlyFlaky() bool {
+	return len(res.Flaky) > 0 && len(res.Keys) == 0
 }
 
 type Report struct {
 	Changed int
 	Results []Result
+}
+
+func (r Report) Flaky() bool {
+	return slices.ContainsFunc(r.Results, func(res Result) bool { return res.Status == core.Fail && len(res.Flaky) > 0 })
 }
 
 func (r Report) Blocking() bool {
@@ -48,7 +57,7 @@ func (r Report) Blocking() bool {
 func (r Report) Failures() []core.FailureKey {
 	var fs []core.FailureKey
 	for _, res := range r.Results {
-		if res.Status == core.Fail {
+		if res.Status == core.Fail && !res.onlyFlaky() {
 			fs = append(fs, core.FailureKey{Objective: res.ID, Lang: res.Lang, Keys: res.Keys})
 		}
 	}
@@ -57,7 +66,7 @@ func (r Report) Failures() []core.FailureKey {
 
 func (r Report) OutsideReach() bool {
 	for _, res := range r.Results {
-		if res.Status == core.Fail && (len(res.Errs) == 0 || slices.ContainsFunc(res.Errs, func(e error) bool { return !core.OutsideReach(e) })) {
+		if res.Status == core.Fail && !res.onlyFlaky() && (len(res.Errs) == 0 || slices.ContainsFunc(res.Errs, func(e error) bool { return !core.OutsideReach(e) })) {
 			return false
 		}
 	}
@@ -199,7 +208,8 @@ func check(m *core.Manifest, ref, label string, keep func(string, adapterproto.O
 	for i, j := range jobs {
 		wg.Go(func() {
 			ev, _ := collect(m, j, ref, RunTimeout)
-			results[i] = Result{Lang: j.lang, Outcome: core.DecideObjective(j.obj, j.files, ev, ws, date), Errs: ev.Errs, Keys: ev.Keys()}
+			results[i] = Result{Lang: j.lang, Outcome: core.DecideObjective(j.obj, j.files, ev, ws, date), Errs: ev.Errs, Keys: ev.Keys(),
+				Flaky: slices.DeleteFunc(slices.Clone(ev.Failing), func(f core.TestFailure) bool { return f.Flaky == 0 })}
 		})
 	}
 	wg.Wait()
@@ -299,7 +309,7 @@ func readEvidence(m *core.Manifest, typ string, data []byte, ev *core.Evidence) 
 			return
 		}
 		for _, f := range j.Failing {
-			ev.Failing = append(ev.Failing, core.TestFailure{Name: f.Name, Text: failingText(f)})
+			ev.Failing = append(ev.Failing, core.TestFailure{Name: f.Name, Text: failingText(f), Flaky: f.Flaky})
 		}
 	case "mutation.report":
 		readMutation(m, data, ev)
@@ -357,12 +367,21 @@ func (r Report) Render() string {
 			continue
 		}
 		fmt.Fprintf(&b, "\n%s (%s): %s\n", res.ID, res.Lang, res.Status)
-		for i, d := range res.Details {
+		details := slices.DeleteFunc(slices.Clone(res.Details), func(d string) bool {
+			return slices.ContainsFunc(res.Flaky, func(f core.TestFailure) bool { return f.Text == d })
+		})
+		for i, d := range details {
 			if i == maxDetails {
-				fmt.Fprintf(&b, "  … %d more\n", len(res.Details)-maxDetails)
+				fmt.Fprintf(&b, "  … %d more\n", len(details)-maxDetails)
 				break
 			}
 			fmt.Fprintf(&b, "  - %s\n", strings.ReplaceAll(d, "\n", "\n    "))
+		}
+		if len(res.Flaky) > 0 {
+			b.WriteString("  flaky tests (failed, then passed when rerun):\n")
+			for _, f := range res.Flaky {
+				fmt.Fprintf(&b, "  - %s: passed on rerun %d\n", f.Name, f.Flaky)
+			}
 		}
 	}
 	return b.String()

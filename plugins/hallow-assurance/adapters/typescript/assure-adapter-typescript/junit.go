@@ -94,10 +94,18 @@ func hasFailure(suites []adapterkit.XMLSuite) bool {
 	return false
 }
 
-func vitestSuites(root, unit, report string, output []byte, code int) []adapterkit.XMLSuite {
-	data, err := os.ReadFile(report)
+func readVitestReport(path string) (vitestReport, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return vitestReport{}, err
+	}
 	var r vitestReport
-	if err != nil || json.Unmarshal(data, &r) != nil {
+	return r, json.Unmarshal(data, &r)
+}
+
+func vitestSuites(root, unit, report string, output []byte, code int) []adapterkit.XMLSuite {
+	r, err := readVitestReport(report)
+	if err != nil {
 		return []adapterkit.XMLSuite{errorSuite("unit "+unit, adapterkit.CapText(output))}
 	}
 	suites := toJUnit(root, r)

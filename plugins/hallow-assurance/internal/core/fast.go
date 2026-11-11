@@ -22,8 +22,9 @@ type Finding struct {
 }
 
 type TestFailure struct {
-	Name string
-	Text string
+	Name  string
+	Text  string
+	Flaky int
 }
 
 type Evidence struct {

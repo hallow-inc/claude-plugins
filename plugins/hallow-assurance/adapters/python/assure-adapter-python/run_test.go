@@ -13,6 +13,7 @@ import (
 
 	"pgregory.net/rapid"
 
+	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/adapterkit"
 	ev "github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/internal/evidence"
 	"github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/schemas"
 )
@@ -30,37 +31,53 @@ func exe(t fataler, p, src string) {
 }
 
 // installFakePython replaces the venv's interpreter with a script that
-// prints version for --version and otherwise records its argv, working
-// directory and ASSURE_SEED into data, copies data/report to the
-// --junitxml path, prints data/stdout and exits with data/code.
+// prints version for --version and otherwise, as call n (0, 1, ...), records
+// its argv, working directory and ASSURE_SEED into data as args.n, cwd.n and
+// seed.n, copies data/report.n (else data/report) to the --junitxml path,
+// prints data/stdout and exits with data/code.n (else data/code).
 func installFakePython(t fataler, venv, data, version string) {
 	writeTree(t, data, map[string]string{"version": "Python " + version + "\n"})
 	exe(t, filepath.Join(venv, "bin", "python"), fmt.Sprintf(`#!/bin/sh
 d='%s'
 if [ "$1" = "--version" ]; then /bin/cat "$d/version"; exit 0; fi
-pwd -P > "$d/cwd"
-printf '%%s\n' "$@" > "$d/args"
-printf '%%s' "$ASSURE_SEED" > "$d/seed"
-for a; do case "$a" in --junitxml=*) [ -f "$d/report" ] && /bin/cat "$d/report" > "${a#--junitxml=}";; esac; done
+n=0
+while [ -f "$d/args.$n" ]; do n=$((n+1)); done
+pwd -P > "$d/cwd.$n"
+printf '%%s' "$ASSURE_SEED" > "$d/seed.$n"
+printf '%%s\n' "$@" > "$d/args.$n"
+r="$d/report"; [ -f "$d/report.$n" ] && r="$d/report.$n"
+c="$d/code"; [ -f "$d/code.$n" ] && c="$d/code.$n"
+for a; do case "$a" in --junitxml=*) [ -f "$r" ] && /bin/cat "$r" > "${a#--junitxml=}";; esac; done
 [ -f "$d/stdout" ] && /bin/cat "$d/stdout"
-exit $(/bin/cat "$d/code" 2>/dev/null || echo 0)
+exit $(/bin/cat "$c" 2>/dev/null || echo 0)
 `, data))
 }
 
+// pyReplay is what the fake pytest replays: report and code for every call,
+// except that call i+1 (rerun i+1) replays the report and code of reruns[i]
+// when it is given.
 type pyReplay struct {
 	report   string
 	noReport bool
 	stdout   string
 	code     int
+	reruns   []pyReplay
 }
 
 func replayPytest(t fataler, data string, r pyReplay) {
-	for _, f := range []string{"report", "args", "cwd", "seed"} {
-		_ = os.Remove(filepath.Join(data, f))
+	for _, pattern := range []string{"report*", "code*", "args.*", "cwd.*", "seed.*"} {
+		old, _ := filepath.Glob(filepath.Join(data, pattern))
+		for _, f := range old {
+			_ = os.Remove(f)
+		}
 	}
 	files := map[string]string{"stdout": r.stdout, "code": fmt.Sprint(r.code)}
 	if !r.noReport {
 		files["report"] = r.report
+	}
+	for i, rr := range r.reruns {
+		files[fmt.Sprintf("code.%d", i+1)] = fmt.Sprint(rr.code)
+		files[fmt.Sprintf("report.%d", i+1)] = rr.report
 	}
 	writeTree(t, data, files)
 }
@@ -71,17 +88,28 @@ type pyCall struct {
 	cwd, seed string
 }
 
+// pytestCall is the first pytest call since the last replayPytest.
 func pytestCall(t fataler, data string) pyCall {
-	args, err := os.ReadFile(filepath.Join(data, "args"))
-	if os.IsNotExist(err) {
-		return pyCall{}
+	if calls := pytestCalls(t, data); len(calls) > 0 {
+		return calls[0]
 	}
-	if err != nil {
-		t.Fatalf("%v", err)
+	return pyCall{}
+}
+
+func pytestCalls(t fataler, data string) []pyCall {
+	var calls []pyCall
+	for n := 0; ; n++ {
+		args, err := os.ReadFile(filepath.Join(data, fmt.Sprintf("args.%d", n)))
+		if os.IsNotExist(err) {
+			return calls
+		}
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		cwd, _ := os.ReadFile(filepath.Join(data, fmt.Sprintf("cwd.%d", n)))
+		seed, _ := os.ReadFile(filepath.Join(data, fmt.Sprintf("seed.%d", n)))
+		calls = append(calls, pyCall{invoked: true, args: strings.Split(strings.TrimSuffix(string(args), "\n"), "\n"), cwd: strings.TrimSpace(string(cwd)), seed: string(seed)})
 	}
-	cwd, _ := os.ReadFile(filepath.Join(data, "cwd"))
-	seed, _ := os.ReadFile(filepath.Join(data, "seed"))
-	return pyCall{invoked: true, args: strings.Split(strings.TrimSuffix(string(args), "\n"), "\n"), cwd: strings.TrimSpace(string(cwd)), seed: string(seed)}
 }
 
 var fakeUnitFiles = map[string]string{
@@ -245,6 +273,7 @@ func TestRunTestsRunsWholeUnitWithSeed(t *testing.T) {
 	if c.seed != seed {
 		t.Fatalf("ASSURE_SEED=%q, want %q; adopter tests read the seed from the environment", c.seed, seed)
 	}
+	checkReruns(t, r.top, c, pytestCalls(t, r.dataOf("."))[1:], adapterkit.RerunRounds)
 
 	j := junitOf(t, out, resp)
 	wantCases := map[string]ev.Outcome{
@@ -258,6 +287,89 @@ func TestRunTestsRunsWholeUnitWithSeed(t *testing.T) {
 	if text := failureText(j, "tests/test_broken.py.(collection)"); !strings.Contains(text, "No module named 'nope'") {
 		t.Fatalf("collection case text %q; the spec requires the tool's output for the file that failed to collect", text)
 	}
+}
+
+const (
+	failNode = "tests/test_cli.py::TestCli::test_neg[-1]"
+	failName = "tests/test_cli.py.TestCli::test_neg[-1]"
+	failPass = `<testcase classname="tests.test_cli.TestCli" name="test_neg[-1]" file="tests/test_cli.py" line="4" time="0.001" />`
+)
+
+// checkReruns: each rerun repeats the first call exactly (same flags, seed,
+// ASSURE_SEED and unit directory) with only its own report path and the
+// failing case's node id appended, so the rerun asks the same question of the
+// same test; a rerun under other flags or seed would not show the failure is
+// flaky, and selecting the collection error would rerun a file that cannot
+// import.
+func checkReruns(t fataler, unit string, first pyCall, reruns []pyCall, want int) {
+	if len(reruns) != want {
+		t.Fatalf("%d rerun calls, want %d; a failing case is rerun until it passes once, at most %d times", len(reruns), want, adapterkit.RerunRounds)
+	}
+	firstJUnit := junitArg(first.args)
+	for i, rc := range reruns {
+		junit := junitArg(rc.args)
+		wantArgs := append(slices.Clone(first.args), failNode)
+		wantArgs[slices.Index(wantArgs, "--junitxml="+firstJUnit)] = "--junitxml=" + junit
+		if !slices.Equal(rc.args, wantArgs) {
+			t.Fatalf("rerun %d args\n%q\nwant\n%q\nthe first run's command plus exactly the failing node id; the collection error is never selected", i+1, rc.args, wantArgs)
+		}
+		if junit == "" || junit == firstJUnit || strings.HasPrefix(junit, unit+string(filepath.Separator)) {
+			t.Fatalf("rerun %d --junitxml=%q (first run %q); a rerun writes its own temporary report outside the repository, never over the first run's", i+1, junit, firstJUnit)
+		}
+		if rc.cwd != unit || rc.seed != first.seed {
+			t.Fatalf("rerun %d ran in %q with ASSURE_SEED=%q, want %q and %q; a rerun must see the unit's conftest.py and the same seed", i+1, rc.cwd, rc.seed, unit, first.seed)
+		}
+	}
+}
+
+// TestRunRerunsFailingCaseUntilItPasses: a case that fails and then passes on
+// rerun k (1..3) is reported still failed with assure.flaky=k, after exactly
+// k reruns; one that never passes is rerun 3 times and is not flaky. The
+// collection error is never rerun and never flaky. A wrong round number or a
+// failure downgraded to a pass would hide a flaky test from the developer.
+func TestRunRerunsFailingCaseUntilItPasses(t *testing.T) {
+	r := newPyRepo(t, map[string]string{".": "3.13.9"})
+	writeTree(t, r.top, map[string]string{"app/parse.py": "changed = 1\n"})
+	rapid.Check(t, func(t *rapid.T) {
+		passOn := rapid.IntRange(0, adapterkit.RerunRounds).Draw(t, "passOn")
+		withCollect := rapid.Bool().Draw(t, "collectionError")
+		first, still := xunit1(passCase, failCase), xunit1(failCase)
+		if withCollect {
+			first, still = xunit1(passCase, failCase, collectCase), xunit1(failCase, collectCase)
+		}
+		rp := pyReplay{report: first, code: 1}
+		for k := 1; k <= adapterkit.RerunRounds; k++ {
+			if k == passOn {
+				rp.reruns = append(rp.reruns, pyReplay{report: xunit1(failPass), code: 0})
+				break
+			}
+			rp.reruns = append(rp.reruns, pyReplay{report: still, code: 1})
+		}
+		replayPytest(t, r.dataOf("."), rp)
+		out, err := os.MkdirTemp(r.data, "out")
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		j := junitOf(t, out, runTestsIn(t, out))
+		calls := pytestCalls(t, r.dataOf("."))
+		wantReruns := adapterkit.RerunRounds
+		if passOn > 0 {
+			wantReruns = passOn
+		}
+		checkReruns(t, r.top, calls[0], calls[1:], wantReruns)
+		if got := caseOutcomes(j)[failName]; got != ev.Failed {
+			t.Fatalf("%s outcome %v after passing on rerun %d; a flaky failure stays a failure", failName, got, passOn)
+		}
+		for _, f := range j.Failing {
+			want := 0
+			if f.Name == failName {
+				want = passOn
+			}
+			if f.Flaky != want {
+				t.Fatalf("%s flaky=%d, want %d (passed on rerun %d); the report names the rerun that passed, and only for a failure that did pass", f.Name, f.Flaky, want, passOn)
+			}
+		}
+	})
 }
 
 type reportKind string

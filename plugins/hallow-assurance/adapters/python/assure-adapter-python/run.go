@@ -255,6 +255,49 @@ func (c runContext) pytest(dir, unit, junit, mapRoot, mapTop string, env []strin
 	return suites, output, nil
 }
 
+func (c runContext) rerunUnit(unit, junit, rerunJUnit string, suites []adapterkit.XMLSuite) []adapterkit.XMLSuite {
+	if !hasFailure(suites) {
+		return suites
+	}
+	r, err := readPytestReport(junit)
+	if err != nil {
+		return suites
+	}
+	ids := nodeIDs(c.root, c.top, unit, r)
+	var all []adapterkit.XMLCase
+	var bounds []int
+	for _, s := range suites {
+		all = append(all, s.Cases...)
+		bounds = append(bounds, len(all))
+	}
+	all = adapterkit.Rerun(all, func(failing []adapterkit.XMLCase) ([]adapterkit.XMLCase, error) {
+		var args []string
+		for _, f := range failing {
+			nodes, ok := ids[caseKey{f.Classname, f.Name}]
+			if !ok {
+				return nil, fmt.Errorf("no pytest node id for %s %s", f.Classname, f.Name)
+			}
+			args = append(args, nodes...)
+		}
+		got, _, err := c.pytest(unit, unit, rerunJUnit, c.root, c.top, nil, args...)
+		if err != nil {
+			return nil, err
+		}
+		var cases []adapterkit.XMLCase
+		for _, s := range got {
+			cases = append(cases, s.Cases...)
+		}
+		return cases, nil
+	})
+	out := slices.Clone(suites)
+	start := 0
+	for i, end := range bounds {
+		out[i].Cases = all[start:end]
+		start = end
+	}
+	return out
+}
+
 func runTests(c runContext) ([]evidence, string, error) {
 	tmp, err := os.MkdirTemp("", "assure-pytest-*")
 	if err != nil {
@@ -266,11 +309,12 @@ func runTests(c runContext) ([]evidence, string, error) {
 		if len(c.sel[unit]) == 0 {
 			continue
 		}
-		s, _, err := c.pytest(unit, unit, filepath.Join(tmp, fmt.Sprintf("pytest-%d.xml", i)), c.root, c.top, nil)
+		junit := filepath.Join(tmp, fmt.Sprintf("pytest-%d.xml", i))
+		s, _, err := c.pytest(unit, unit, junit, c.root, c.top, nil)
 		if err != nil {
 			return nil, "", err
 		}
-		suites = append(suites, s...)
+		suites = append(suites, c.rerunUnit(unit, junit, filepath.Join(tmp, fmt.Sprintf("rerun-%d.xml", i)), s)...)
 	}
 	if err := writeJUnit(filepath.Join(c.out, "junit.xml"), suites); err != nil {
 		return nil, "", err

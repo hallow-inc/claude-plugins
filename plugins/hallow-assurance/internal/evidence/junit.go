@@ -49,6 +49,7 @@ type Failure struct {
 	Message string
 	Text    string
 	Error   bool
+	Flaky   int
 }
 
 type xmlOutcome struct {
@@ -57,11 +58,12 @@ type xmlOutcome struct {
 }
 
 type xmlCase struct {
-	Name      string      `xml:"name,attr"`
-	Classname string      `xml:"classname,attr"`
-	Failure   *xmlOutcome `xml:"failure"`
-	Error     *xmlOutcome `xml:"error"`
-	Skipped   *struct{}   `xml:"skipped"`
+	Name       string        `xml:"name,attr"`
+	Classname  string        `xml:"classname,attr"`
+	Failure    *xmlOutcome   `xml:"failure"`
+	Error      *xmlOutcome   `xml:"error"`
+	Skipped    *struct{}     `xml:"skipped"`
+	Properties []xmlProperty `xml:"properties>property"`
 }
 
 type xmlProperty struct {
@@ -169,7 +171,7 @@ func (j *JUnit) add(s xmlSuite, isSuite bool) {
 		case c.Failure != nil:
 			suite.Cases = append(suite.Cases, Case{Name: name, Outcome: Failed})
 			j.Failures++
-			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Failure.Message, Text: c.Failure.Text})
+			j.Failing = append(j.Failing, Failure{Name: name, Message: c.Failure.Message, Text: c.Failure.Text, Flaky: flaky(c.Properties)})
 		case c.Error != nil:
 			suite.Cases = append(suite.Cases, Case{Name: name, Outcome: Errored})
 			j.Errors++
@@ -189,4 +191,22 @@ func (j *JUnit) add(s xmlSuite, isSuite bool) {
 	for _, sub := range s.Suites {
 		j.add(sub, true)
 	}
+}
+
+func flaky(props []xmlProperty) int {
+	rerun, seen := 0, 0
+	for _, p := range props {
+		if p.Name != "assure.flaky" {
+			continue
+		}
+		seen++
+		switch p.Value {
+		case "1", "2", "3":
+			rerun = int(p.Value[0] - '0')
+		}
+	}
+	if seen != 1 {
+		return 0
+	}
+	return rerun
 }

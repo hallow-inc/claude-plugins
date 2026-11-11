@@ -41,37 +41,66 @@ func fakeNodeOnPath(t *testing.T) {
 }
 
 // installFake installs pkg at version in dir/node_modules with a .bin script
-// that records its argv and working directory into data and replays what
-// replay last wrote there.
+// that, as call n (0, 1, ...) since the last replay, records its argv,
+// working directory and ASSURE_SEED into data as .args.n, .cwd.n and .seed.n
+// (call 0 also as .args and .cwd, which callOf reads), and replays what
+// replay last wrote there: .report.n (else .report) to the --outputFile path
+// unless .noreport.n exists, and exit code .code.n (else .code).
 func installFake(t fataler, dir, data, pkg, version string) {
 	installTool(t, dir, pkg, version)
 	bin := fakeBins[pkg]
 	d := filepath.Join(data, bin)
 	exe(t, filepath.Join(dir, "node_modules", ".bin", bin), fmt.Sprintf(`#!/bin/sh
 d='%s'
-pwd -P > "$d.cwd"
-printf '%%s\n' "$@" > "$d.args"
-for a; do case "$a" in --outputFile=*) [ -f "$d.report" ] && /bin/cat "$d.report" > "${a#--outputFile=}";; esac; done
+n=0
+while [ -f "$d.args.$n" ]; do n=$((n+1)); done
+pwd -P > "$d.cwd.$n"
+printf '%%s' "$ASSURE_SEED" > "$d.seed.$n"
+printf '%%s\n' "$@" > "$d.args.$n"
+if [ "$n" = 0 ]; then /bin/cp "$d.cwd.0" "$d.cwd"; /bin/cp "$d.args.0" "$d.args"; fi
+r="$d.report"; [ -f "$d.report.$n" ] && r="$d.report.$n"; [ -f "$d.noreport.$n" ] && r="$d.absent"
+c="$d.code"; [ -f "$d.code.$n" ] && c="$d.code.$n"
+prev=
+for a; do
+  [ "$prev" = --outputFile ] && [ -f "$r" ] && /bin/cat "$r" > "$a"
+  case "$a" in --outputFile=*) [ -f "$r" ] && /bin/cat "$r" > "${a#--outputFile=}";; esac
+  prev=$a
+done
 [ -f "$d.stdout" ] && /bin/cat "$d.stdout"
 [ -f "$d.stderr" ] && /bin/cat "$d.stderr" >&2
-exit $(/bin/cat "$d.code" 2>/dev/null || echo 0)
+exit $(/bin/cat "$c" 2>/dev/null || echo 0)
 `, d))
 }
 
+// replayed is what the fake replays: report and code for every call, except
+// that call i+1 replays the report (or its absence) and code of reruns[i]
+// when it is given.
 type replayed struct {
 	stdout, stderr, report string
 	noReport               bool
 	code                   int
+	reruns                 []replayed
 }
 
 func replay(t fataler, data, bin string, r replayed) {
 	d := filepath.Join(data, bin)
-	for _, ext := range []string{".cwd", ".args", ".report"} {
-		_ = os.Remove(d + ext)
+	for _, ext := range []string{".cwd", ".args", ".report", ".seed", ".code", ".noreport"} {
+		old, _ := filepath.Glob(d + ext + "*")
+		for _, f := range old {
+			_ = os.Remove(f)
+		}
 	}
 	files := map[string]string{bin + ".stdout": r.stdout, bin + ".stderr": r.stderr, bin + ".code": fmt.Sprint(r.code)}
 	if !r.noReport {
 		files[bin+".report"] = r.report
+	}
+	for i, rr := range r.reruns {
+		files[fmt.Sprintf("%s.code.%d", bin, i+1)] = fmt.Sprint(rr.code)
+		if rr.noReport {
+			files[fmt.Sprintf("%s.noreport.%d", bin, i+1)] = ""
+		} else {
+			files[fmt.Sprintf("%s.report.%d", bin, i+1)] = rr.report
+		}
 	}
 	writeTree(t, data, files)
 }
@@ -80,6 +109,25 @@ type call struct {
 	invoked bool
 	args    []string
 	cwd     string
+	seed    string
+}
+
+// callsOf is every call of a fake installed by installFake since the last replay, in order.
+func callsOf(t fataler, data, bin string) []call {
+	d := filepath.Join(data, bin)
+	var calls []call
+	for n := 0; ; n++ {
+		args, err := os.ReadFile(fmt.Sprintf("%s.args.%d", d, n))
+		if os.IsNotExist(err) {
+			return calls
+		}
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		cwd, _ := os.ReadFile(fmt.Sprintf("%s.cwd.%d", d, n))
+		seed, _ := os.ReadFile(fmt.Sprintf("%s.seed.%d", d, n))
+		calls = append(calls, call{invoked: true, args: strings.Split(strings.TrimSuffix(string(args), "\n"), "\n"), cwd: strings.TrimSpace(string(cwd)), seed: string(seed)})
+	}
 }
 
 func callOf(t fataler, data, bin string) call {
@@ -304,6 +352,26 @@ func TestRunTestsReplaysRecordedVitest(t *testing.T) {
 	}
 	if want := []string{filepath.Join(r.top, "src", "broken.test.ts"), filepath.Join(r.top, "src", "parse.ts")}; !slices.Equal(c.files(), want) {
 		t.Fatalf("vitest file args %q, want the changed source and test files %q; vitest related finds their importers", c.files(), want)
+	}
+	checkRecordedReruns(t, r, j)
+}
+
+// checkRecordedReruns: the recorded report's one failing test is rerun alone, by file and full
+// name, every round; its load-error file and its passing and skipped neighbours are not.
+func checkRecordedReruns(t *testing.T, r tsRepo, j ev.JUnit) {
+	calls := callsOf(t, r.data, "vitest")
+	if len(calls)-1 != adapterkit.RerunRounds {
+		t.Fatalf("%d rerun calls, want %d; cli > fails fails in every replayed round, so it is rerun the protocol's fixed number of rounds", len(calls)-1, adapterkit.RerunRounds)
+	}
+	for k, rc := range calls[1:] {
+		checkRerunCall(t, k+1, r.top, calls[0], rc, rerunBatch{
+			files:      []string{filepath.Join(r.top, "src", "cli.test.ts")},
+			names:      []string{"cli > fails"},
+			neighbours: []string{"cli > inner > adds", "cli > skipped", "top"},
+		})
+	}
+	if i := slices.IndexFunc(j.Failing, func(f ev.Failure) bool { return f.Name == "src/cli.test.ts.cli > fails" }); i < 0 || j.Failing[i].Flaky != 0 {
+		t.Fatalf("failing %+v; cli > fails failed in every round and must stay a plain failure", j.Failing)
 	}
 }
 
