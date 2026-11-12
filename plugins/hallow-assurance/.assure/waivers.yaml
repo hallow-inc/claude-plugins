@@ -1,1 +1,1 @@
-- {objective: VER-MUTATION-CHANGED, scope: '**', rationale: mutation run exceeds the 10 min evaluate timeout (local run without the limit took 23 min and scored 82% vs B 65; see PR 97), approver: '@hello-world-bfree', expires: 2026-11-17}
+[]
