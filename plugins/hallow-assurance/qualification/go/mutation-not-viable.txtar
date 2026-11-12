@@ -1,0 +1,45 @@
+Pair in p/pair.go is covered by a test that asserts nothing. On line 4 the `1 + 1` to `1 - 1`
+mutant cannot compile ([0]int is not [2]int), so Gremlins must report it NOT VIABLE and the
+evaluator must leave it out of the score; the `x * 2` mutants compile and survive. Counting the
+non-compiling mutant as killed changes the detected count (go-gremlins/gremlins#321).
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/pair.go --
+package p
+
+func Pair(x int) [2]int {
+	return [1 + 1]int{x, x * 2}
+}
+-- head/p/pair_test.go --
+package p
+
+import "testing"
+
+func TestPairRuns(t *testing.T) {
+	_ = Pair(3)
+}
+-- head.msg --
+feat(p): add Pair
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["level B: 0 of 1 mutants detected", "p/pair.go:4 "]},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}

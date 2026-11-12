@@ -1,0 +1,37 @@
+The head commit adds package p/kind, which declares a type and a string constant and holds no
+expression Gremlins mutates anywhere in the package (an operator elsewhere in the package would
+be reported as an ignored mutant). Gremlins then writes no output file; the adapter must still
+give an empty mutation report, so VER-MUTATION-CHANGED passes instead of erroring.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/p/kind/kind.go --
+package kind
+
+type Kind string
+
+const Plain Kind = "plain"
+-- head.msg --
+feat(p): add Kind
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}
