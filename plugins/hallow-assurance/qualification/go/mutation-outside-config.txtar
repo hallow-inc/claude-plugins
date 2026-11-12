@@ -1,0 +1,46 @@
+Triple in p/triple.go is covered by a test that asserts nothing, so its only mutant, ARITHMETIC_BASE
+on `x * 3`, survives. The head tree's .gremlins.yaml turns arithmetic-base off; if Gremlins honoured
+it, line 3 would have no mutant and the objective would pass.
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: p/**
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/p/p.go --
+package p
+
+func Double(x int) int { return 2 * x }
+-- head/.gremlins.yaml --
+mutants:
+  arithmetic-base:
+    enabled: false
+-- head/p/triple.go --
+package p
+
+func Triple(x int) int { return x * 3 }
+-- head/p/triple_test.go --
+package p
+
+import "testing"
+
+func TestTripleRuns(t *testing.T) {
+	_ = Triple(4)
+}
+-- head.msg --
+feat(p): add Triple
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "fail", "locations": ["level B: 0 of 1 mutants detected", "p/triple.go:3 "]},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}

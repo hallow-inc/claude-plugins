@@ -1,0 +1,60 @@
+Add in cmd/tool/main.go is a package main helper; only cmd/tool's own test asserts on it, so that
+test kills its ARITHMETIC_BASE mutant. The module root package q has a passing test that never
+calls Add. Gremlins v0.6.0 runs a package main mutant's tests as `go test <module root import
+path>`; judged by q's test, the mutant would survive and the objective would fail (DATA-182).
+
+-- base/assurance.yaml --
+version: 0
+catalog: v0
+languages: [go]
+default_level: B
+components:
+  - path: "**"
+    level: B
+-- base/go.mod --
+module example.com/q
+
+go 1.27
+-- base/q.go --
+package q
+
+func Name() string { return "q" }
+-- base/q_test.go --
+package q
+
+import "testing"
+
+func TestName(t *testing.T) {
+	if Name() != "q" {
+		t.Fatal(Name())
+	}
+}
+-- head/cmd/tool/main.go --
+package main
+
+import "fmt"
+
+func Add(a, b int) int { return a + b }
+
+func main() { fmt.Println(Add(1, 2)) }
+-- head/cmd/tool/main_test.go --
+package main
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if got := Add(2, 3); got != 5 {
+		t.Fatalf("Add(2, 3) = %d, want 5", got)
+	}
+	main()
+}
+-- head.msg --
+feat(cmd/tool): add tool
+-- expect.json --
+{
+  "objectives": [
+    {"objective": "VER-COVERAGE-RESOLUTION", "language": "go", "status": "pass"},
+    {"objective": "VER-MUTATION-CHANGED", "language": "go", "status": "pass"},
+    {"objective": "VER-TESTS-PASS", "language": "go", "status": "pass"}
+  ]
+}
