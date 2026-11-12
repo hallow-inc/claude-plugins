@@ -301,6 +301,48 @@ the adapter picks, so it lives here, not in the catalog. `run` exits 0 whenever 
 response, including when the tools found failures.
 Schemas: `schemas/adapter-{describe,classify,run,tools}.schema.json`.
 
+## Choosing a level
+
+Guidance, not an objective: `assure` never checks which level a component was given.
+
+A component's level is its **consequence** of failure crossed with its **recoverability**. The
+three schemes assure draws on all set a level from consequence plus a second factor:
+
+- IEEE Std 829 integrity levels: consequence (catastrophic, critical, marginal, negligible), with
+  whether a workaround exists as the second factor (Hyde, *Write Great Code, Vol. 3*, §12.1.2).
+- ISO 26262 ASIL: severity × exposure × controllability (*Functional Safety for Embedded
+  Systems*, §1.2.2).
+- IEC 61508 SIL: set by risk assessment, using a risk matrix or risk graph (*The Safety Critical
+  Systems Handbook*, 4th ed., §2.1.3 and, for the machinery-sector BS EN 62061, §9.3.1).
+
+**Consequence**: what a wrong result costs if it reaches production.
+
+| Consequence | Examples |
+|---|---|
+| Severe | money moved wrongly; data lost or corrupted; security or privacy breach |
+| Serious | a core user flow fails or returns a wrong answer |
+| Minor | a secondary feature degrades |
+| Negligible | cosmetic defects; internal tooling |
+
+**Recoverability**: whether the failure is caught or undone before it does harm. A failure is
+*recoverable* when it is visible and reversible, or a workaround exists (IEEE 829's workaround,
+ASIL's controllability). It is *unrecoverable* when it is silent or irreversible.
+
+| Consequence | Unrecoverable | Recoverable |
+|---|---|---|
+| Severe | A | B |
+| Serious | B | C |
+| Minor | C | D |
+| Negligible | D | D |
+
+How often the code runs (ASIL's exposure, the likelihood axis of a risk matrix) does not lower
+the level: a billing path that runs once a month still moves money.
+
+ASIL decomposition, which assigns a lower ASIL to each of two redundant, independent
+implementations of one function (*Functional Safety for Embedded Systems*, §6.3), is not
+adopted. It depends on independent redundant channels. One code path verified by tests is not
+two independent implementations.
+
 ## Starter catalog (v0)
 
 | ID | Intent | A | B | C | D |

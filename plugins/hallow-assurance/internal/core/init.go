@@ -47,7 +47,8 @@ catalog: ` + c.Version + `
 # (required, may be empty) Per-path levels. A path takes the level of the
 # matching glob with the most literal segments; ties take the stricter level.
 #   path    (required) repo-relative glob: no leading /, no backslash, no ..
-#   level   (required) A | B | C | D
+#   level   (required) A | B | C | D. To pick one, see "Choosing a level" in
+#           https://github.com/hallow-inc/claude-plugins/blob/master/plugins/hallow-assurance/CHARTER.md#choosing-a-level
 #   inputs  (optional) only value: true. The code handles external input,
 #           so objectives marked [inputs] apply.
 #   formal  (optional) Lean model of the component; objectives marked [formal]
