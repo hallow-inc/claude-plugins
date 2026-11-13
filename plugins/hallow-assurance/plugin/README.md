@@ -76,7 +76,7 @@ The hooks need `assure` on `PATH`, plus the adapter for each language the manife
 lists. One line installs `assure` and every adapter at a release tag:
 
 ```sh
-go install github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/...@v0.2.0
+go install github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/...@v0.3.0
 ```
 
 Install the tools the adapters run at the versions your repository pins (`assure tools` lists them):
@@ -97,8 +97,8 @@ the agent cannot fix the install.
 
 ### Building from a clone
 
-Changes merged since the last tag reach you only from a clone. At v0.2.0 that includes the Python
-adapter and `assure init`. Install `assure` and every adapter from the module root:
+Changes merged since the last tag reach you only from a clone. Install `assure` and every adapter
+from the module root:
 
 ```sh
 cd plugins/hallow-assurance
@@ -125,10 +125,10 @@ v0.2.0 removes the edit guard, protected files, provenance, and reviews. Before 
 2. Delete any `.assure/waivers.yaml` entry for `CFG-PROTECTED` or `IND-VERIFIER-DISTINCT`. They
    apply to nothing now, and an expired one still fails `assure evaluate`.
 3. Update both halves together, then restart Claude Code. A v0.1.x plugin denies every edit when a
-   v0.2.0 `assure` is on `PATH`:
+   v0.2.0 or later `assure` is on `PATH`:
 
    ```sh
-   go install github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/...@v0.2.0
+   go install github.com/hallow-inc/claude-plugins/plugins/hallow-assurance/...@v0.3.0
    ```
 
    ```
@@ -152,7 +152,7 @@ The shared workflow runs `assure evaluate` on every pull request.
      assure:
        permissions:
          contents: read
-       uses: hallow-inc/claude-plugins/.github/workflows/assure-evaluate.yml@plugins/hallow-assurance/v0.2.0
+       uses: hallow-inc/claude-plugins/.github/workflows/assure-evaluate.yml@plugins/hallow-assurance/v0.3.0
    ```
 
    Pass `with: {working-directory: <dir>}` when `assurance.yaml` is not at the repository root.
@@ -188,11 +188,10 @@ jobs:
   audit:
     permissions:
       contents: read
-    uses: hallow-inc/claude-plugins/.github/workflows/assure-audit.yml@<ref>
+    uses: hallow-inc/claude-plugins/.github/workflows/assure-audit.yml@plugins/hallow-assurance/v0.3.0
 ```
 
-No release includes `assure audit` yet (v0.2.0 predates it), so `<ref>` is a commit SHA from
-`master` until the next tag, then that tag. Pass `with: {working-directory: <dir>}` when
+`assure audit` first shipped in v0.3.0. Pass `with: {working-directory: <dir>}` when
 `assurance.yaml` is not at the repository root, and
 `scope: <args>` to audit less than the whole repository. A whole-repository audit can take hours;
 the job allows six.
